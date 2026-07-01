@@ -8,6 +8,7 @@ venv/
 
 # Local memory and logs
 memory.txt
+data/*.txt
 logs/*.log
 
 # Environment secrets

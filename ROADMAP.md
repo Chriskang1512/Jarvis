@@ -2,6 +2,20 @@
 
 Jarvis 프로젝트의 단계별 개발 계획입니다.
 
+## Current Version
+
+현재 버전: v0.0.2
+
+## Version Plan
+
+| 버전 | 목표 | 상태 |
+| --- | --- | --- |
+| v0.0.1 | 프로젝트 생성 | 완료 |
+| v0.0.2 | Brain Routing | 현재 |
+| v0.0.3 | Memory | 예정 |
+| v0.0.4 | Scheduler | 예정 |
+| v0.1.0 | 첫 번째 Agent 완성 | 예정 |
+
 ## 1단계: 환경 구축
 
 Python 프로젝트 구조를 만들고, GitHub 저장소와 기본 문서를 준비합니다.
