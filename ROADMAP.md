@@ -1,57 +1,69 @@
 # Jarvis Roadmap
 
-Jarvis 프로젝트의 단계별 개발 계획입니다.
+Jarvis 프로젝트는 날짜가 아니라 마일스톤 기준으로 버전을 관리합니다.
 
-## Current Version
+## Version Roadmap
 
-현재 버전: v0.0.2
+## v0.1.0 - Project Bootstrap
 
-## Version Plan
+개발 환경과 기본 구조를 준비하는 단계입니다.
 
-| 버전 | 목표 | 상태 |
-| --- | --- | --- |
-| v0.0.1 | 프로젝트 생성 | 완료 |
-| v0.0.2 | Brain Routing | 현재 |
-| v0.0.3 | Memory | 예정 |
-| v0.0.4 | Scheduler | 예정 |
-| v0.1.0 | 첫 번째 Agent 완성 | 예정 |
+- [x] 개발 환경 구축 완료
+- [x] Git
+- [x] GitHub
+- [x] VS Code
+- [x] Python
+- [x] Brain
+- [x] Agent
+- [x] Memory
+- [x] GitHub Actions
+- [x] GitHub CLI
 
-## 1단계: 환경 구축
+---
 
-Python 프로젝트 구조를 만들고, GitHub 저장소와 기본 문서를 준비합니다.
+## v0.2.0 - First Functional AI
 
-## 2단계: Brain
+첫 번째 실제 기능형 AI Agent를 만드는 단계입니다.
 
-사용자 명령을 분석하고 적절한 Agent에게 작업을 배정하는 Brain 구조를 만듭니다.
+- [ ] Invest Agent 실제 기능
+- [ ] Scheduler 실제 기능
+- [ ] Memory 검색 개선
+- [ ] 자연어 명령 분류 개선
 
-## 3단계: Memory
+---
 
-대화 기록과 작업 기록을 저장하고 다시 불러올 수 있는 Memory 기능을 만듭니다.
+## v0.3.0 - External Services
 
-## 4단계: 투자 Agent
+외부 서비스와 연결하는 단계입니다.
 
-주식, ETF, 경제 뉴스 등을 분석하는 투자 Agent를 만듭니다.
+- [ ] OpenAI API
+- [ ] Gmail
+- [ ] Google Calendar
+- [ ] Discord
+- [ ] Telegram
 
-## 5단계: 일본어 Shorts Agent
+---
 
-일본어 학습용 쇼츠 아이디어, 대본, 자막을 만드는 Agent를 만듭니다.
+## v0.5.0 - Automation
 
-## 6단계: YouTube 자동화
+Jarvis가 사용자의 반복 작업을 자동으로 도와주는 단계입니다.
 
-YouTube 업로드, 제목, 설명, 태그, 썸네일 관리 자동화를 준비합니다.
+- [ ] 음성 명령
+- [ ] 자동 실행
+- [ ] 자동 투자 보조
+- [ ] 자동 일정 관리
 
-## 7단계: 음성 호출
+---
 
-음성으로 Jarvis를 호출하고 명령할 수 있는 기능을 추가합니다.
+## v1.0.0 - Personal AI Assistant
 
-## 8단계: 24시간 서버
+실제 개인 AI 비서로 완성하는 단계입니다.
 
-Jarvis가 항상 실행될 수 있도록 서버 환경을 구성합니다.
-
-## 9단계: 자동 주식매매
-
-투자 분석 결과를 바탕으로 자동 매매 기능을 검토하고 구현합니다.
-
-## 10단계: 나만의 AI 운영체제
-
-여러 Agent와 자동화 기능을 통합하여 개인용 AI 운영체제로 확장합니다.
+- [ ] 개인 비서 수준 완성
+- [ ] 투자
+- [ ] 일정
+- [ ] 일본어
+- [ ] 음악
+- [ ] YouTube
+- [ ] Memory
+- [ ] 음성
