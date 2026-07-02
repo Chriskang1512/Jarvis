@@ -5,6 +5,7 @@ from typing import Protocol
 
 
 DEFAULT_OPENAI_MODEL = "gpt-5.5"
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-6"
 
 
 @dataclass
@@ -91,6 +92,49 @@ class OpenAIProvider:
         return response.output_text
 
 
+class ClaudeProvider:
+    """Chat provider that sends completed prompts to Claude."""
+
+    def __init__(self, model, temperature, env_path=".env"):
+        """Create a Claude provider with runtime settings."""
+        self.model = choose_claude_model(model)
+        self.temperature = temperature
+        self.env_path = Path(env_path)
+        self.last_metadata = ChatResponseMetadata(
+            model=self.model,
+            provider_name="claude",
+            created_at=current_timestamp(),
+        )
+
+    def generate_reply(self, message):
+        """Return one real Claude response for a completed prompt."""
+        api_key = read_claude_api_key(self.env_path)
+
+        if api_key == "":
+            return create_missing_claude_key_message()
+
+        try:
+            from anthropic import Anthropic
+        except ImportError:
+            return "anthropic 패키지가 설치되어 있지 않습니다. pip install -r requirements.txt 를 실행해주세요."
+
+        client = Anthropic(api_key=api_key)
+
+        try:
+            response = create_claude_response(
+                client=client,
+                model=self.model,
+                message=message,
+                temperature=self.temperature,
+            )
+        except Exception as error:
+            return create_claude_error_message(error)
+
+        reply = extract_claude_text(response)
+        self.last_metadata = create_claude_metadata(response, reply)
+        return reply
+
+
 def create_openai_response(client, model, message, temperature):
     """Create an OpenAI response with model-safe request parameters."""
     request_data = {
@@ -134,6 +178,70 @@ def create_openai_metadata(response):
     )
 
 
+def create_claude_response(client, model, message, temperature):
+    """Create a Claude response with the Messages API."""
+    return client.messages.create(
+        model=model,
+        max_tokens=1024,
+        temperature=temperature,
+        messages=[
+            {
+                "role": "user",
+                "content": message,
+            }
+        ],
+    )
+
+
+def extract_claude_text(response):
+    """Extract text from a Claude Messages API response."""
+    text_parts = []
+
+    for content_block in getattr(response, "content", []):
+        text = getattr(content_block, "text", "")
+
+        if text != "":
+            text_parts.append(text)
+
+    return "\n".join(text_parts)
+
+
+def create_claude_metadata(response, reply):
+    """Create response metadata from a Claude SDK response object."""
+    return ChatResponseMetadata(
+        text=reply,
+        model=getattr(response, "model", ""),
+        provider_name="claude",
+        finish_reason=getattr(response, "stop_reason", ""),
+        usage=getattr(response, "usage", None),
+        created_at=current_timestamp(),
+    )
+
+
+def create_missing_claude_key_message():
+    """Return a friendly setup message when the Claude API key is missing."""
+    return "\n".join(
+        [
+            "Claude provider selected, but ANTHROPIC_API_KEY was not found.",
+            "",
+            "Please add ANTHROPIC_API_KEY to your .env file or switch provider=mock.",
+        ]
+    )
+
+
+def create_claude_error_message(error):
+    """Return a friendly message for Claude API errors."""
+    return "\n".join(
+        [
+            "Claude provider failed to generate a response.",
+            "",
+            f"Reason: {error}",
+            "",
+            "You can switch provider=mock while checking the setup.",
+        ]
+    )
+
+
 def create_missing_openai_key_message():
     """Return a friendly setup message when the OpenAI API key is missing."""
     return "\n".join(
@@ -166,10 +274,24 @@ def read_openai_api_key(env_path):
     return env_values.get("OPENAI_API_KEY", "")
 
 
+def read_claude_api_key(env_path):
+    """Read ANTHROPIC_API_KEY from a local .env file."""
+    env_values = read_env_file(env_path)
+    return env_values.get("ANTHROPIC_API_KEY", "")
+
+
 def choose_openai_model(model):
     """Choose a safe OpenAI model when config only selects provider=openai."""
     if model == "" or model == "mock":
         return DEFAULT_OPENAI_MODEL
+
+    return model
+
+
+def choose_claude_model(model):
+    """Choose a safe Claude model when config only selects provider=claude."""
+    if model == "" or model == "mock" or model.startswith("gpt-"):
+        return DEFAULT_CLAUDE_MODEL
 
     return model
 

@@ -1,4 +1,4 @@
-from jarvis.chat.providers import MockChatProvider, OpenAIProvider
+from jarvis.chat.providers import ClaudeProvider, MockChatProvider, OpenAIProvider
 
 
 class ProviderFactory:
@@ -11,6 +11,12 @@ class ProviderFactory:
 
         if config.provider == "openai":
             return OpenAIProvider(
+                model=config.model,
+                temperature=config.temperature,
+            )
+
+        if config.provider == "claude":
+            return ClaudeProvider(
                 model=config.model,
                 temperature=config.temperature,
             )

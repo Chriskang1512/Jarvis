@@ -1,12 +1,16 @@
+import sys
+
 from jarvis.commands import CommandDispatcher, create_default_registry
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.config import ConfigurationLoader
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
+from jarvis.memory import MemoryService, MockMemoryProvider
 
 
 def main():
     """Run the Jarvis command console loop."""
+    configure_console_encoding()
     config = ConfigurationLoader().load()
     event_bus = EventBus()
     console_adapter = ConsoleEventAdapter()
@@ -14,7 +18,12 @@ def main():
     prompt_profile = create_default_prompt_profile()
     prompt_builder = PromptBuilder(profile=prompt_profile)
     chat_provider = ProviderFactory().create(config)
-    chat_service = ChatService(provider=chat_provider, prompt_builder=prompt_builder)
+    memory_service = MemoryService(provider=MockMemoryProvider())
+    chat_service = ChatService(
+        provider=chat_provider,
+        prompt_builder=prompt_builder,
+        memory_service=memory_service,
+    )
     registry = create_default_registry()
     dispatcher = CommandDispatcher(
         registry=registry,
@@ -41,6 +50,15 @@ def main():
 
         if dispatcher.should_exit():
             break
+
+
+def configure_console_encoding():
+    """Use UTF-8 console input and output when the terminal supports it."""
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8")
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
 
 
 if __name__ == "__main__":

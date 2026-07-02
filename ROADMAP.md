@@ -12,12 +12,65 @@ Sprint 4  - The First Personality
 Sprint 5  - The First Configuration
 Sprint 6  - The First Breath
 Sprint 7  - The First Memory
-Sprint 8  - The First Tool
+Sprint 8  - The Second Brain
 Sprint 9  - The First Voice
 Sprint 10 - The First Face
 ```
 
 ## Version Roadmap
+
+## v0.2.0-alpha.8 - Sprint 8 Wrap-up
+
+Provider-agnostic architecture를 검증하고 beta 진입 전 기록을 정리하는 단계입니다.
+
+- [x] ClaudeProvider
+- [x] Provider Contract Test
+- [x] ADR-0001 Core Never Knows Vendors
+- [x] README 업데이트
+- [x] ROADMAP 업데이트
+- [x] CHANGELOG 업데이트
+- [ ] Git Tag
+
+---
+
+## v0.2.0-beta.1 - Voice Pipeline Foundation
+
+음성 파이프라인의 최소 기반을 만드는 단계입니다.
+
+- [ ] `voice_main.py`
+- [ ] `jarvis/voice` module
+- [ ] Wake Word
+- [ ] Microphone Input
+- [ ] STT Interface
+- [ ] TTS Interface
+- [ ] VoicePipeline
+- [ ] Provider 연결
+- [ ] Stage logging
+
+---
+
+## v0.2.0-beta.2 - Metadata Console
+
+Provider 응답 메타데이터를 확인할 수 있게 만드는 단계입니다.
+
+- [ ] provider_name
+- [ ] model
+- [ ] usage
+- [ ] finish_reason
+- [ ] created_at
+
+---
+
+## v0.2.0-beta.3 - Tool Calling
+
+Jarvis가 실제 작업을 실행할 수 있는 기반을 만드는 단계입니다.
+
+- [ ] Tool Interface
+- [ ] Tool Registry
+- [ ] Tool Dispatcher
+- [ ] Command execution foundation
+
+---
 
 ## v0.1.0 - Project Bootstrap
 
@@ -64,6 +117,15 @@ Sprint 10 - The First Face
 - [x] OpenAIProvider
 - [x] provider=openai support
 - [x] OPENAI_API_KEY from .env
+- [x] ClaudeProvider
+- [x] provider=claude support
+- [x] ANTHROPIC_API_KEY from .env
+- [x] MemoryService
+- [x] MockMemoryProvider
+- [x] First memory conversation
+- [ ] JSONMemoryProvider
+- [ ] SQLiteMemoryProvider
+- [ ] VectorMemoryProvider
 - [ ] Rive-compatible visual layer planned
 - [ ] Invest Agent 실제 기능
 - [ ] Scheduler 실제 기능

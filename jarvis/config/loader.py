@@ -37,5 +37,5 @@ def create_config_from_dict(config_data):
         temperature=config_data.get("temperature", 0.7),
         debug=config_data.get("debug", False),
         profile=config_data.get("profile", "jarvis"),
-        version=config_data.get("version", "v0.2.0-alpha.5"),
+        version=config_data.get("version", "v0.2.0-alpha.8"),
     )

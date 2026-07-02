@@ -1,8 +1,8 @@
 {
-  "provider": "openai",
-  "model": "gpt-5.5",
+  "provider": "mock",
+  "model": "mock",
   "temperature": 0.7,
   "debug": false,
   "profile": "jarvis",
-  "version": "v0.2.0-alpha.5"
+  "version": "v0.2.0-alpha.8"
 }
