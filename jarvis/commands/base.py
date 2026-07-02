@@ -56,7 +56,8 @@ class VersionCommand(BaseCommand):
     def execute(self, context):
         """Return the current Sprint version."""
         self.publish_status(context, JarvisStatus.SUCCESS, "Version command completed")
-        return "Jarvis v0.2.0-alpha.2"
+        version = getattr(context.config, "version", "unknown")
+        return f"Jarvis {version}"
 
 
 class ExitCommand(BaseCommand):

@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.1.0 - Project Bootstrap
+v0.2.0-alpha.4 - The First Configuration
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -40,6 +40,23 @@ v1.0.0 = Personal AI Assistant
 ```
 
 새로운 기능이 완성될 때마다 버전을 올리고, 변경 내용은 `CHANGELOG.md`에 기록합니다.
+
+## Sprint Codenames
+
+Jarvis는 Sprint마다 코드네임을 사용합니다.
+
+```text
+Sprint 1  - The First Heartbeat
+Sprint 2  - The First Command
+Sprint 3  - The First Conversation
+Sprint 4  - The First Personality
+Sprint 5  - The First Configuration
+Sprint 6  - The Second Brain
+Sprint 7  - The First Memory
+Sprint 8  - The First Tool
+Sprint 9  - The First Voice
+Sprint 10 - The First Face
+```
 
 ## Core Design Principle
 
@@ -102,6 +119,48 @@ Console Adapter
 
 위 입력은 `chat 안녕`, `chat 오늘 뭐해?`처럼 대화 명령으로 처리됩니다.
 
+v0.2.0 Sprint 4의 목표는 `The First Personality`입니다.
+
+```text
+ChatCommand
+  |
+ChatService
+  |
+PromptBuilder
+  |
+ChatProvider
+```
+
+PromptBuilder는 Jarvis identity, personality, response style, special modes를 Provider 밖에서 관리합니다. 그래서 OpenAI, Claude, local provider가 나중에 추가되어도 같은 Jarvis 성격을 공유할 수 있습니다.
+
+Provider는 응답을 생성하지만, Jarvis가 누구인지 정의하지 않습니다. Jarvis의 identity, core rules, personality, special modes는 PromptBuilder가 관리합니다.
+
+현재 Special Modes:
+
+- Project Mode
+- Developer Mode
+- Japanese Mode
+- Hotel Mode
+- Finance Mode
+
+v0.2.0 Sprint 5의 목표는 `The First Configuration`입니다.
+
+```text
+Jarvis Runtime
+  |
+Configuration Layer
+  |
+JarvisConfig
+  |
+ProviderFactory
+  |
+ChatProvider
+```
+
+Jarvis Core는 Provider 선택, Model 이름, Debug 옵션을 직접 알지 않습니다. 모든 실행 설정은 Configuration Layer에서 공급합니다.
+
+이번 Sprint에서는 `.env`, API Key, Network 호출을 다루지 않습니다.
+
 ## Project Layers
 
 Jarvis는 역할별 Layer를 나누어 확장합니다.
@@ -136,6 +195,61 @@ Infrastructure
 `-- Logging
 ```
 
+## North Star Architecture
+
+Jarvis의 장기 목표 구조입니다.
+
+```text
+USER
+  |
+Input Layer
+Keyboard / Voice / API
+  |
+Intent Router
+Dispatcher + Registry
+  |
+  |--------------------|
+  |                    |
+Conversation          Commands
+  |                    |
+ChatService           Calendar / Mail / Stock
+  |                    |
+PromptBuilder         Tool Services
+  |
+ChatProvider
+  |
+OpenAI / Claude / Ollama
+  |
+EventBus
+  |
+Console / Electron / Rive
+```
+
+현재 구현된 부분:
+
+```text
+Input Layer      -> CLI
+Intent Router    -> CommandDispatcher + CommandRegistry
+Conversation     -> ChatCommand
+ChatService      -> ChatService
+PromptBuilder    -> PromptBuilder
+ChatProvider     -> MockChatProvider
+EventBus         -> EventBus
+Console          -> ConsoleEventAdapter
+```
+
+아직 예정인 부분:
+
+```text
+Voice / API input
+Calendar / Mail / Stock Tool Services
+OpenAIProvider
+ClaudeProvider
+OllamaProvider
+Electron UI
+Rive Visual UI
+```
+
 ## Design Goals
 
 - UI-independent Core
@@ -157,6 +271,47 @@ Infrastructure
 - GitHub Actions: push 후 자동 검사
 - GitHub CLI(`gh`): 터미널에서 Actions 상태 확인
 - Codex: 코드 작성, 구조 개선, 테스트 보조
+
+## Configuration
+
+Jarvis는 `config.json`이 있으면 읽고, 없으면 안전한 기본값을 사용합니다.
+
+현재 기본값:
+
+```text
+provider=mock
+model=mock
+temperature=0.7
+debug=false
+profile=jarvis
+version=v0.2.0-alpha.4
+```
+
+Bootstrap Flow:
+
+```text
+main.py
+  |
+ConfigurationLoader
+  |
+JarvisConfig
+  |
+ProviderFactory
+  |
+MockChatProvider
+  |
+ChatService
+  |
+PromptBuilder
+  |
+Conversation
+```
+
+주의:
+
+```text
+이번 Sprint에서는 OpenAI, Claude, .env, API Key를 추가하지 않습니다.
+```
 
 ## 현재 프로젝트 구조
 
@@ -241,7 +396,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.2.0-alpha.2
+Jarvis v0.2.0-alpha.4
 ================================
 Jarvis >
 ```

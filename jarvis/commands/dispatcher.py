@@ -8,6 +8,7 @@ class CommandContext:
     registry: object
     event_bus: object
     chat_service: object = None
+    config: object = None
     command_text: str = ""
     should_exit: bool = False
 
@@ -15,7 +16,7 @@ class CommandContext:
 class CommandDispatcher:
     """Find and execute commands from user input."""
 
-    def __init__(self, registry, event_bus, chat_service=None):
+    def __init__(self, registry, event_bus, chat_service=None, config=None):
         """Create a dispatcher with a registry and EventBus."""
         self.registry = registry
         self.event_bus = event_bus
@@ -23,6 +24,7 @@ class CommandDispatcher:
             registry=registry,
             event_bus=event_bus,
             chat_service=chat_service,
+            config=config,
         )
 
     def dispatch(self, user_input):
