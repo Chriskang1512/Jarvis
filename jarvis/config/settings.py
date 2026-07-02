@@ -10,4 +10,4 @@ class JarvisConfig:
     temperature: float = 0.7
     debug: bool = False
     profile: str = "jarvis"
-    version: str = "v0.2.0-alpha.4"
+    version: str = "v0.2.0-alpha.5"

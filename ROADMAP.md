@@ -10,7 +10,7 @@ Sprint 2  - The First Command
 Sprint 3  - The First Conversation
 Sprint 4  - The First Personality
 Sprint 5  - The First Configuration
-Sprint 6  - The Second Brain
+Sprint 6  - The First Breath
 Sprint 7  - The First Memory
 Sprint 8  - The First Tool
 Sprint 9  - The First Voice
@@ -61,6 +61,9 @@ Sprint 10 - The First Face
 - [x] JarvisConfig
 - [x] ConfigurationLoader
 - [x] ProviderFactory
+- [x] OpenAIProvider
+- [x] provider=openai support
+- [x] OPENAI_API_KEY from .env
 - [ ] Rive-compatible visual layer planned
 - [ ] Invest Agent 실제 기능
 - [ ] Scheduler 실제 기능
