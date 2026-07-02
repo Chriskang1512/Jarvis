@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.2.0-beta.1 - Voice Pipeline Foundation
+v0.2.0-beta.2 - Metadata Console
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -68,6 +68,37 @@ v0.2.0-beta.2 - Metadata Console
 v0.2.0-beta.3 - Tool Calling
 ```
 
+v0.2.0-beta.2의 목표는 `Metadata Console`입니다.
+
+Diagnostics는 UI가 아니라 개발자 진단 도구입니다.
+
+```text
+Modules publish metadata
+  |
+DiagnosticsCollector
+  |
+DiagnosticsConsole
+```
+
+진단 콘솔은 별도 진입점으로 실행합니다.
+
+```powershell
+python diagnostics_main.py
+```
+
+Diagnostics Console은 아래 정보를 표시합니다.
+
+```text
+Session
+Provider
+Performance
+Pipeline Status
+Health
+Event Log
+```
+
+Console은 metadata를 렌더링만 합니다. Source of truth는 `DiagnosticsCollector`입니다.
+
 v0.2.0-beta.1의 목표는 `Voice Pipeline Foundation`입니다.
 
 ```text
@@ -112,6 +143,18 @@ $env:JARVIS_TTS_PROVIDER="pyttsx3"
 ```
 
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
+
+Beta 1 Done Criteria:
+
+```text
+[x] Wake Word가 동작한다.
+[x] 마이크 입력을 받을 수 있다.
+[x] STT 결과를 텍스트로 얻는다.
+[x] LLM 응답을 생성한다.
+[x] TTS로 응답을 읽는다.
+[x] 각 단계 로그가 출력된다.
+[x] 기존 main.py CLI는 정상 동작한다.
+```
 
 ## Core Design Principle
 
@@ -391,7 +434,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.2.0-beta.1
+version=v0.2.0-beta.2
 ```
 
 Bootstrap Flow:
@@ -543,7 +586,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.2.0-beta.1
+Jarvis v0.2.0-beta.2
 ================================
 Jarvis >
 ```
