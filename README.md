@@ -87,10 +87,20 @@ Console Adapter
 
 현재 기본 Command:
 
+- `chat`
 - `help`
 - `status`
 - `version`
 - `exit`
+
+등록되지 않은 일반 입력은 `ChatCommand`로 fallback 됩니다.
+
+```text
+안녕
+오늘 뭐해?
+```
+
+위 입력은 `chat 안녕`, `chat 오늘 뭐해?`처럼 대화 명령으로 처리됩니다.
 
 ## Project Layers
 
@@ -273,6 +283,9 @@ exit
 Command System:
 
 ```text
+안녕
+오늘 뭐해?
+chat 안녕
 help
 status
 version

@@ -1,4 +1,5 @@
 from jarvis.commands.base import ExitCommand, HelpCommand, StatusCommand, VersionCommand
+from jarvis.commands.chat import ChatCommand
 
 
 class CommandRegistry:
@@ -28,9 +29,9 @@ class CommandRegistry:
 def create_default_registry():
     """Create the default command registry for the CLI."""
     registry = CommandRegistry()
+    registry.register(ChatCommand())
     registry.register(HelpCommand())
     registry.register(StatusCommand())
     registry.register(VersionCommand())
     registry.register(ExitCommand())
     return registry
-

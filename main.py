@@ -1,4 +1,5 @@
 from jarvis.commands import CommandDispatcher, create_default_registry
+from jarvis.chat import ChatService, MockChatProvider
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
 
@@ -8,8 +9,14 @@ def main():
     event_bus = EventBus()
     console_adapter = ConsoleEventAdapter()
     event_bus.subscribe_all(console_adapter.handle_event)
+    chat_provider = MockChatProvider()
+    chat_service = ChatService(provider=chat_provider)
     registry = create_default_registry()
-    dispatcher = CommandDispatcher(registry=registry, event_bus=event_bus)
+    dispatcher = CommandDispatcher(
+        registry=registry,
+        event_bus=event_bus,
+        chat_service=chat_service,
+    )
 
     print("================================")
     print("Jarvis v0.2.0-alpha.2")
