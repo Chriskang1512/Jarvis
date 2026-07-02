@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.2.0-alpha.8 - The Second Brain
+v0.2.0-beta.1 - Voice Pipeline Foundation
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -67,6 +67,51 @@ v0.2.0-beta.1 - Voice Pipeline Foundation
 v0.2.0-beta.2 - Metadata Console
 v0.2.0-beta.3 - Tool Calling
 ```
+
+v0.2.0-beta.1의 목표는 `Voice Pipeline Foundation`입니다.
+
+```text
+Wake Word
+  |
+Speech-to-Text
+  |
+ChatService
+  |
+ChatProvider
+  |
+Text-to-Speech
+```
+
+기존 CLI는 그대로 유지합니다.
+
+```powershell
+python main.py
+```
+
+음성 파이프라인은 별도 진입점으로 실행합니다.
+
+```powershell
+python voice_main.py
+```
+
+Voice 설정은 환경변수로 관리합니다.
+
+```powershell
+$env:JARVIS_WAKE_WORD="hey jarvis"
+$env:JARVIS_STT_PROVIDER="console"
+$env:JARVIS_TTS_PROVIDER="console"
+$env:JARVIS_VOICE_DEBUG="true"
+$env:JARVIS_VOICE_ONCE="true"
+```
+
+실험용 마이크/TTS Provider:
+
+```powershell
+$env:JARVIS_STT_PROVIDER="microphone"
+$env:JARVIS_TTS_PROVIDER="pyttsx3"
+```
+
+현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
 ## Core Design Principle
 
@@ -346,7 +391,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.2.0-alpha.8
+version=v0.2.0-beta.1
 ```
 
 Bootstrap Flow:
@@ -498,7 +543,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.2.0-alpha.8
+Jarvis v0.2.0-beta.1
 ================================
 Jarvis >
 ```
