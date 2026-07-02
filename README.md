@@ -99,6 +99,8 @@ Event Log
 
 Console은 metadata를 렌더링만 합니다. Source of truth는 `DiagnosticsCollector`입니다.
 
+DiagnosticSnapshot은 호환성을 위해 `version` 필드를 가집니다. Beta.2의 snapshot version은 `1`입니다. 향후 Finance, Memory, Calendar, Automation metadata가 추가되면 snapshot version을 올려 CLI, GUI, REST API가 같은 계약을 공유할 수 있게 합니다.
+
 v0.2.0-beta.1의 목표는 `Voice Pipeline Foundation`입니다.
 
 ```text

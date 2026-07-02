@@ -66,6 +66,7 @@ class EventLogEntry:
 class DiagnosticSnapshot:
     """Store one complete diagnostics snapshot."""
 
+    version: int = 1
     session: SessionMetadata = field(default_factory=SessionMetadata)
     provider: ProviderMetadata = field(default_factory=ProviderMetadata)
     performance: PerformanceMetadata = field(default_factory=PerformanceMetadata)

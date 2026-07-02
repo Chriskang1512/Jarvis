@@ -8,6 +8,7 @@ class DiagnosticsConsole:
         lines.append("      JARVIS Developer Console")
         lines.append("======================================")
         lines.append("")
+        append_section(lines, "Snapshot", [f"Version   : {snapshot.version}"])
         append_section(lines, "Status", [snapshot.health.overall])
         append_section(
             lines,
