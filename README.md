@@ -41,6 +41,101 @@ v1.0.0 = Personal AI Assistant
 
 새로운 기능이 완성될 때마다 버전을 올리고, 변경 내용은 `CHANGELOG.md`에 기록합니다.
 
+## Core Design Principle
+
+Jarvis는 event-driven architecture를 따릅니다.
+
+Core는 누가 이벤트를 소비하는지 알지 않습니다.
+
+향후 Console, Rive, Electron, Unity 같은 renderer뿐만 아니라 Agent, Memory system, Automation module, external integration도 EventBus를 독립적으로 구독합니다.
+
+이 구조는 Jarvis Core와 UI, 자동화, 외부 연동을 느슨하게 연결합니다. 그래서 프로젝트가 커져도 Core 코드를 크게 뜯지 않고 기능을 확장할 수 있습니다.
+
+v0.2.0 Sprint 1의 목표는 첫 심장박동입니다.
+
+```text
+Jarvis Core
+  |
+EventBus
+  |
+Console Adapter
+  |
+Status 출력
+```
+
+Core는 `JarvisEvent`와 `JarvisState`만 발행합니다. Console, Rive, Electron, Unity 같은 표현 계층은 EventBus를 구독해서 상태를 표시합니다.
+
+v0.2.0 Sprint 2의 목표는 첫 명령 시스템입니다.
+
+```text
+Dispatcher routes. Command executes. EventBus broadcasts. Adapters render.
+```
+
+```text
+Input
+  |
+Command Dispatcher
+  |
+Command Registry
+  |
+Command
+  |
+EventBus
+  |
+Console Adapter
+```
+
+현재 기본 Command:
+
+- `help`
+- `status`
+- `version`
+- `exit`
+
+## Project Layers
+
+Jarvis는 역할별 Layer를 나누어 확장합니다.
+
+```text
+Application Layer
+|
+|-- Voice
+|-- Agents
+|-- Memory
+`-- Automation
+
+Core Layer
+|
+|-- Jarvis Core
+|-- Event Bus
+`-- State Model
+
+Presentation Layer
+|
+|-- Console
+|-- Rive
+|-- Electron
+`-- Unity
+
+Infrastructure
+|
+|-- OpenAI
+|-- Claude
+|-- MCP
+|-- Database
+`-- Logging
+```
+
+## Design Goals
+
+- UI-independent Core
+- Event-driven architecture
+- Provider-agnostic AI layer
+- Modular Agent system
+- Extensible Adapter architecture
+- Testability first
+- Future-ready (Rive / Electron / Unity)
+
 ## 개발 환경
 
 현재 개발 환경은 아래 도구를 기준으로 합니다.
@@ -135,9 +230,10 @@ python main.py
 실행하면 아래처럼 명령을 입력할 수 있습니다.
 
 ```text
-Hello, Jarvis
-Type a command, or type 'exit' to quit.
-You >
+================================
+Jarvis v0.2.0-alpha.2
+================================
+Jarvis >
 ```
 
 ## 현재 가능한 명령어 예시
@@ -171,6 +267,15 @@ Memory Agent:
 종료:
 
 ```text
+exit
+```
+
+Command System:
+
+```text
+help
+status
+version
 exit
 ```
 
