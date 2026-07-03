@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.1 - Voice Experience
+v0.3.0-beta.2 - Memory Begins
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -167,7 +167,7 @@ Voice 설정은 환경변수로 관리합니다.
 ```powershell
 $env:JARVIS_WAKE_WORD="hey jarvis"
 $env:JARVIS_STT_PROVIDER="console"
-$env:JARVIS_TTS_PROVIDER="console"
+$env:JARVIS_TTS_PROVIDER="pyttsx3"
 $env:JARVIS_VOICE_DEBUG="true"
 $env:JARVIS_VOICE_ONCE="true"
 ```
@@ -178,6 +178,14 @@ $env:JARVIS_VOICE_ONCE="true"
 $env:JARVIS_STT_PROVIDER="microphone"
 $env:JARVIS_TTS_PROVIDER="pyttsx3"
 ```
+
+Default TTS provider:
+
+```text
+pyttsx3
+```
+
+Jarvis defaults to `pyttsx3` for local voice output. The VoicePipeline still only depends on the TTS Provider contract, so future providers such as Piper, OpenAI, Azure, or ElevenLabs can replace it without changing the pipeline.
 
 Local TTS provider test:
 
@@ -190,6 +198,18 @@ python voice_main.py
 ```
 
 `config.json` can also select the TTS provider:
+
+```json
+{
+  "tts": {
+    "provider": "pyttsx3",
+    "voice": "default",
+    "streaming": true
+  }
+}
+```
+
+Piper can be selected as an interchangeable local provider:
 
 ```json
 {
@@ -212,6 +232,35 @@ piper
 ```
 
 Piper is optional. If Piper or the voice model is missing, Jarvis keeps the TTS provider contract and falls back to console output while publishing `voice.tts.error`.
+
+## Sprint 3.2 - Memory Begins
+
+Mission 3.2 adds short-term conversational memory for the current session.
+
+```text
+VoiceSession
+  |
+ConversationContext
+  |
+History Buffer
+  |
+PromptBuilder
+  |
+ChatProvider
+```
+
+Jarvis now keeps recent user and assistant turns, injects that history into the next prompt, and trims the buffer by configured turn and token windows. The active `VoiceSession` owns the `ConversationContext`; no global conversation state is used.
+
+This is not long-term memory. User profiles, vector databases, persistent storage, tool calling, and permission layers stay out of scope for this mission.
+
+Conversation diagnostics events:
+
+```text
+conversation.started
+conversation.updated
+conversation.context.injected
+conversation.finished
+```
 
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
@@ -505,7 +554,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.1
+version=v0.3.0-beta.2
 ```
 
 Bootstrap Flow:
@@ -657,7 +706,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.1
+Jarvis v0.3.0-beta.2
 ================================
 Jarvis >
 ```

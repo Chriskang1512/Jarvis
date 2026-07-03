@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import uuid4
 
+from jarvis.memory import ConversationContext
+
 
 @dataclass
 class VoiceSession:
@@ -9,6 +11,7 @@ class VoiceSession:
 
     session_id: str
     started_at: str
+    conversation_context: ConversationContext
     turn_count: int = 0
     current_stage: str = "idle"
     interrupt_requested: bool = False
@@ -32,11 +35,15 @@ class VoiceSession:
         return self.interrupt_requested
 
 
-def create_voice_session():
+def create_voice_session(max_turns=6, max_tokens=1200):
     """Create a fresh voice session."""
     return VoiceSession(
         session_id=create_session_id(),
         started_at=datetime.now().isoformat(timespec="seconds"),
+        conversation_context=ConversationContext(
+            max_turns=max_turns,
+            max_tokens=max_tokens,
+        ),
     )
 
 

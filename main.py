@@ -5,7 +5,7 @@ from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_defa
 from jarvis.config import ConfigurationLoader
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
-from jarvis.memory import MemoryService, MockMemoryProvider
+from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
 
 
 def main():
@@ -19,10 +19,15 @@ def main():
     prompt_builder = PromptBuilder(profile=prompt_profile)
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
+    conversation_context = ConversationContext(
+        max_turns=config.conversation.max_turns,
+        max_tokens=config.conversation.max_tokens,
+    )
     chat_service = ChatService(
         provider=chat_provider,
         prompt_builder=prompt_builder,
         memory_service=memory_service,
+        conversation_context=conversation_context,
     )
     registry = create_default_registry()
     dispatcher = CommandDispatcher(
@@ -49,6 +54,7 @@ def main():
         print("--------------------------")
 
         if dispatcher.should_exit():
+            chat_service.finish_conversation()
             break
 
 

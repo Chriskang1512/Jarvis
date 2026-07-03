@@ -22,7 +22,10 @@ def main():
 
     config = ConfigurationLoader().load()
     diagnostics_collector = DiagnosticsCollector()
-    voice_session = create_voice_session()
+    voice_session = create_voice_session(
+        max_turns=config.conversation.max_turns,
+        max_tokens=config.conversation.max_tokens,
+    )
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
@@ -30,6 +33,8 @@ def main():
         provider=chat_provider,
         prompt_builder=prompt_builder,
         memory_service=memory_service,
+        voice_session=voice_session,
+        diagnostics_collector=diagnostics_collector,
     )
 
     wake_word = os.environ.get("JARVIS_WAKE_WORD", "hey jarvis")
@@ -51,6 +56,7 @@ def main():
 
     if os.environ.get("JARVIS_VOICE_ONCE") == "true":
         pipeline.run_once()
+        chat_service.finish_conversation()
         return
 
     while True:

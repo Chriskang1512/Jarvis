@@ -5,6 +5,26 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.2] - Memory Begins
+
+### Added
+
+- ConversationContext for short-term session memory
+- Rolling history buffer with configurable turn and token windows
+- History buffer injection into chat prompts
+- Conversation diagnostics events
+- VoiceSession ownership of ConversationContext
+- Pyttsx3 default TTS provider for local voice output
+
+### Changed
+
+- ChatService now keeps recent conversation turns without using long-term memory.
+- Runtime version updated to v0.3.0-beta.2.
+
+### Fixed
+
+- Existing VoicePipeline remains compatible with session-scoped conversation memory.
+
 ## [v0.3.0-beta.1] - Voice Experience
 
 ### Added

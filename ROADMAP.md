@@ -162,6 +162,7 @@ Transform Jarvis from a conversational assistant into an extensible AI agent pla
 - [x] Streaming-ready TTS 계약
 - [x] Console TTS streaming chunks
 - [x] Pyttsx3 TTS streaming chunks
+- [x] Pyttsx3 default local voice provider
 - [x] Piper local TTS provider candidate
 - [x] Configurable TTS provider selection
 - [x] TTS latency tracking
@@ -246,7 +247,7 @@ System
 v0.3.0의 목표:
 
 - [ ] Voice Experience
-- [ ] Conversation Memory
+- [x] Conversation Memory
 - [ ] Tool Calling
 - [ ] Permission Layer
 - [ ] Memory Store

@@ -15,6 +15,14 @@ from jarvis.voice.providers import (
 class TestTTSProviders(unittest.TestCase):
     """Test that TTS providers keep the shared speech contract."""
 
+    def test_default_config_selects_pyttsx3_provider(self):
+        """Check that pyttsx3 is the default local TTS provider."""
+        config = create_config_from_dict({})
+
+        provider = create_tts_provider(config.tts)
+
+        self.assertIsInstance(provider, Pyttsx3TextToSpeechProvider)
+
     def test_config_selects_piper_provider(self):
         """Check that config can select the Piper TTS provider."""
         config = create_config_from_dict(

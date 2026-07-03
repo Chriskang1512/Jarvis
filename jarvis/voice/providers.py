@@ -314,7 +314,7 @@ def read_provider_name(provider_config):
     if isinstance(provider_config, str):
         return provider_config
 
-    return getattr(provider_config, "provider", "console")
+    return getattr(provider_config, "provider", "pyttsx3")
 
 
 def read_config_value(provider_config, key, default):
