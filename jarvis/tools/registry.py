@@ -25,6 +25,18 @@ class ToolRegistry:
         """Return all registered tools sorted by name."""
         return [self.tools[name] for name in sorted(self.tools)]
 
+    def list_by_domain(self, domain):
+        """Return all tools in one domain sorted by name."""
+        return [
+            tool
+            for tool in self.list()
+            if tool.metadata.domain == domain
+        ]
+
+    def list_domains(self):
+        """Return all registered tool domains sorted by name."""
+        return sorted({tool.metadata.domain for tool in self.tools.values()})
+
     def exists(self, tool_name):
         """Return whether a tool is registered."""
         return tool_name in self.tools

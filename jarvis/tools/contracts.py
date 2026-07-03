@@ -8,6 +8,7 @@ class ToolMetadata:
 
     name: str
     description: str
+    domain: str = "core"
     safe: bool = True
 
 

@@ -11,6 +11,7 @@ class TimeTool:
     metadata = ToolMetadata(
         name="time",
         description="Return the current local time.",
+        domain="core",
         safe=True,
     )
 
@@ -29,6 +30,7 @@ class CalculatorTool:
     metadata = ToolMetadata(
         name="calculator",
         description="Evaluate a safe arithmetic expression.",
+        domain="core",
         safe=True,
     )
 
@@ -61,6 +63,7 @@ class DiagnosticsSummaryTool:
     metadata = ToolMetadata(
         name="diagnostics",
         description="Return a short diagnostics summary.",
+        domain="core",
         safe=True,
     )
 
@@ -93,6 +96,7 @@ class MemoryReadTool:
     metadata = ToolMetadata(
         name="memory_read",
         description="Read one value from the current memory service.",
+        domain="memory",
         safe=True,
     )
 

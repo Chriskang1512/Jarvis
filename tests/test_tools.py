@@ -19,6 +19,19 @@ class TestTools(unittest.TestCase):
         self.assertTrue(registry.exists("diagnostics"))
         self.assertTrue(registry.exists("memory_read"))
 
+    def test_registry_lists_tools_by_domain(self):
+        """Check that tools can be discovered by domain."""
+        registry = create_default_tool_registry()
+
+        core_tool_names = [tool.metadata.name for tool in registry.list_by_domain("core")]
+        memory_tool_names = [tool.metadata.name for tool in registry.list_by_domain("memory")]
+
+        self.assertIn("time", core_tool_names)
+        self.assertIn("calculator", core_tool_names)
+        self.assertIn("diagnostics", core_tool_names)
+        self.assertIn("memory_read", memory_tool_names)
+        self.assertEqual(registry.list_domains(), ["core", "memory"])
+
     def test_dispatcher_executes_calculator_tool(self):
         """Check that dispatcher executes a registered safe tool."""
         registry = create_default_tool_registry()

@@ -291,6 +291,23 @@ diagnostics
 memory_read
 ```
 
+Tool domains:
+
+```text
+core
+memory
+creator
+japanese
+finance
+golf
+hotel
+life
+ai
+plugins
+```
+
+Mission 3.3 only marks tools with domain metadata and exposes domain lookup through ToolRegistry. Future domain tools can be added by creating a new tool and registering it, without changing ToolDispatcher or core pipeline code.
+
 CLI examples:
 
 ```powershell
