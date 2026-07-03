@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from jarvis.permissions import PermissionLevel
+
 
 @dataclass
 class ToolMetadata:
@@ -9,6 +11,7 @@ class ToolMetadata:
     name: str
     description: str
     domain: str = "core"
+    permission_level: PermissionLevel = PermissionLevel.SAFE
     safe: bool = True
 
 

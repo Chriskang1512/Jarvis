@@ -2,6 +2,7 @@ import ast
 import operator
 from datetime import datetime
 
+from jarvis.permissions import PermissionLevel
 from jarvis.tools.contracts import ToolMetadata, ToolResult
 
 
@@ -12,6 +13,7 @@ class TimeTool:
         name="time",
         description="Return the current local time.",
         domain="core",
+        permission_level=PermissionLevel.SAFE,
         safe=True,
     )
 
@@ -31,6 +33,7 @@ class CalculatorTool:
         name="calculator",
         description="Evaluate a safe arithmetic expression.",
         domain="core",
+        permission_level=PermissionLevel.SAFE,
         safe=True,
     )
 
@@ -64,6 +67,7 @@ class DiagnosticsSummaryTool:
         name="diagnostics",
         description="Return a short diagnostics summary.",
         domain="core",
+        permission_level=PermissionLevel.SAFE,
         safe=True,
     )
 
@@ -97,6 +101,7 @@ class MemoryReadTool:
         name="memory_read",
         description="Read one value from the current memory service.",
         domain="memory",
+        permission_level=PermissionLevel.SAFE,
         safe=True,
     )
 

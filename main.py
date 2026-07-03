@@ -7,6 +7,7 @@ from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
 from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
+from jarvis.permissions import PermissionLayer
 from jarvis.tools import ToolDispatcher, create_default_tool_registry
 
 
@@ -28,6 +29,7 @@ def main():
     )
     tool_dispatcher = ToolDispatcher(
         registry=tool_registry,
+        permission_layer=PermissionLayer(diagnostics_collector=diagnostics_collector),
         diagnostics_collector=diagnostics_collector,
     )
     conversation_context = ConversationContext(

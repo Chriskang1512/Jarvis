@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from jarvis.commands.tool import ToolCommand, parse_tool_command
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.memory import MemoryService, MockMemoryProvider
+from jarvis.permissions import PermissionLevel
 from jarvis.tools import ToolDispatcher, ToolRequest, ToolResult, create_default_tool_registry
 from jarvis.tools.safe_tools import evaluate_expression
 
@@ -36,6 +37,7 @@ class TestTools(unittest.TestCase):
         self.assertTrue(registry.exists("calculator"))
         self.assertTrue(registry.exists("diagnostics"))
         self.assertTrue(registry.exists("memory_read"))
+        self.assertEqual(registry.get("calculator").metadata.permission_level, PermissionLevel.SAFE)
 
     def test_registry_lists_tools_by_domain(self):
         """Check that tools can be discovered by domain."""

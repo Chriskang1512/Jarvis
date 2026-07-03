@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.3 - First Action
+v0.3.0-beta.4 - Guardian
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -332,6 +332,50 @@ tool.failed
 
 Jarvis does not execute actions inside the LLM provider. A provider may request an action later, but ToolDispatcher performs execution through ToolRegistry. This keeps Mission 3.4 Permission Layer ready to intercept tool execution without changing tool implementations.
 
+## Sprint 3.4 - Guardian
+
+Mission 3.4 adds the Permission Layer. Tool execution now passes through a single metadata-driven checkpoint before `Tool.execute()`.
+
+```text
+LLM
+  |
+Tool Dispatcher
+  |
+Permission Layer
+  |
+Tool Registry
+  |
+Tool
+```
+
+Permission levels:
+
+```text
+safe
+confirm
+restricted
+```
+
+Permission decision statuses:
+
+```text
+allowed
+confirm_required
+denied
+```
+
+Permission diagnostics events:
+
+```text
+permission.check.started
+permission.allowed
+permission.confirm.required
+permission.denied
+permission.failed
+```
+
+This mission does not implement confirmation UI, voice confirmation, authentication, account systems, network permissions, or plugin signatures. It only creates the security checkpoint that future tools and Permission Layer policies can use.
+
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
 Beta 1 Done Criteria:
@@ -624,7 +668,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.3
+version=v0.3.0-beta.4
 ```
 
 Bootstrap Flow:
@@ -776,7 +820,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.3
+Jarvis v0.3.0-beta.4
 ================================
 Jarvis >
 ```

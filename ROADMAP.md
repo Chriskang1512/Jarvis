@@ -249,7 +249,7 @@ v0.3.0의 목표:
 - [ ] Voice Experience
 - [x] Conversation Memory
 - [x] Tool Calling
-- [ ] Permission Layer
+- [x] Permission Layer
 - [ ] Memory Store
 - [ ] Plugin System
 - [ ] LLM Abstraction

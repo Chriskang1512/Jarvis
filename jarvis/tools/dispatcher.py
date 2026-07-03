@@ -1,12 +1,16 @@
+from jarvis.permissions import PermissionLayer, PermissionStatus
 from jarvis.tools.contracts import ToolRequest, ToolResult
 
 
 class ToolDispatcher:
     """Select and execute registered tools."""
 
-    def __init__(self, registry, diagnostics_collector=None):
+    def __init__(self, registry, permission_layer=None, diagnostics_collector=None):
         """Create a dispatcher using one registry."""
         self.registry = registry
+        self.permission_layer = permission_layer or PermissionLayer(
+            diagnostics_collector=diagnostics_collector,
+        )
         self.diagnostics_collector = diagnostics_collector
 
     def execute(self, request):
@@ -24,6 +28,12 @@ class ToolDispatcher:
             )
 
         self.log_event("tool.selected")
+        permission_decision = self.permission_layer.evaluate(tool, tool_request)
+
+        if not permission_decision.allowed:
+            self.log_event("tool.failed")
+            return create_permission_tool_result(tool_request, permission_decision)
+
         self.log_event("tool.started")
 
         try:
@@ -57,3 +67,19 @@ def normalize_request(request):
         return request
 
     return ToolRequest(tool_name=str(request), input_data={})
+
+
+def create_permission_tool_result(tool_request, permission_decision):
+    """Create a ToolResult for denied or confirm-required requests."""
+    if permission_decision.status == PermissionStatus.CONFIRM_REQUIRED:
+        return ToolResult(
+            tool_name=tool_request.tool_name,
+            success=False,
+            error=f"Permission confirmation required: {permission_decision.reason}",
+        )
+
+    return ToolResult(
+        tool_name=tool_request.tool_name,
+        success=False,
+        error=f"Permission denied: {permission_decision.reason}",
+    )
