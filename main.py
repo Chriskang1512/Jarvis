@@ -3,9 +3,11 @@ import sys
 from jarvis.commands import CommandDispatcher, create_default_registry
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.config import ConfigurationLoader
+from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
 from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
+from jarvis.tools import ToolDispatcher, create_default_tool_registry
 
 
 def main():
@@ -13,12 +15,21 @@ def main():
     configure_console_encoding()
     config = ConfigurationLoader().load()
     event_bus = EventBus()
+    diagnostics_collector = DiagnosticsCollector()
     console_adapter = ConsoleEventAdapter()
     event_bus.subscribe_all(console_adapter.handle_event)
     prompt_profile = create_default_prompt_profile()
     prompt_builder = PromptBuilder(profile=prompt_profile)
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
+    tool_registry = create_default_tool_registry(
+        diagnostics_collector=diagnostics_collector,
+        memory_service=memory_service,
+    )
+    tool_dispatcher = ToolDispatcher(
+        registry=tool_registry,
+        diagnostics_collector=diagnostics_collector,
+    )
     conversation_context = ConversationContext(
         max_turns=config.conversation.max_turns,
         max_tokens=config.conversation.max_tokens,
@@ -34,6 +45,7 @@ def main():
         registry=registry,
         event_bus=event_bus,
         chat_service=chat_service,
+        tool_dispatcher=tool_dispatcher,
         config=config,
     )
 

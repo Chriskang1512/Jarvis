@@ -29,6 +29,6 @@ class JarvisConfig:
     temperature: float = 0.7
     debug: bool = False
     profile: str = "jarvis"
-    version: str = "v0.3.0-beta.2"
+    version: str = "v0.3.0-beta.3"
     tts: TTSConfig = field(default_factory=TTSConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)

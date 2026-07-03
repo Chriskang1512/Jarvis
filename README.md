@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.2 - Memory Begins
+v0.3.0-beta.3 - First Action
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -261,6 +261,56 @@ conversation.updated
 conversation.context.injected
 conversation.finished
 ```
+
+## Sprint 3.3 - First Action
+
+Mission 3.3 adds the first Tool Calling framework. Jarvis can now execute safe actions through a registry and dispatcher.
+
+```text
+Voice Session
+  |
+Conversation Context
+  |
+Prompt Builder
+  |
+LLM
+  |
+Tool Dispatcher
+  |
+Tool Registry
+  |
+Safe Tool
+```
+
+Built-in safe tools:
+
+```text
+time
+calculator
+diagnostics
+memory_read
+```
+
+CLI examples:
+
+```powershell
+tool time
+tool calculator 2 + 3 * 4
+tool diagnostics
+tool memory_read user_name
+```
+
+Tool lifecycle diagnostics events:
+
+```text
+tool.requested
+tool.selected
+tool.started
+tool.completed
+tool.failed
+```
+
+Jarvis does not execute actions inside the LLM provider. A provider may request an action later, but ToolDispatcher performs execution through ToolRegistry. This keeps Mission 3.4 Permission Layer ready to intercept tool execution without changing tool implementations.
 
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
@@ -554,7 +604,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.2
+version=v0.3.0-beta.3
 ```
 
 Bootstrap Flow:
@@ -706,7 +756,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.2
+Jarvis v0.3.0-beta.3
 ================================
 Jarvis >
 ```

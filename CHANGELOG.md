@@ -5,6 +5,26 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.3] - First Action
+
+### Added
+
+- Tool contract with metadata, request, and structured result models
+- ToolRegistry for safe tool lookup and registration
+- ToolDispatcher for tool selection and execution
+- Safe built-in tools: time, calculator, diagnostics summary, and memory read
+- `tool` CLI command for dispatcher-based tool execution
+- Tool diagnostics lifecycle events
+
+### Changed
+
+- CLI bootstrap now wires ToolRegistry and ToolDispatcher without changing VoicePipeline.
+- Runtime version updated to v0.3.0-beta.3.
+
+### Fixed
+
+- Calculator tool rejects unsupported or expensive expressions without using eval.
+
 ## [v0.3.0-beta.2] - Memory Begins
 
 ### Added
