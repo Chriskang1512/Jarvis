@@ -311,6 +311,9 @@ Mission 3.3 only marks tools with domain metadata and exposes domain lookup thro
 CLI examples:
 
 ```powershell
+tool list
+tool domains
+tool domain core
 tool time
 tool calculator 2 + 3 * 4
 tool diagnostics

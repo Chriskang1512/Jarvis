@@ -1,10 +1,28 @@
 import unittest
+from dataclasses import dataclass
 
-from jarvis.commands.tool import parse_tool_command
+from jarvis.commands.tool import ToolCommand, parse_tool_command
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.memory import MemoryService, MockMemoryProvider
 from jarvis.tools import ToolDispatcher, ToolRequest, ToolResult, create_default_tool_registry
 from jarvis.tools.safe_tools import evaluate_expression
+
+
+class NullEventBus:
+    """Event bus used by command tests."""
+
+    def publish_state(self, event_type, state):
+        """Ignore published command state."""
+        return None
+
+
+@dataclass
+class ToolCommandContext:
+    """Minimal command context for ToolCommand tests."""
+
+    tool_dispatcher: object
+    event_bus: object
+    command_text: str
 
 
 class TestTools(unittest.TestCase):
@@ -108,6 +126,46 @@ class TestTools(unittest.TestCase):
 
         self.assertEqual(tool_name, "calculator")
         self.assertEqual(input_data["expression"], "1 + 2")
+
+    def test_tool_command_lists_tools(self):
+        """Check CLI can list registered tools without executing one."""
+        context = create_tool_command_context("list")
+
+        output = ToolCommand().execute(context)
+
+        self.assertIn("core.time", output)
+        self.assertIn("core.calculator", output)
+        self.assertIn("memory.memory_read", output)
+
+    def test_tool_command_lists_domains(self):
+        """Check CLI can list registered tool domains."""
+        context = create_tool_command_context("domains")
+
+        output = ToolCommand().execute(context)
+
+        self.assertIn("core", output)
+        self.assertIn("memory", output)
+
+    def test_tool_command_lists_one_domain(self):
+        """Check CLI can list tools for one domain."""
+        context = create_tool_command_context("domain core")
+
+        output = ToolCommand().execute(context)
+
+        self.assertIn("core.time", output)
+        self.assertIn("core.diagnostics", output)
+        self.assertNotIn("memory.memory_read", output)
+
+
+def create_tool_command_context(command_text):
+    """Create a ToolCommand test context."""
+    registry = create_default_tool_registry()
+    dispatcher = ToolDispatcher(registry=registry)
+    return ToolCommandContext(
+        tool_dispatcher=dispatcher,
+        event_bus=NullEventBus(),
+        command_text=command_text,
+    )
 
 
 if __name__ == "__main__":

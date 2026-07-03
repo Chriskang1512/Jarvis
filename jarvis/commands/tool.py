@@ -15,11 +15,17 @@ class ToolCommand(BaseCommand):
             self.publish_status(context, JarvisStatus.ERROR, "Tool dispatcher is not available")
             return "Tool dispatcher is not available."
 
+        lookup_output = handle_tool_lookup(context)
+
+        if lookup_output != "":
+            self.publish_status(context, JarvisStatus.SUCCESS, "Tool registry lookup completed")
+            return lookup_output
+
         tool_name, input_data = parse_tool_command(context.command_text)
 
         if tool_name == "":
             self.publish_status(context, JarvisStatus.ERROR, "Tool name is required")
-            return "Usage: tool <name> [input]"
+            return "Usage: tool <name> [input] | tool list | tool domains | tool domain <name>"
 
         self.publish_status(context, JarvisStatus.WORKING, f"Tool requested: {tool_name}")
         result = context.tool_dispatcher.execute(
@@ -57,6 +63,45 @@ def parse_tool_command(command_text):
         return tool_name, {"key": raw_input}
 
     return tool_name, {"text": raw_input}
+
+
+def handle_tool_lookup(context):
+    """Return registry lookup output for non-executing tool commands."""
+    command_text = context.command_text.strip()
+
+    if command_text == "list":
+        return format_tool_list(context.tool_dispatcher.registry.list())
+
+    if command_text == "domains":
+        return format_domain_list(context.tool_dispatcher.registry.list_domains())
+
+    if command_text.startswith("domain "):
+        domain = command_text.split(maxsplit=1)[1].strip()
+        return format_tool_list(context.tool_dispatcher.registry.list_by_domain(domain))
+
+    return ""
+
+
+def format_tool_list(tools):
+    """Format a list of tool metadata for the CLI."""
+    if len(tools) == 0:
+        return "No tools found."
+
+    lines = ["Tools"]
+
+    for tool in tools:
+        metadata = tool.metadata
+        lines.append(f"{metadata.domain}.{metadata.name} - {metadata.description}")
+
+    return "\n".join(lines)
+
+
+def format_domain_list(domains):
+    """Format registered tool domains for the CLI."""
+    if len(domains) == 0:
+        return "No tool domains found."
+
+    return "\n".join(["Tool Domains"] + domains)
 
 
 def format_tool_output(output):
