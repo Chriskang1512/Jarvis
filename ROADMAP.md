@@ -251,7 +251,7 @@ v0.3.0의 목표:
 - [x] Tool Calling
 - [x] Permission Layer
 - [x] Memory Store
-- [ ] Plugin System
+- [x] Plugin System
 - [ ] LLM Abstraction
 - [ ] Gmail
 - [ ] Google Calendar

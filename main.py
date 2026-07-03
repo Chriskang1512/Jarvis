@@ -9,6 +9,7 @@ from jarvis.events.adapters import ConsoleEventAdapter
 from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
 from jarvis.memory_store import JsonMemoryStore, MemoryManager
 from jarvis.permissions import PermissionLayer
+from jarvis.plugins import PluginLoader
 from jarvis.tools import ToolDispatcher, create_default_tool_registry
 
 
@@ -34,6 +35,9 @@ def main():
         memory_service=memory_service,
         memory_manager=memory_manager,
     )
+    plugin_loader = PluginLoader(diagnostics_collector=diagnostics_collector)
+    plugin_registry = plugin_loader.load()
+    plugin_loader.register_plugin_tools(plugin_registry, tool_registry)
     tool_dispatcher = ToolDispatcher(
         registry=tool_registry,
         permission_layer=PermissionLayer(diagnostics_collector=diagnostics_collector),

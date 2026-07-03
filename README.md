@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.5 - Long Memory
+v0.3.0-beta.6 - Expansion
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -433,6 +433,54 @@ Default Memory Store config:
 
 This mission does not implement embeddings, vector search, semantic retrieval, AI memory extraction, user profile inference, or cloud sync. It only creates the library where durable memories can live.
 
+## Sprint 3.6 - Expansion
+
+Mission 3.6 adds the local Plugin System foundation. Jarvis can now load builtin plugins and register plugin tools without changing core tool execution.
+
+```text
+Plugin
+  |
+Tool
+  |
+ToolRegistry
+  |
+PermissionLayer
+  |
+ToolDispatcher
+```
+
+Plugin metadata:
+
+```text
+id
+name
+version
+domain
+description
+author
+enabled
+permission_level
+```
+
+Plugin registry APIs:
+
+```text
+list_plugins()
+get_plugin(id)
+list_by_domain(domain)
+list_enabled()
+```
+
+Builtin validation plugin:
+
+```text
+builtin.echo
+  |
+plugin_echo
+```
+
+This mission does not implement YouTube, Japanese, Finance, marketplace, remote installs, auto-update, signing, or external credentials. It only creates the local socket where future plugin capabilities can attach.
+
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
 Beta 1 Done Criteria:
@@ -725,7 +773,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.5
+version=v0.3.0-beta.6
 ```
 
 Bootstrap Flow:
@@ -877,7 +925,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.5
+Jarvis v0.3.0-beta.6
 ================================
 Jarvis >
 ```

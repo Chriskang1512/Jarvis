@@ -5,6 +5,26 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.6] - Expansion
+
+### Added
+
+- Plugin metadata model
+- Plugin contract for local Jarvis plugins
+- PluginRegistry for loaded plugin lookup
+- PluginLoader for builtin plugin discovery
+- Builtin echo plugin used to validate plugin tool registration
+- Plugin diagnostics lifecycle events
+
+### Changed
+
+- Runtime now loads builtin plugins and registers plugin tools into ToolRegistry.
+- Runtime version updated to v0.3.0-beta.6.
+
+### Fixed
+
+- Plugin tools pass through the same ToolRegistry, PermissionLayer, and ToolDispatcher as core tools.
+
 ## [v0.3.0-beta.5] - Long Memory
 
 ### Added

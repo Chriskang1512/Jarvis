@@ -42,7 +42,7 @@ def create_config_from_dict(config_data):
         temperature=config_data.get("temperature", 0.7),
         debug=config_data.get("debug", False),
         profile=config_data.get("profile", "jarvis"),
-        version=config_data.get("version", "v0.3.0-beta.5"),
+        version=config_data.get("version", "v0.3.0-beta.6"),
         tts=create_tts_config(tts_data),
         conversation=create_conversation_config(conversation_data),
         memory_store=create_memory_store_config(memory_store_data),
