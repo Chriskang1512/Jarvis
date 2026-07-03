@@ -5,6 +5,33 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.1] - Voice Experience
+
+### Added
+
+- VoiceSession
+- Streaming-ready TTS contract
+- Console TTS chunk output
+- Pyttsx3 TTS chunk output
+- Interrupt-ready voice session flag
+- Voice session ID in `voice_main.py`
+- Local Piper TTS provider candidate
+- Configurable TTS provider settings in `config.json`
+- TTS diagnostics events for provider selection, chunks, playback, and errors
+
+### Changed
+
+- VoicePipeline now uses streaming-ready TTS when available.
+- VoicePipeline now tracks session stage.
+- VoicePipeline logs TTS streaming start and finish.
+- VoicePipeline can switch TTS providers without changing pipeline code.
+- Runtime version updated to v0.3.0-beta.1.
+
+### Fixed
+
+- Existing CLI remains available through `python main.py`.
+- Existing diagnostics entry point remains available through `python diagnostics_main.py`.
+
 ## [v0.2.0-beta.2] - Metadata Console
 
 ### Added

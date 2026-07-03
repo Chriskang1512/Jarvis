@@ -146,9 +146,112 @@ Jarvis가 실제 작업을 실행할 수 있는 기반을 만드는 단계입니
 
 ## v0.3.0 - External Services
 
-외부 서비스와 연결하는 단계입니다.
+생각하고, 기억하고, 행동할 수 있는 AI로 발전하는 단계입니다.
 
-- [ ] OpenAI API
+## v0.3.0 Beta Blueprint
+
+Goal:
+
+Transform Jarvis from a conversational assistant into an extensible AI agent platform.
+
+## v0.3.0-beta.1 - Voice Experience
+
+사람처럼 대화하는 음성 경험의 기반을 만드는 단계입니다.
+
+- [x] Voice Session 관리
+- [x] Streaming-ready TTS 계약
+- [x] Console TTS streaming chunks
+- [x] Pyttsx3 TTS streaming chunks
+- [x] Piper local TTS provider candidate
+- [x] Configurable TTS provider selection
+- [x] TTS latency tracking
+- [x] Interrupt-ready session flag
+- [x] Voice diagnostics event publish
+- [ ] OpenAI TTS Provider
+- [ ] Real interrupt handling
+
+Development Principles:
+
+1. Architecture First
+   - 기능보다 구조를 먼저 만듭니다.
+
+2. Extensibility
+   - 나중에 기능을 추가해도 기존 코드를 크게 수정하지 않습니다.
+
+3. Safety by Design
+   - 권한은 처음부터 아키텍처에 포함합니다.
+   - Permission Layer는 나중에 덧붙이는 기능이 아니라 핵심 설계 요소입니다.
+
+PM Task Order:
+
+```text
+3.1 Voice Experience
+  |
+3.2 Conversation Memory
+  |
+3.3 Tool Calling (Safe Only)
+  |
+3.4 Permission Layer
+  |
+3.5 Memory Store
+  |
+3.6 Plugin System
+  |
+3.7 LLM Abstraction
+```
+
+```text
+Jarvis v0.3.0 Beta
+
+|-- Beta 3.1 Voice Experience
+|   `-- 실제 음성 입출력 완성
+|
+|-- Beta 3.2 Conversation Memory
+|   `-- 현재 대화 기억
+|
+|-- Beta 3.3 Tool Calling
+|   `-- AI가 기능을 호출하는 구조
+|
+|-- Beta 3.4 Permission Layer
+|   `-- Tool 실행 권한 관리
+|
+|-- Beta 3.5 Memory Store
+|   `-- 장기 기억 저장
+|
+|-- Beta 3.6 Plugin System
+|   `-- 기능 확장 구조
+|
+`-- Beta 3.7 LLM Abstraction
+    `-- OpenAI / Claude / Gemini / Local 교체 가능
+```
+
+의존 관계:
+
+```text
+Voice Experience
+  |
+Conversation Memory
+  |
+Tool Calling
+  |
+Permission Layer
+  |
+Memory Store
+  |--------|
+  |        |
+Plugin   LLM Abstraction
+System
+```
+
+v0.3.0의 목표:
+
+- [ ] Voice Experience
+- [ ] Conversation Memory
+- [ ] Tool Calling
+- [ ] Permission Layer
+- [ ] Memory Store
+- [ ] Plugin System
+- [ ] LLM Abstraction
 - [ ] Gmail
 - [ ] Google Calendar
 - [ ] Discord

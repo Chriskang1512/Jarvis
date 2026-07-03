@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.2.0-beta.2 - Metadata Console
+v0.3.0-beta.1 - Voice Experience
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -101,6 +101,41 @@ Console은 metadata를 렌더링만 합니다. Source of truth는 `DiagnosticsCo
 
 DiagnosticSnapshot은 호환성을 위해 `version` 필드를 가집니다. Beta.2의 snapshot version은 `1`입니다. 향후 Finance, Memory, Calendar, Automation metadata가 추가되면 snapshot version을 올려 CLI, GUI, REST API가 같은 계약을 공유할 수 있게 합니다.
 
+v0.3.0-beta.1의 목표는 `Voice Experience`입니다.
+
+이번 Sprint의 목표는 완성형 음성비서가 아니라 사람처럼 대화하는 음성 경험의 기반입니다.
+
+```text
+VoiceSession
+  |
+VoicePipeline
+  |
+Streaming-ready TTS
+  |
+DiagnosticsCollector
+```
+
+Voice Experience 기준:
+
+```text
+[x] Voice Session 관리
+[x] Streaming-ready TTS 계약
+[x] TTS chunk output
+[x] 응답 지연 측정
+[x] 향후 Interrupt 지원 구조
+[x] Diagnostics event publish
+```
+
+v0.3 기능은 아래 질문을 통과해야 합니다.
+
+```text
+확장 가능한가?
+Provider를 교체할 수 있는가?
+Permission Layer와 자연스럽게 연결되는가?
+Diagnostics로 추적 가능한가?
+Snapshot으로 재현 가능한가?
+```
+
 v0.2.0-beta.1의 목표는 `Voice Pipeline Foundation`입니다.
 
 ```text
@@ -143,6 +178,40 @@ $env:JARVIS_VOICE_ONCE="true"
 $env:JARVIS_STT_PROVIDER="microphone"
 $env:JARVIS_TTS_PROVIDER="pyttsx3"
 ```
+
+Local TTS provider test:
+
+```powershell
+$env:JARVIS_TTS_PROVIDER="piper"
+$env:JARVIS_TTS_PIPER_PATH="piper"
+$env:JARVIS_TTS_MODEL_PATH="C:\path\to\voice.onnx"
+$env:JARVIS_TTS_STREAMING="true"
+python voice_main.py
+```
+
+`config.json` can also select the TTS provider:
+
+```json
+{
+  "tts": {
+    "provider": "piper",
+    "voice": "default",
+    "streaming": true,
+    "piper_path": "piper",
+    "model_path": "C:\\path\\to\\voice.onnx"
+  }
+}
+```
+
+Supported TTS provider names:
+
+```text
+console
+pyttsx3
+piper
+```
+
+Piper is optional. If Piper or the voice model is missing, Jarvis keeps the TTS provider contract and falls back to console output while publishing `voice.tts.error`.
 
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
@@ -436,7 +505,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.2.0-beta.2
+version=v0.3.0-beta.1
 ```
 
 Bootstrap Flow:
@@ -588,7 +657,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.2.0-beta.2
+Jarvis v0.3.0-beta.1
 ================================
 Jarvis >
 ```

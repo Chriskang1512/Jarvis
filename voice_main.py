@@ -6,7 +6,13 @@ from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_defa
 from jarvis.config import ConfigurationLoader
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.memory import MemoryService, MockMemoryProvider
-from jarvis.voice import VoicePipeline, WakeWordListener, create_stt_provider, create_tts_provider
+from jarvis.voice import (
+    VoicePipeline,
+    WakeWordListener,
+    create_stt_provider,
+    create_tts_provider,
+    create_voice_session,
+)
 
 
 def main():
@@ -16,6 +22,7 @@ def main():
 
     config = ConfigurationLoader().load()
     diagnostics_collector = DiagnosticsCollector()
+    voice_session = create_voice_session()
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
@@ -27,18 +34,19 @@ def main():
 
     wake_word = os.environ.get("JARVIS_WAKE_WORD", "hey jarvis")
     stt_provider_name = os.environ.get("JARVIS_STT_PROVIDER", "console")
-    tts_provider_name = os.environ.get("JARVIS_TTS_PROVIDER", "console")
 
     pipeline = VoicePipeline(
         wake_listener=WakeWordListener(wake_word=wake_word),
         stt_provider=create_stt_provider(stt_provider_name),
         chat_service=chat_service,
-        tts_provider=create_tts_provider(tts_provider_name),
+        tts_provider=create_tts_provider(config.tts, diagnostics_collector=diagnostics_collector),
         diagnostics_collector=diagnostics_collector,
+        voice_session=voice_session,
     )
 
     print("Jarvis Voice Pipeline")
     print(f"Wake word: {wake_word}")
+    print(f"Voice session: {voice_session.session_id}")
     print("Press Ctrl+C to stop.")
 
     if os.environ.get("JARVIS_VOICE_ONCE") == "true":
