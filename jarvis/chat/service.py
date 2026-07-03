@@ -50,7 +50,14 @@ class ChatService:
             self.log_event("conversation.context.injected")
 
         prompt = self.prompt_builder.build(message, conversation_history=history)
-        reply = self.provider.generate_reply(prompt)
+        self.log_event("llm.request.started")
+        try:
+            reply = generate_provider_reply(self.provider, prompt)
+        except Exception:
+            self.log_event("llm.provider.failed")
+            raise
+
+        self.log_event("llm.request.finished")
         self.update_conversation(message, reply)
         return reply
 
@@ -154,3 +161,11 @@ def format_memory_reply(key, value):
         return "I do not know your name yet."
 
     return ""
+
+
+def generate_provider_reply(provider, prompt):
+    """Generate a reply through the LLM provider contract."""
+    if hasattr(provider, "generate"):
+        return provider.generate(prompt)
+
+    return provider.generate_reply(prompt)

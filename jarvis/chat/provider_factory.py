@@ -1,24 +1,16 @@
-from jarvis.chat.providers import ClaudeProvider, MockChatProvider, OpenAIProvider
+from jarvis.llm import LLMProviderFactory
 
 
 class ProviderFactory:
-    """Create ChatProvider instances from JarvisConfig."""
+    """Backward-compatible factory for LLM providers."""
 
-    def create(self, config):
-        """Return a provider for the configured provider name."""
-        if config.provider == "mock":
-            return MockChatProvider()
+    def __init__(self, diagnostics_collector=None):
+        """Create a provider factory."""
+        self.llm_factory = LLMProviderFactory(diagnostics_collector=diagnostics_collector)
 
-        if config.provider == "openai":
-            return OpenAIProvider(
-                model=config.model,
-                temperature=config.temperature,
-            )
+    def create(self, config, diagnostics_collector=None):
+        """Return an LLM provider for the configured provider name."""
+        if diagnostics_collector is not None:
+            self.llm_factory = LLMProviderFactory(diagnostics_collector=diagnostics_collector)
 
-        if config.provider == "claude":
-            return ClaudeProvider(
-                model=config.model,
-                temperature=config.temperature,
-            )
-
-        raise ValueError(f"Provider '{config.provider}' is not supported yet.")
+        return self.llm_factory.create(config)

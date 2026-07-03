@@ -252,7 +252,7 @@ v0.3.0의 목표:
 - [x] Permission Layer
 - [x] Memory Store
 - [x] Plugin System
-- [ ] LLM Abstraction
+- [x] LLM Abstraction
 - [ ] Gmail
 - [ ] Google Calendar
 - [ ] Discord

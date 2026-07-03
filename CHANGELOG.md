@@ -5,6 +5,27 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.7] - LLM Abstraction
+
+### Added
+
+- Provider-independent `jarvis.llm` package
+- Common LLM provider contract with `generate()`, `generate_stream()`, and `metadata()`
+- LLM provider metadata model for capability discovery
+- LLMProviderFactory for provider creation from configuration
+- Mock and OpenAI LLM provider adapters
+- LLM diagnostics lifecycle events
+
+### Changed
+
+- ChatService now calls the LLM provider contract instead of a concrete provider implementation.
+- Runtime provider creation now goes through the LLMProviderFactory.
+- Runtime version updated to v0.3.0-beta.7.
+
+### Fixed
+
+- Jarvis Core no longer needs provider-specific chat calls for normal response generation.
+
 ## [v0.3.0-beta.6] - Expansion
 
 ### Added

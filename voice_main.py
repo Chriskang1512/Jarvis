@@ -27,7 +27,7 @@ def main():
         max_tokens=config.conversation.max_tokens,
     )
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
-    chat_provider = ProviderFactory().create(config)
+    chat_provider = ProviderFactory(diagnostics_collector=diagnostics_collector).create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
     chat_service = ChatService(
         provider=chat_provider,

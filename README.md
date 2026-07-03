@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.6 - Expansion
+v0.3.0-beta.7 - LLM Abstraction
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -481,6 +481,60 @@ plugin_echo
 
 This mission does not implement YouTube, Japanese, Finance, marketplace, remote installs, auto-update, signing, or external credentials. It only creates the local socket where future plugin capabilities can attach.
 
+## Sprint 3.7 - LLM Abstraction
+
+Mission 3.7 adds the provider-independent LLM layer. ChatService now depends on the LLM Provider contract instead of a concrete vendor implementation.
+
+```text
+Voice
+  |
+Conversation
+  |
+ChatService
+  |
+LLM Provider
+```
+
+LLM provider contract:
+
+```text
+generate()
+generate_stream()
+metadata()
+```
+
+Provider metadata:
+
+```text
+id
+name
+model
+supports_stream
+supports_tools
+supports_images
+supports_reasoning
+```
+
+Implemented providers:
+
+```text
+mock
+openai
+```
+
+The existing Claude adapter remains available through the legacy provider path for compatibility, but new provider work should target `jarvis.llm`.
+
+LLM diagnostics events:
+
+```text
+llm.provider.selected
+llm.request.started
+llm.request.finished
+llm.provider.failed
+```
+
+Changing the AI provider should now be a configuration change, not a ChatService rewrite.
+
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
 Beta 1 Done Criteria:
@@ -773,7 +827,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.6
+version=v0.3.0-beta.7
 ```
 
 Bootstrap Flow:
@@ -812,7 +866,7 @@ OpenAI 사용 예시:
   "temperature": 0.7,
   "debug": false,
   "profile": "jarvis",
-  "version": "v0.2.0-alpha.8"
+  "version": "v0.3.0-beta.7"
 }
 ```
 
@@ -825,7 +879,7 @@ Claude 사용 예시:
   "temperature": 0.7,
   "debug": false,
   "profile": "jarvis",
-  "version": "v0.2.0-alpha.8"
+  "version": "v0.3.0-beta.7"
 }
 ```
 
@@ -925,7 +979,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.6
+Jarvis v0.3.0-beta.7
 ================================
 Jarvis >
 ```

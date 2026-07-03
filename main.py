@@ -23,7 +23,7 @@ def main():
     event_bus.subscribe_all(console_adapter.handle_event)
     prompt_profile = create_default_prompt_profile()
     prompt_builder = PromptBuilder(profile=prompt_profile)
-    chat_provider = ProviderFactory().create(config)
+    chat_provider = ProviderFactory(diagnostics_collector=diagnostics_collector).create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
     memory_manager = MemoryManager(
         store=JsonMemoryStore(config.memory_store.path),
@@ -52,6 +52,7 @@ def main():
         prompt_builder=prompt_builder,
         memory_service=memory_service,
         conversation_context=conversation_context,
+        diagnostics_collector=diagnostics_collector,
     )
     registry = create_default_registry()
     dispatcher = CommandDispatcher(
