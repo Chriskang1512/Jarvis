@@ -7,6 +7,7 @@ from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
 from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
+from jarvis.memory_store import JsonMemoryStore, MemoryManager
 from jarvis.permissions import PermissionLayer
 from jarvis.tools import ToolDispatcher, create_default_tool_registry
 
@@ -23,9 +24,15 @@ def main():
     prompt_builder = PromptBuilder(profile=prompt_profile)
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
+    memory_manager = MemoryManager(
+        store=JsonMemoryStore(config.memory_store.path),
+        diagnostics_collector=diagnostics_collector,
+    )
+    memory_manager.load()
     tool_registry = create_default_tool_registry(
         diagnostics_collector=diagnostics_collector,
         memory_service=memory_service,
+        memory_manager=memory_manager,
     )
     tool_dispatcher = ToolDispatcher(
         registry=tool_registry,

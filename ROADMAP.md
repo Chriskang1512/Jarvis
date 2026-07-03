@@ -250,7 +250,7 @@ v0.3.0의 목표:
 - [x] Conversation Memory
 - [x] Tool Calling
 - [x] Permission Layer
-- [ ] Memory Store
+- [x] Memory Store
 - [ ] Plugin System
 - [ ] LLM Abstraction
 - [ ] Gmail

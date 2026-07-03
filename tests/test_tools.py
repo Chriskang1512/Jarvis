@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from jarvis.commands.tool import ToolCommand, parse_tool_command
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.memory import MemoryService, MockMemoryProvider
+from jarvis.memory_store import InMemoryStore, MemoryManager
 from jarvis.permissions import PermissionLevel
 from jarvis.tools import ToolDispatcher, ToolRequest, ToolResult, create_default_tool_registry
 from jarvis.tools.safe_tools import evaluate_expression
@@ -121,6 +122,23 @@ class TestTools(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(result.output, "Chris")
+
+    def test_memory_read_tool_searches_long_memory_manager(self):
+        """Check memory_read can read long-term memories."""
+        memory_manager = MemoryManager(store=InMemoryStore())
+        memory_manager.remember("Jarvis targets v0.3.0 Beta.", category="project", tags=["jarvis"])
+        registry = create_default_tool_registry(memory_manager=memory_manager)
+        dispatcher = ToolDispatcher(registry=registry)
+
+        result = dispatcher.execute(
+            ToolRequest(
+                tool_name="memory_read",
+                input_data={"key": "Jarvis"},
+            )
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.output[0]["content"], "Jarvis targets v0.3.0 Beta.")
 
     def test_tool_command_parser_maps_safe_inputs(self):
         """Check CLI tool command text becomes structured input."""

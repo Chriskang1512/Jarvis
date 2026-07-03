@@ -42,11 +42,11 @@ class ToolRegistry:
         return tool_name in self.tools
 
 
-def create_default_tool_registry(diagnostics_collector=None, memory_service=None):
+def create_default_tool_registry(diagnostics_collector=None, memory_service=None, memory_manager=None):
     """Create the default registry with safe built-in tools."""
     registry = ToolRegistry()
     registry.register(TimeTool())
     registry.register(CalculatorTool())
     registry.register(DiagnosticsSummaryTool(diagnostics_collector=diagnostics_collector))
-    registry.register(MemoryReadTool(memory_service=memory_service))
+    registry.register(MemoryReadTool(memory_service=memory_service, memory_manager=memory_manager))
     return registry

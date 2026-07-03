@@ -21,6 +21,13 @@ class ConversationConfig:
 
 
 @dataclass
+class MemoryStoreConfig:
+    """Store long-term memory backend settings."""
+
+    path: str = "data/memory_store.json"
+
+
+@dataclass
 class JarvisConfig:
     """Store runtime configuration for Jarvis bootstrap."""
 
@@ -29,6 +36,7 @@ class JarvisConfig:
     temperature: float = 0.7
     debug: bool = False
     profile: str = "jarvis"
-    version: str = "v0.3.0-beta.4"
+    version: str = "v0.3.0-beta.5"
     tts: TTSConfig = field(default_factory=TTSConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
+    memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)

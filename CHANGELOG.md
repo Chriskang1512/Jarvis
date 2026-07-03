@@ -5,6 +5,26 @@ Jarvis 프로젝트의 변경 기록입니다.
 이 문서는 Keep a Changelog 형식을 참고합니다.
 Jarvis 버전은 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 증가합니다.
 
+## [v0.3.0-beta.5] - Long Memory
+
+### Added
+
+- Long-term Memory Store package
+- Structured MemoryRecord model with category, source, tags, and timestamps
+- MemoryManager for storage and retrieval coordination
+- JSON-backed Memory Store implementation
+- Metadata retrieval APIs for category, tag, recent, and text search
+- Memory Store diagnostics lifecycle events
+
+### Changed
+
+- Runtime now wires a JSON Memory Store without coupling it to VoiceSession.
+- Runtime version updated to v0.3.0-beta.5.
+
+### Fixed
+
+- ConversationContext remains short-term and independent from persistent memory.
+
 ## [v0.3.0-beta.4] - Guardian
 
 ### Added

@@ -6,7 +6,7 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.4 - Guardian
+v0.3.0-beta.5 - Long Memory
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -376,6 +376,62 @@ permission.failed
 
 This mission does not implement confirmation UI, voice confirmation, authentication, account systems, network permissions, or plugin signatures. It only creates the security checkpoint that future tools and Permission Layer policies can use.
 
+## Sprint 3.5 - Long Memory
+
+Mission 3.5 adds a long-term Memory Store. ConversationContext still remembers only the active session; Memory Store remembers across sessions.
+
+```text
+VoiceSession
+  |
+ConversationContext
+  |
+MemoryManager
+  |
+MemoryStore
+```
+
+Memory categories:
+
+```text
+preference
+fact
+goal
+project
+routine
+```
+
+Memory metadata:
+
+```text
+id
+category
+created_at
+updated_at
+source
+tags
+```
+
+Retrieval APIs:
+
+```text
+find_by_category()
+find_by_tag()
+find_recent()
+search()
+```
+
+Default Memory Store config:
+
+```json
+{
+  "memory_store": {
+    "path": "data/memory_store.json"
+  }
+}
+```
+
+This mission does not implement embeddings, vector search, semantic retrieval, AI memory extraction, user profile inference, or cloud sync. It only creates the library where durable memories can live.
+
 현재 음성 파이프라인은 foundation 단계입니다. 완벽한 음성비서가 아니라 `Hey Jarvis -> listen -> transcribe -> LLM response -> speak -> log` 흐름을 검증합니다.
 
 Beta 1 Done Criteria:
@@ -668,7 +724,7 @@ model=mock
 temperature=0.7
 debug=false
 profile=jarvis
-version=v0.3.0-beta.4
+version=v0.3.0-beta.5
 ```
 
 Bootstrap Flow:
@@ -820,7 +876,7 @@ python main.py
 
 ```text
 ================================
-Jarvis v0.3.0-beta.4
+Jarvis v0.3.0-beta.5
 ================================
 Jarvis >
 ```

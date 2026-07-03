@@ -105,9 +105,10 @@ class MemoryReadTool:
         safe=True,
     )
 
-    def __init__(self, memory_service=None):
+    def __init__(self, memory_service=None, memory_manager=None):
         """Create a memory read tool."""
         self.memory_service = memory_service
+        self.memory_manager = memory_manager
 
     def execute(self, input_data):
         """Read one memory key."""
@@ -118,6 +119,24 @@ class MemoryReadTool:
                 tool_name=self.metadata.name,
                 success=False,
                 error="Memory key is required.",
+            )
+
+        if self.memory_service is not None:
+            value = self.memory_service.recall(key)
+
+            if value != "":
+                return ToolResult(
+                    tool_name=self.metadata.name,
+                    success=True,
+                    output=value,
+                )
+
+        if self.memory_manager is not None:
+            memories = self.memory_manager.search(key)
+            return ToolResult(
+                tool_name=self.metadata.name,
+                success=True,
+                output=[memory.to_dict() for memory in memories],
             )
 
         if self.memory_service is None:

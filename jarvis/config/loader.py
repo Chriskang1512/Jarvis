@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from jarvis.config.settings import ConversationConfig, JarvisConfig
+from jarvis.config.settings import ConversationConfig, JarvisConfig, MemoryStoreConfig
 from jarvis.config.settings import TTSConfig
 
 
@@ -34,6 +34,7 @@ def create_config_from_dict(config_data):
     """Create JarvisConfig using known keys from a dictionary."""
     tts_data = config_data.get("tts", {})
     conversation_data = config_data.get("conversation", {})
+    memory_store_data = config_data.get("memory_store", {})
 
     return JarvisConfig(
         provider=config_data.get("provider", "mock"),
@@ -41,9 +42,10 @@ def create_config_from_dict(config_data):
         temperature=config_data.get("temperature", 0.7),
         debug=config_data.get("debug", False),
         profile=config_data.get("profile", "jarvis"),
-        version=config_data.get("version", "v0.3.0-beta.4"),
+        version=config_data.get("version", "v0.3.0-beta.5"),
         tts=create_tts_config(tts_data),
         conversation=create_conversation_config(conversation_data),
+        memory_store=create_memory_store_config(memory_store_data),
     )
 
 
@@ -63,4 +65,11 @@ def create_conversation_config(conversation_data):
     return ConversationConfig(
         max_turns=conversation_data.get("max_turns", 6),
         max_tokens=conversation_data.get("max_tokens", 1200),
+    )
+
+
+def create_memory_store_config(memory_store_data):
+    """Create MemoryStoreConfig using known keys from a dictionary."""
+    return MemoryStoreConfig(
+        path=memory_store_data.get("path", "data/memory_store.json"),
     )
