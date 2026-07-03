@@ -4,6 +4,7 @@ import sys
 
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.config import ConfigurationLoader
+from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.memory import MemoryService, MockMemoryProvider
 from jarvis.voice import VoicePipeline, WakeWordListener, create_stt_provider, create_tts_provider
 
@@ -14,6 +15,7 @@ def main():
     configure_logging()
 
     config = ConfigurationLoader().load()
+    diagnostics_collector = DiagnosticsCollector()
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
     chat_provider = ProviderFactory().create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
@@ -32,6 +34,7 @@ def main():
         stt_provider=create_stt_provider(stt_provider_name),
         chat_service=chat_service,
         tts_provider=create_tts_provider(tts_provider_name),
+        diagnostics_collector=diagnostics_collector,
     )
 
     print("Jarvis Voice Pipeline")
