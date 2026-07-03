@@ -16,13 +16,14 @@ class MemoryManager:
         self.log_event("memory.loaded")
         return memories
 
-    def remember(self, content, category=MemoryCategory.FACT, source="manual", tags=None):
+    def remember(self, content, category=MemoryCategory.FACT, title="", source="manual", tags=None):
         """Create a memory when the content is worth storing."""
         if not self.should_store(content):
             return None
 
         memory = MemoryRecord(
             content=content.strip(),
+            title=title.strip(),
             category=normalize_category(category),
             source=source,
             tags=normalize_tags(tags),
@@ -31,11 +32,12 @@ class MemoryManager:
         self.log_event("memory.created")
         return created_memory
 
-    def update(self, memory_id, content=None, category=None, source=None, tags=None):
+    def update(self, memory_id, content=None, title=None, category=None, source=None, tags=None):
         """Update one stored memory."""
         memory = self.store.update(
             memory_id=memory_id,
             content=content,
+            title=title,
             category=category,
             source=source,
             tags=normalize_tags(tags) if tags is not None else None,

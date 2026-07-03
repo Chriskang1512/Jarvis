@@ -16,12 +16,14 @@ class TestMemoryStore(unittest.TestCase):
 
         memory = manager.remember(
             "Owner prefers pyttsx3 as the default TTS.",
+            title="Default TTS Preference",
             category=MemoryCategory.PREFERENCE,
             source="test",
             tags=["voice", "tts"],
         )
 
         self.assertIsNotNone(memory.id)
+        self.assertEqual(memory.title, "Default TTS Preference")
         self.assertEqual(memory.category, MemoryCategory.PREFERENCE)
         self.assertEqual(memory.source, "test")
         self.assertIn("voice", memory.tags)
@@ -31,12 +33,13 @@ class TestMemoryStore(unittest.TestCase):
     def test_memory_store_retrieval_apis(self):
         """Check metadata-based retrieval APIs."""
         manager = MemoryManager(store=InMemoryStore())
-        manager.remember("Jarvis targets v0.3.0 Beta.", category="project", tags=["jarvis"])
-        manager.remember("Owner studies Japanese N4.", category="goal", tags=["japanese"])
+        manager.remember("Jarvis targets v0.3.0 Beta.", title="Jarvis Beta", category="project", tags=["jarvis"])
+        manager.remember("Owner studies Japanese N4.", title="Japanese Study", category="goal", tags=["japanese"])
 
         self.assertEqual(len(manager.find_by_category("project")), 1)
         self.assertEqual(len(manager.find_by_tag("japanese")), 1)
         self.assertEqual(len(manager.search("beta")), 1)
+        self.assertEqual(len(manager.search("study")), 1)
         self.assertEqual(len(manager.find_recent(limit=1)), 1)
 
     def test_memory_manager_updates_and_deletes_memory(self):
@@ -44,10 +47,11 @@ class TestMemoryStore(unittest.TestCase):
         manager = MemoryManager(store=InMemoryStore())
         memory = manager.remember("Old content", category="fact")
 
-        updated = manager.update(memory.id, content="New content", tags=["updated"])
+        updated = manager.update(memory.id, content="New content", title="New title", tags=["updated"])
         deleted = manager.delete(memory.id)
 
         self.assertEqual(updated.content, "New content")
+        self.assertEqual(updated.title, "New title")
         self.assertIn("updated", updated.tags)
         self.assertTrue(deleted)
         self.assertIsNone(manager.get(memory.id))
@@ -58,12 +62,13 @@ class TestMemoryStore(unittest.TestCase):
             path = Path(temp_dir) / "memory_store.json"
             first_manager = MemoryManager(store=JsonMemoryStore(path))
             first_manager.load()
-            first_manager.remember("Persistent memory.", category="fact", tags=["persist"])
+            first_manager.remember("Persistent memory.", title="Persistent Title", category="fact", tags=["persist"])
 
             second_manager = MemoryManager(store=JsonMemoryStore(path))
             loaded = second_manager.load()
 
             self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0].title, "Persistent Title")
             self.assertEqual(loaded[0].content, "Persistent memory.")
             self.assertEqual(loaded[0].category, MemoryCategory.FACT)
 

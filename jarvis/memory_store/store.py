@@ -29,7 +29,7 @@ class InMemoryStore:
         """Return one memory by ID."""
         return self.memories.get(memory_id)
 
-    def update(self, memory_id, content=None, category=None, source=None, tags=None):
+    def update(self, memory_id, content=None, title=None, category=None, source=None, tags=None):
         """Update one memory and return it."""
         memory = self.get(memory_id)
 
@@ -38,6 +38,9 @@ class InMemoryStore:
 
         if content is not None:
             memory.content = content
+
+        if title is not None:
+            memory.title = title
 
         if category is not None:
             memory.category = normalize_category(category)
@@ -84,7 +87,7 @@ class InMemoryStore:
         return [
             memory
             for memory in self.list()
-            if normalized_query in memory.content.lower()
+            if normalized_query in memory.content.lower() or normalized_query in memory.title.lower()
         ]
 
 

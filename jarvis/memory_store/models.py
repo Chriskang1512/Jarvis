@@ -24,6 +24,7 @@ class MemoryRecord:
     """Represent one long-term memory item."""
 
     content: str
+    title: str = ""
     category: MemoryCategory = MemoryCategory.FACT
     source: str = "manual"
     tags: list = field(default_factory=list)
@@ -35,6 +36,7 @@ class MemoryRecord:
         """Return a JSON-serializable dictionary."""
         return {
             "id": self.id,
+            "title": self.title,
             "content": self.content,
             "category": self.category.value,
             "source": self.source,
@@ -48,6 +50,7 @@ def memory_from_dict(data):
     """Create a MemoryRecord from stored data."""
     return MemoryRecord(
         id=data.get("id", str(uuid4())),
+        title=data.get("title", ""),
         content=data.get("content", ""),
         category=normalize_category(data.get("category", MemoryCategory.FACT.value)),
         source=data.get("source", "manual"),
@@ -63,4 +66,3 @@ def normalize_category(category):
         return category
 
     return MemoryCategory(str(category).lower())
-
