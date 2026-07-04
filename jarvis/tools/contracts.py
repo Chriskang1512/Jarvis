@@ -10,9 +10,21 @@ class ToolMetadata:
 
     name: str
     description: str
+    version: str = "0.1.0"
     domain: str = "core"
     permission_level: PermissionLevel = PermissionLevel.SAFE
+    safety_level: PermissionLevel = PermissionLevel.SAFE
     safe: bool = True
+    deprecated: bool = False
+    priority: int = 0
+    capability: str = ""
+    aliases: list[str] = field(default_factory=list)
+    supported_intents: list[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
+    input_mode: str = "text"
+    input_prefixes: list[str] = field(default_factory=list)
+    allow_empty_input: bool = False
+    route_confidence: float = 0.75
 
 
 @dataclass

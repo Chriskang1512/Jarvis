@@ -36,7 +36,7 @@ class JarvisConfig:
     temperature: float = 0.7
     debug: bool = False
     profile: str = "jarvis"
-    version: str = "v0.3.0-beta.7"
+    version: str = "v0.4.0-alpha.6"
     tts: TTSConfig = field(default_factory=TTSConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
     memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)

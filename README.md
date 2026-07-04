@@ -6,7 +6,312 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.3.0-beta.7 - LLM Abstraction
+v0.4.0-alpha.6 - Hotel Capability Alpha
+
+## v0.4 Sprint 6 - Hotel Capability Alpha
+
+Hotel is the fourth real capability application and Jarvis's hospitality
+operations assistant for front office and rooms division workflows.
+
+```text
+Hotel Capability
+  |
+  |-- hotel_schedule_planner
+  |-- hotel_complaint_report
+  `-- hotel_complaint_manual
+       |
+ToolMetadata
+       |
+Brain Tool Router
+       |
+Permission
+       |
+Dispatcher
+```
+
+Included SAFE tools:
+
+- `hotel_schedule_planner`: drafts editable staff schedules and returns
+  conflicts, unresolved constraints, and manager notes.
+- `hotel_complaint_report`: creates structured manager-style complaint reports.
+- `hotel_complaint_manual`: creates SOP guidance for complaint scenarios such as
+  noise, refund requests, cleanliness, and difficult guest interactions.
+
+Hotel follows the same small-app capability structure:
+
+```text
+jarvis/capabilities/hotel/
+  __init__.py
+  metadata.py
+  tools/
+    schedule_planner.py
+    complaint_report.py
+    complaint_manual.py
+  prompts/
+    schedule/
+    complaint_report/
+    complaint_manual/
+  tests/
+```
+
+Schedule planning is intentionally alpha-grade: Jarvis creates a draft and
+surfaces conflicts instead of pretending to be a perfect optimizer.
+
+## v0.4 Sprint 5 - Creator Capability Alpha
+
+Creator is the third real capability application. It is a creative engine, not a
+YouTube-only utility.
+
+```text
+Creator Capability
+  |
+  |-- creator_lyrics
+  |-- creator_music_prompt
+  |-- creator_title
+  |-- creator_description
+  `-- creator_song_package
+       |
+ToolMetadata
+       |
+Brain Tool Router
+       |
+Permission
+       |
+Dispatcher
+```
+
+Included SAFE tools:
+
+- `creator_lyrics`: generate structured song lyrics.
+- `creator_music_prompt`: generate prompts for Suno, Udio, and Stable Audio style tools.
+- `creator_title`: generate ten title candidates.
+- `creator_description`: generate YouTube or song descriptions.
+- `creator_song_package`: local Creator-only orchestration demo that returns lyrics,
+  music prompt, titles, thumbnail prompt, description, and tags.
+
+Creator treats prompts as first-class assets:
+
+```text
+jarvis/capabilities/creator/
+  __init__.py
+  metadata.py
+  song/
+  video/
+  blog/
+  presentation/
+  tools/
+    lyrics.py
+    music_prompt.py
+    title.py
+    description.py
+    song_package.py
+  prompts/
+    lyrics/
+    music/
+    thumbnail/
+    script/
+  tests/
+```
+
+Creator is designed around sub-domains. Song is the first implemented
+sub-domain, but Video, Blog, and Presentation are reserved as future creative
+domains.
+
+Creator output contracts include project and asset identity:
+
+```json
+{
+  "project": "jarvis_theme_song",
+  "subdomain": "song",
+  "asset": "lyrics"
+}
+```
+
+`creator_song_package` is not the Multi Tool Planner. It only demonstrates local
+sequential execution inside Creator. Cross-capability orchestration belongs to
+v0.4 beta.
+
+## v0.4 Sprint 4 - Finance Capability Alpha
+
+Finance is the second real capability application. It proves that a different
+domain can be added through the same Capability -> Tool -> Permission ->
+Dispatcher path without changing Brain.
+
+```text
+Finance Capability
+  |
+  |-- finance_compound
+  |-- finance_average_price
+  |-- finance_profit
+  |-- finance_portfolio
+  `-- finance_exchange
+       |
+ToolMetadata
+       |
+Brain Tool Router
+       |
+Permission
+       |
+Dispatcher
+```
+
+Included SAFE tools:
+
+- `finance_compound`: local compound interest simulation.
+- `finance_average_price`: weighted average purchase price for buy lots.
+- `finance_profit`: profit/loss, return rate, and after-tax result.
+- `finance_portfolio`: simple allocation and diversification summary.
+- `finance_exchange`: KRW, USD, and JPY conversion using supplied or sample rates.
+
+Finance follows the same small-app capability structure:
+
+```text
+jarvis/capabilities/finance/
+  __init__.py
+  metadata.py
+  tools/
+    average_price.py
+    compound.py
+    exchange.py
+    portfolio.py
+    profit.py
+  prompts/
+  tests/
+```
+
+Capability metadata includes `version`, `status`, and `owner` so each
+capability can mature and release independently.
+
+The v0.4 Alpha Architecture Review is documented in
+`docs/architecture/alpha-review-v0.4.md`.
+
+## v0.4 Sprint 3 - Japanese Capability Alpha
+
+Japanese is the first real capability built on top of the Capability Plugin
+Framework. Brain remains unchanged: Japanese tools are discovered through the
+Japanese capability, registered into ToolRegistry, authorized by PermissionLayer,
+and executed by ToolDispatcher.
+
+```text
+Japanese Capability
+  |
+  |-- japanese_translate
+  |-- japanese_grammar
+  |-- japanese_reply
+  `-- japanese_review
+       |
+ToolMetadata
+       |
+Brain Tool Router
+       |
+Permission
+       |
+Dispatcher
+```
+
+Included SAFE tools:
+
+- `japanese_translate`: simple Korean/Japanese learning translations with
+  hiragana spacing, standard Japanese, Korean pronunciation, and Korean meaning.
+- `japanese_grammar`: simple grammar differences such as `しらない vs わからない`.
+- `japanese_reply`: casual Japanese reply drafts for preferred names such as
+  `アヤ` and `ユイ`.
+- `japanese_review`: recent Japanese expressions from memory when available,
+  with fallback guidance when memory is empty.
+
+Japanese capability is structured as a small app:
+
+```text
+jarvis/capabilities/japanese/
+  __init__.py
+  metadata.py
+  tools/
+    translate.py
+    grammar.py
+    reply.py
+    review.py
+  prompts/
+    translate.md
+    grammar.md
+    reply.md
+  tests/
+```
+
+Tool metadata also carries `examples` so future Brain routing can combine
+`supported_intents` and examples for better intent matching.
+
+## v0.4 Sprint 2 - Capability Plugin Framework
+
+Capabilities are now the primary extension unit for Jarvis.
+
+```text
+Brain
+  |
+Brain Tool Router
+  |
+Tool Registry
+  ^
+  |
+Capability Registry
+  |
+  |------|----------|-------|---------|------|
+Finance Japanese   Hotel   Creator   Life
+  |
+Tool Collection
+```
+
+The capability layer sits above the existing Tool Registry. Each capability owns
+its tools, each tool owns its metadata, the Permission Layer authorizes, and the
+Dispatcher executes.
+
+```text
+Capability
+  |
+Tool
+  |
+Permission
+  |
+Dispatcher
+```
+
+Sprint 2 includes framework and skeletons only. Finance, Japanese, Hotel,
+Creator, and Life business logic will be added in later sprints.
+
+## v0.4 Phase 1 - Brain Tool Router
+
+Jarvis now checks safe tool routes before sending normal chat to the LLM.
+
+```text
+User
+  |
+Voice / Text
+  |
+Brain
+  |
+Brain Tool Router
+  |
+  |--------------------|
+  |                    |
+Tool Route            LLM Route
+  |                    |
+Permission            ChatCommand
+  |                    |
+Dispatcher            ChatService
+  |
+Tool
+```
+
+The Brain Tool Router is registry-driven. It reads `ToolMetadata` from the
+existing `ToolRegistry`, scores candidate tools from metadata such as
+`capability`, `aliases`, `supported_intents`, `input_mode`, and
+`input_prefixes`, checks the existing `PermissionLayer`, and then returns a
+`ToolRequest` for the `ToolDispatcher`.
+
+The Brain decides. The Permission Layer authorizes. The Dispatcher executes.
+The Registry describes available tools.
+
+Only SAFE tools are eligible for automatic routing in v0.4 Phase 1. Ambiguous
+requests continue to the normal LLM conversation path.
 
 Jarvis는 날짜가 아니라 프로젝트 완성 단계, 즉 마일스톤 기준으로 버전을 관리합니다.
 
@@ -775,6 +1080,7 @@ Console / Electron / Rive
 Input Layer      -> CLI
 Intent Router    -> CommandDispatcher + CommandRegistry
 Conversation     -> ChatCommand
+Brain Tool Router -> Registry metadata driven SAFE tool routing
 ChatService      -> ChatService
 PromptBuilder    -> PromptBuilder
 ChatProvider     -> MockChatProvider / OpenAIProvider / ClaudeProvider

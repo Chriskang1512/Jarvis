@@ -19,6 +19,149 @@ Sprint 10 - The First Face
 
 ## Version Roadmap
 
+## v0.5 - Capability Collaboration
+
+Jarvis moves from adding independent capabilities to making capabilities
+collaborate.
+
+The goal changes from:
+
+```text
+Add Capability
+```
+
+to:
+
+```text
+Plan Task
+  |
+Select Capabilities
+  |
+Run Multiple Tools
+  |
+Merge Outputs
+  |
+Complete Work
+```
+
+This is where Jarvis starts becoming an agent that can combine Japanese,
+Finance, Creator, Hotel, and future capabilities into one completed workflow.
+
+- [ ] Multi-Tool Planner
+- [ ] Cross-capability task planning
+- [ ] Tool result chaining
+- [ ] Shared execution context
+- [ ] Planner diagnostics
+
+---
+
+## v0.4.0-alpha.6 - Hotel Capability Alpha
+
+Jarvis gets its hospitality operations assistant capability.
+
+- [x] Hotel capability owns tools
+- [x] `hotel_schedule_planner`
+- [x] `hotel_complaint_report`
+- [x] `hotel_complaint_manual`
+- [x] Korean natural language routing
+- [x] Existing Japanese / Finance / Creator / Core route regressions
+- [ ] Life Capability Alpha
+- [ ] Multi-Tool Planning
+
+---
+
+## v0.4.0-alpha.5 - Creator Capability Alpha
+
+Jarvis gets its first creative engine capability.
+
+- [x] Creator capability owns tools
+- [x] `creator_lyrics`
+- [x] `creator_music_prompt`
+- [x] `creator_title`
+- [x] `creator_description`
+- [x] `creator_song_package`
+- [x] Prompt assets as first-class capability resources
+- [x] Local Creator-only song package orchestration
+- [x] Hotel Capability Alpha
+- [ ] Life Capability Alpha
+- [ ] Multi-Tool Planning
+
+---
+
+## v0.4.0-alpha.4 - Finance Capability Alpha
+
+Jarvis gets its second real capability.
+
+- [x] Finance capability owns tools
+- [x] `finance_compound`
+- [x] `finance_average_price`
+- [x] `finance_profit`
+- [x] `finance_portfolio`
+- [x] `finance_exchange`
+- [x] Registry-driven Brain routing
+- [x] Japanese routing regression
+- [x] Alpha Architecture Review
+- [ ] Hotel Capability Alpha
+- [x] Creator Capability Alpha
+- [ ] Life Capability Alpha
+- [ ] Multi-Tool Planning
+
+---
+
+## v0.4.0-alpha.3 - Japanese Capability Alpha
+
+Jarvis gets its first real capability.
+
+- [x] Japanese capability owns tools
+- [x] `japanese_translate`
+- [x] `japanese_grammar`
+- [x] `japanese_reply`
+- [x] `japanese_review`
+- [x] Registry-driven Brain routing
+- [x] Memory-backed review fallback path
+- [ ] Speech / shadowing
+- [ ] Spaced repetition engine
+- [ ] Full JLPT curriculum
+
+---
+
+## v0.4.0-alpha.2 - Capability Plugin Framework
+
+Jarvis organizes future powers as independent capabilities.
+
+- [x] CapabilityMetadata
+- [x] CapabilityRegistry
+- [x] CapabilityLoader
+- [x] Automatic capability discovery
+- [x] Creator capability skeleton
+- [x] Finance capability skeleton
+- [x] Hotel capability skeleton
+- [x] Japanese capability skeleton
+- [x] Life capability skeleton
+- [x] Capability tool registration into ToolRegistry
+- [x] Finance Capability Alpha
+- [x] Japanese Capability Alpha
+- [ ] Hotel Capability Alpha
+- [ ] Creator Capability Alpha
+- [ ] Multi-Tool Planning
+
+---
+
+## v0.4.0-alpha.1 - Brain Tool Routing
+
+Jarvis starts turning plain chat into safe actions.
+
+- [x] BrainToolRouter
+- [x] Natural-language calculator routing
+- [x] Natural-language time routing
+- [x] Natural-language diagnostics routing
+- [x] Natural-language memory-read routing
+- [x] Safe tool execution before LLM fallback
+- [ ] Agent-specific real capabilities
+- [ ] Confirmation flow for non-safe actions
+
+---
+
 ## v0.2.0-alpha.8 - Sprint 8 Wrap-up
 
 Provider-agnostic architecture를 검증하고 beta 진입 전 기록을 정리하는 단계입니다.

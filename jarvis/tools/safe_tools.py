@@ -15,6 +15,11 @@ class TimeTool:
         domain="core",
         permission_level=PermissionLevel.SAFE,
         safe=True,
+        capability="time.current",
+        aliases=["time", "current time", "show time"],
+        supported_intents=["what time is it", "what's the time", "현재 시간"],
+        examples=["오늘 몇 시야", "지금 몇 시야", "현재 시간"],
+        input_mode="none",
     )
 
     def execute(self, input_data):
@@ -35,6 +40,11 @@ class CalculatorTool:
         domain="core",
         permission_level=PermissionLevel.SAFE,
         safe=True,
+        capability="math.calculate",
+        aliases=["calculate", "calc", "compute"],
+        supported_intents=["what is"],
+        input_mode="arithmetic_expression",
+        input_prefixes=["calculate", "calc", "compute", "what is"],
     )
 
     def execute(self, input_data):
@@ -69,6 +79,10 @@ class DiagnosticsSummaryTool:
         domain="core",
         permission_level=PermissionLevel.SAFE,
         safe=True,
+        capability="diagnostics.summary",
+        aliases=["diagnostics", "health", "health check", "system status"],
+        supported_intents=["diagnostics", "health check"],
+        input_mode="none",
     )
 
     def __init__(self, diagnostics_collector=None):
@@ -103,6 +117,11 @@ class MemoryReadTool:
         domain="memory",
         permission_level=PermissionLevel.SAFE,
         safe=True,
+        capability="memory.read",
+        aliases=["recall", "memory", "memory read"],
+        supported_intents=["recall memory", "read memory"],
+        input_mode="query",
+        input_prefixes=["recall", "remembered", "memory read", "memory"],
     )
 
     def __init__(self, memory_service=None, memory_manager=None):

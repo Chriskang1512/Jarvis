@@ -1,6 +1,7 @@
 import sys
 
 from jarvis.commands import CommandDispatcher, create_default_registry
+from jarvis.capabilities import CapabilityLoader
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.config import ConfigurationLoader
 from jarvis.diagnostics import DiagnosticsCollector
@@ -38,6 +39,12 @@ def main():
     plugin_loader = PluginLoader(diagnostics_collector=diagnostics_collector)
     plugin_registry = plugin_loader.load()
     plugin_loader.register_plugin_tools(plugin_registry, tool_registry)
+    capability_loader = CapabilityLoader(
+        diagnostics_collector=diagnostics_collector,
+        memory_manager=memory_manager,
+    )
+    capability_registry = capability_loader.load()
+    capability_loader.register_capability_tools(capability_registry, tool_registry)
     tool_dispatcher = ToolDispatcher(
         registry=tool_registry,
         permission_layer=PermissionLayer(diagnostics_collector=diagnostics_collector),
