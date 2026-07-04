@@ -16,3 +16,7 @@ class CapabilityMetadata:
     enabled: bool = True
     permission_level: PermissionLevel = PermissionLevel.SAFE
     tools: list[str] = field(default_factory=list)
+    planning_prefix: str = ""
+    planning_aliases: list[str] = field(default_factory=list)
+    planning_intents: dict[str, list[str]] = field(default_factory=dict)
+    planning_examples: list[str] = field(default_factory=list)

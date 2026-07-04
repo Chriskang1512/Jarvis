@@ -38,3 +38,17 @@ Future voice providers should focus on audio generation.
 Future voice personality settings should define Jarvis-like speech behavior independently from the selected engine.
 
 This keeps Jarvis replaceable at the engine layer while preserving a consistent assistant identity.
+
+## 2026-07 Addendum: STT Provider Configuration
+
+STT provider selection follows the same replaceable-provider principle.
+
+`stt.provider` is the config-level switch for voice input:
+
+- `mock`
+- `microphone`
+- `openai`
+
+The current microphone provider is local and replaceable. The OpenAI provider
+name is reserved for a future sprint. Voice remains an input/output layer and
+must not bypass Brain, Capability routing, Permission, or Dispatcher.

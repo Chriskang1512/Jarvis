@@ -5,9 +5,13 @@ from contextlib import redirect_stdout
 from jarvis.config.loader import create_config_from_dict
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.voice.providers import (
+    ConsoleSpeechToTextProvider,
     ConsoleTextToSpeechProvider,
+    MicrophoneSpeechToTextProvider,
+    OpenAISpeechToTextProvider,
     PiperTextToSpeechProvider,
     Pyttsx3TextToSpeechProvider,
+    create_stt_provider,
     create_tts_provider,
 )
 
@@ -81,6 +85,50 @@ class TestTTSProviders(unittest.TestCase):
         """Check existing console and pyttsx3 provider names still resolve."""
         self.assertIsInstance(create_tts_provider("console"), ConsoleTextToSpeechProvider)
         self.assertIsInstance(create_tts_provider("pyttsx3"), Pyttsx3TextToSpeechProvider)
+
+    def test_default_config_selects_mock_stt_provider(self):
+        """Check that mock STT remains the default voice input provider."""
+        config = create_config_from_dict({})
+
+        provider = create_stt_provider(config.stt)
+
+        self.assertIsInstance(provider, ConsoleSpeechToTextProvider)
+
+    def test_config_selects_microphone_stt_provider(self):
+        """Check config can select the microphone STT provider."""
+        config = create_config_from_dict(
+            {
+                "stt": {
+                    "provider": "microphone",
+                    "language": "ko-KR",
+                    "device": "default",
+                }
+            }
+        )
+
+        provider = create_stt_provider(config.stt)
+
+        self.assertIsInstance(provider, MicrophoneSpeechToTextProvider)
+        self.assertEqual(provider.language, "ko-KR")
+        self.assertEqual(provider.device, "default")
+
+    def test_config_reserves_openai_stt_provider(self):
+        """Check OpenAI STT provider name is reserved for a future sprint."""
+        config = create_config_from_dict(
+            {
+                "stt": {
+                    "provider": "openai",
+                    "language": "ko-KR",
+                    "openai_model": "gpt-4o-mini-transcribe",
+                }
+            }
+        )
+
+        provider = create_stt_provider(config.stt)
+
+        self.assertIsInstance(provider, OpenAISpeechToTextProvider)
+        self.assertEqual(provider.model, "gpt-4o-mini-transcribe")
+        self.assertEqual(provider.language, "ko-KR")
 
     def assert_event_logged(self, diagnostics, expected_message):
         """Check that one diagnostics event was logged."""

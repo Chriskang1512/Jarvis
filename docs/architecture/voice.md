@@ -28,6 +28,33 @@ TTS
 - LLM uses the existing ChatService and ChatProvider architecture.
 - TTS speaks the generated reply.
 
+## STT Provider Configuration
+
+Voice input is selected through config first:
+
+```json
+{
+  "stt": {
+    "provider": "mock",
+    "language": "ko-KR",
+    "device": "default",
+    "openai_model": "gpt-4o-mini-transcribe"
+  }
+}
+```
+
+Supported provider names:
+
+- `mock`: terminal input fallback for deterministic smoke tests.
+- `microphone`: local microphone input provider.
+- `openai`: reserved provider name for a future OpenAI STT implementation.
+
+`JARVIS_STT_PROVIDER` may override config for local smoke tests, but config is
+the default source of truth.
+
+Next sprint should harden the microphone provider around device selection,
+ambient-noise calibration, timeout handling, and clear fallback errors.
+
 ## Principle
 
 Voice is an input/output layer.

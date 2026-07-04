@@ -2,9 +2,16 @@ import os
 import shutil
 import subprocess
 import tempfile
+import wave
 from collections.abc import Iterable
+from io import BytesIO
 from pathlib import Path
 from typing import Protocol
+
+from jarvis.voice.models import VoiceResult
+from jarvis.voice.provider import VoiceProvider
+from jarvis.voice.providers.mock import MockVoiceProvider
+from jarvis.voice.providers.openai import OpenAIVoiceProvider
 
 
 class SpeechToTextProvider(Protocol):
@@ -35,8 +42,28 @@ class ConsoleSpeechToTextProvider:
         return input("Voice input > ").strip()
 
 
+class OpenAISpeechToTextProvider:
+    """Reserved OpenAI STT provider placeholder for a future sprint."""
+
+    def __init__(self, model="gpt-4o-mini-transcribe", language="ko-KR"):
+        """Create an OpenAI STT provider placeholder."""
+        self.model = model
+        self.language = language
+
+    def listen(self):
+        """Return a clear message until the OpenAI STT provider is implemented."""
+        return "OpenAI STT provider is not implemented yet."
+
+
 class MicrophoneSpeechToTextProvider:
     """Microphone STT provider using the SpeechRecognition package."""
+
+    def __init__(self, language="ko-KR", device="default", duration_seconds=5, sample_rate=16000):
+        """Create a microphone STT provider."""
+        self.language = language
+        self.device = device
+        self.duration_seconds = duration_seconds
+        self.sample_rate = sample_rate
 
     def listen(self):
         """Listen through the microphone and return recognized text."""
@@ -45,6 +72,10 @@ class MicrophoneSpeechToTextProvider:
         except ImportError:
             return "SpeechRecognition package is not installed."
 
+        return self.listen_with_speech_recognition(sr)
+
+    def listen_with_speech_recognition(self, sr):
+        """Use SpeechRecognition microphone when PyAudio is available."""
         recognizer = sr.Recognizer()
 
         try:
@@ -52,10 +83,40 @@ class MicrophoneSpeechToTextProvider:
                 print("Listening...")
                 audio = recognizer.listen(source)
         except Exception as error:
+            return self.listen_with_sounddevice(sr, recognizer, error)
+
+        try:
+            return recognizer.recognize_google(audio, language=self.language)
+        except Exception as error:
+            return f"Speech recognition failed: {error}"
+
+    def listen_with_sounddevice(self, sr, recognizer, microphone_error):
+        """Use sounddevice recording when PyAudio-backed microphone is unavailable."""
+        try:
+            import numpy as np
+            import sounddevice as sd
+        except ImportError:
+            return f"Microphone input failed: {microphone_error}"
+
+        try:
+            print(f"Listening for {self.duration_seconds} seconds...")
+            device = None if self.device == "default" else self.device
+            recording = sd.rec(
+                int(self.duration_seconds * self.sample_rate),
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="int16",
+                device=device,
+            )
+            sd.wait()
+            audio_data = create_wav_bytes(recording, self.sample_rate, np)
+        except Exception as error:
             return f"Microphone input failed: {error}"
 
         try:
-            return recognizer.recognize_google(audio)
+            with sr.AudioFile(BytesIO(audio_data)) as source:
+                audio = recognizer.record(source)
+            return recognizer.recognize_google(audio, language=self.language)
         except Exception as error:
             return f"Speech recognition failed: {error}"
 
@@ -234,10 +295,21 @@ class PiperTextToSpeechProvider(DiagnosticsMixin):
         return output_file.name
 
 
-def create_stt_provider(provider_name):
-    """Create a speech-to-text provider by name."""
+def create_stt_provider(provider_config):
+    """Create a speech-to-text provider by name or config."""
+    provider_name = read_stt_provider_name(provider_config)
+
     if provider_name == "microphone":
-        return MicrophoneSpeechToTextProvider()
+        return MicrophoneSpeechToTextProvider(
+            language=read_stt_config_value(provider_config, "language", "ko-KR"),
+            device=read_stt_config_value(provider_config, "device", "default"),
+        )
+
+    if provider_name == "openai":
+        return OpenAISpeechToTextProvider(
+            model=read_stt_config_value(provider_config, "openai_model", "gpt-4o-mini-transcribe"),
+            language=read_stt_config_value(provider_config, "language", "ko-KR"),
+        )
 
     return ConsoleSpeechToTextProvider()
 
@@ -317,6 +389,36 @@ def read_provider_name(provider_config):
     return getattr(provider_config, "provider", "pyttsx3")
 
 
+def read_stt_provider_name(provider_config):
+    """Read STT provider name from env, config object, or raw string."""
+    env_provider = os.environ.get("JARVIS_STT_PROVIDER")
+    if env_provider:
+        return normalize_stt_provider_name(env_provider)
+
+    if isinstance(provider_config, str):
+        return normalize_stt_provider_name(provider_config)
+
+    return normalize_stt_provider_name(getattr(provider_config, "provider", "mock"))
+
+
+def normalize_stt_provider_name(provider_name):
+    """Normalize STT provider aliases."""
+    if provider_name == "console":
+        return "mock"
+
+    return provider_name
+
+
+def read_stt_config_value(provider_config, key, default):
+    """Read one STT provider config value from env or object."""
+    env_key = f"JARVIS_STT_{key.upper()}"
+    env_value = os.environ.get(env_key)
+    if env_value:
+        return env_value
+
+    return getattr(provider_config, key, default)
+
+
 def read_config_value(provider_config, key, default):
     """Read one provider config value from env or object."""
     env_key = f"JARVIS_TTS_{key.upper()}"
@@ -355,6 +457,20 @@ def play_wav_file(path):
         return
 
     winsound.PlaySound(path, winsound.SND_FILENAME)
+
+
+def create_wav_bytes(recording, sample_rate, np):
+    """Return mono PCM WAV bytes for a sounddevice recording."""
+    pcm = np.asarray(recording, dtype=np.int16)
+    buffer = BytesIO()
+
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm.tobytes())
+
+    return buffer.getvalue()
 
 
 def remove_file_if_exists(path):

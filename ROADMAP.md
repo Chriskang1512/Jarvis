@@ -19,7 +19,58 @@ Sprint 10 - The First Face
 
 ## Version Roadmap
 
-## v0.5 - Capability Collaboration
+## v0.4.0 Stable Release
+
+v0.4.0 is released as the stable architecture baseline for Jarvis Framework.
+
+- [x] Release Candidate promoted to stable
+- [x] Full test suite passing
+- [x] Public API list documented
+- [x] v0.5 candidates separated into Next / Future
+
+Stable release status: v0.4.0.
+
+---
+
+## v0.4.0 Release Candidate
+
+v0.4.0 RC does not add new features. It freezes the Beta.1-Beta.7 architecture
+for stable release.
+
+- [x] Planner reviewed
+- [x] Execution Graph reviewed
+- [x] Execution Kernel official terminology documented
+- [x] Result Merge reviewed
+- [x] Voice Integration reviewed
+- [x] Scheduler Foundation reviewed
+- [x] Agent Runtime reviewed
+- [x] Public API list documented
+- [x] Import boundaries verified by tests
+- [x] v0.4.0 Release Note draft added
+- [x] ADR 0018-0021 reviewed
+- [x] Full test suite passing
+
+Release Candidate status: promoted to v0.4.0 stable.
+
+---
+
+## Next / Future: v0.5 Candidates
+
+v0.5 candidates are intentionally outside the v0.4.0 RC scope.
+
+- [ ] Permission Layer
+- [ ] Memory Foundation
+- [ ] Tool Router
+- [ ] Plugin System
+- [ ] First real tool calling
+- [ ] OpenAI Voice Provider actual implementation
+- [ ] Real audio playback
+- [ ] Persistence layer
+- [ ] EventBus async fan-out
+
+---
+
+## Future: v0.5 - Capability Collaboration
 
 Jarvis moves from adding independent capabilities to making capabilities
 collaborate.
@@ -55,6 +106,315 @@ Finance, Creator, Hotel, and future capabilities into one completed workflow.
 
 ---
 
+## v0.4 Beta - Capability Orchestration
+
+Jarvis starts living at home: capabilities collaborate instead of only answering
+one tool at a time.
+
+- [x] v0.4-beta.1 Intent Planner
+- [x] v0.4-beta.2 Execution Graph
+- [x] v0.4-beta.3 Capability Context
+- [x] v0.4-beta.4 Result Merge
+- [x] v0.4-beta.5 Voice Integration
+- [x] v0.4-beta.6 Scheduler Foundation
+- [x] v0.4-beta.7 Agent Runtime
+
+Current core architecture:
+
+```text
+                User
+                  |
+                  v
+             Planner
+                  |
+                  v
+          Execution Graph
+                  |
+                  v
+        Execution Kernel
+        (Runner + Merge)
+          |        |
+          |        v
+          |   UnifiedResult
+          |        |
+          |      Voice
+          |
+          v
+      Scheduler
+          ^
+          |
+    Agent Runtime
+```
+
+Beta.5 Voice Integration entry conditions:
+
+- [x] `UnifiedResult.summary` is stable for Voice output
+- [x] UI can render `results`, `warnings`, `errors`, and `metadata`
+- [x] Result order follows plan execution order
+- [x] Partial results are preserved when one node fails
+- [x] Summary keeps warning/error detail out of voice text
+- [x] Diagnostics-ready metadata includes execution, plan, node, status, timing, and counts
+
+Voice Integration note:
+
+- [x] Voice pipeline mock STT smoke verified
+- [x] Config contract prepared for `stt.provider`
+- [x] `UnifiedResult.summary` to `VoiceResult` service contract
+- [x] `VoiceProvider` interface
+- [x] `MockVoiceProvider`
+- [x] Provider DI test coverage
+- [x] Voice boundary tests proving Planner, Execution, and Capability are not imported
+- [x] OpenAI voice provider placeholder
+- [x] Audio playback deferred beyond Beta.5
+- [ ] Harden microphone input provider
+- [ ] Add OpenAI STT provider implementation
+- [ ] Add device selection and microphone diagnostics
+
+---
+
+## v0.4.0-beta.5 - Voice Integration
+
+Jarvis prepares to speak by converting unified responses into voice results.
+Beta.5 does not play audio through speakers.
+
+```text
+UnifiedResult
+  |
+VoiceService
+  |
+VoiceProvider
+  |
+VoiceResult
+```
+
+- [x] `voice/` service contract
+- [x] `VoiceService`
+- [x] `VoiceProvider` protocol
+- [x] `VoiceResult`
+- [x] `MockVoiceProvider`
+- [x] OpenAI voice provider placeholder
+- [x] `UnifiedResult.summary` only is sent to VoiceProvider
+- [x] Provider dependency injection
+- [x] Voice boundary tests
+- [x] README update
+- [x] ADR 0019 Voice Integration Architecture
+
+Beta.5 close status: implemented.
+
+Beta.6 entry: Scheduler can depend on `UnifiedResult` / `VoiceResult` contracts
+without taking a dependency on Planner, Execution Graph, or Capabilities.
+
+---
+
+## v0.4.0-beta.7 - Agent Runtime
+
+AgentRuntime is not the executor. It is the Runtime Layer that manages the
+lifecycle between Scheduler and the Execution Kernel.
+
+Jarvis adds a minimal runtime layer that coordinates Scheduler and Execution
+Kernel through manual ticks.
+
+```text
+AgentRuntime
+  |
+Scheduler.due_tasks(now)
+  |
+Scheduler.trigger_due(now)
+  |
+ExecutionRunner.run_unified()
+  |
+UnifiedResult
+```
+
+- [x] `jarvis.agent_runtime` module
+- [x] `AgentRuntime`
+- [x] `AgentRuntimeState`
+- [x] `AgentTickResult`
+- [x] `ExecutionKernel` protocol
+- [x] explicit `start()` / `stop()` lifecycle
+- [x] manual `tick(now)` only
+- [x] Scheduler due check coordination
+- [x] Scheduler trigger coordination
+- [x] task-level failure remains isolated by Scheduler
+- [x] runtime-level failure state when Scheduler itself fails
+- [x] boundary tests proving Runtime does not import Planner, Voice, or Capabilities
+- [x] ADR 0021 Agent Runtime Architecture
+
+Explicitly out of scope:
+
+- [ ] background thread
+- [ ] asyncio loop
+- [ ] daemon
+- [ ] autonomous planning loop
+- [ ] direct Planner calls
+- [ ] direct Voice calls
+- [ ] direct Capability calls
+- [ ] Memory write loop
+- [ ] automatic voice playback
+
+Beta.7 close status: implemented.
+
+---
+
+## v0.4.0-beta.6 - Scheduler Foundation
+
+Beta.6의 목표는 시간을 흐르게 만드는 것이 아니라, 예약 Task의 Lifecycle을
+모델링하는 것이다.
+
+Jarvis models scheduled task lifecycle without background execution.
+
+```text
+ScheduleRequest
+  |
+Schedule
+  |
+ScheduledTask
+  |
+TaskState
+  |
+Scheduler
+  |
+due_tasks(now)
+  |
+ExecutionRunner.run_unified()
+  |
+UnifiedResult
+```
+
+- [x] `jarvis.scheduler` module
+- [x] `ScheduleRequest`
+- [x] `Schedule`
+- [x] `ScheduledTask`
+- [x] `TaskState` enum
+- [x] `Scheduler` protocol
+- [x] `InMemoryScheduler`
+- [x] `InMemoryTaskStore`
+- [x] `SystemClock`
+- [x] `FixedClock`
+- [x] one-shot `run_at` schedule support
+- [x] `ScheduledTask.is_due(now)`
+- [x] `Scheduler.get()`
+- [x] `Scheduler.cancel()`
+- [x] `due_tasks(now)`
+- [x] manual `trigger_due(now)`
+- [x] `ExecutionRunner.run_unified()` integration by dependency injection
+- [x] tests for lifecycle, due filtering, cancellation, trigger success, trigger failure, store isolation, and deterministic clock
+- [x] ADR 0020 Scheduler Foundation Architecture
+
+Explicitly out of scope:
+
+- [ ] background thread
+- [ ] asyncio loop
+- [ ] cron parser
+- [ ] recurring schedule
+- [ ] interval schedule
+- [ ] conditional schedule
+- [ ] OS scheduler
+- [ ] Windows Scheduler
+- [ ] background daemon
+- [ ] real notification delivery
+- [ ] automatic voice playback
+
+Beta.6 close status: implemented.
+
+Beta.7 entry: Agent Runtime can ask Scheduler for due tasks and execute them
+without owning scheduling lifecycle rules.
+
+---
+
+## v0.4.0-beta.1 - Intent Planner Contract
+
+Jarvis defines the first Capability Orchestration contract.
+
+- [x] Intent Planner package
+- [x] Stable planning contract with `plan_id` and `planner_version`
+- [x] Graph-shaped output with nodes and edges
+- [x] Sequential execution mode only
+- [x] Capability-level planning only
+- [x] Permission mode marking
+- [x] Planner design rules documented
+- [x] Existing Alpha capability regressions
+
+---
+
+## v0.4.0-beta.2 - Execution Graph Runtime
+
+Jarvis executes validated capability plans sequentially for the first time.
+
+- [x] Execution package
+- [x] Execution Graph Runner
+- [x] Metadata Capability Router
+- [x] Node lifecycle states
+- [x] Ordered node result list
+- [x] Runner diagnostics trace
+- [x] No merge
+- [x] Runner architecture boundary tests
+
+---
+
+## v0.4.0-beta.3 - Capability Context
+
+Jarvis passes previous node results through temporary execution context.
+
+- [x] ExecutionContext contract
+- [x] Runner-owned context lifecycle
+- [x] Previous node result handoff
+- [x] Context destroyed after execution
+- [x] Capability boundary tests
+- [x] Memory remains separate
+
+---
+
+## v0.4.0-beta.4 - Result Merge
+
+Jarvis assembles multiple capability results into one user-facing response.
+
+```text
+Finance Result
+  |
+Japanese Result
+  |
+Creator Result
+  |
+Merged Response
+```
+
+- [x] `ResultMerger` interface
+- [x] `DefaultResultMerger` implementation
+- [x] Immutable `UnifiedResult`
+- [x] Success, warning, and error merge rules
+- [x] Ordered result collection preserving plan execution order
+- [x] Partial result preservation on node failure
+- [x] Voice-friendly summary without detailed warning/error text
+- [x] Diagnostics-ready metadata
+- [x] ExecutionGraph `run_unified()` integration
+- [x] ADR 0018 Result Merge Architecture
+- [x] Regression tests for Voice/UI readiness, ordering, partial failure, summary, and metadata
+
+Beta.4 close status: approved.
+
+Beta.5 entry: Voice can consume `UnifiedResult.summary` without knowing planner,
+execution, capability, warning, error, or metadata internals.
+
+---
+
+## v0.4.0-alpha.7 - Life Capability Alpha
+
+Jarvis gets its final v0.4 alpha capability: a memory-adjacent life assistant.
+
+- [x] Life capability owns tools
+- [x] `life_todo`
+- [x] `life_reminder`
+- [x] `life_routine`
+- [x] `life_habit`
+- [x] `life_reflection`
+- [x] Reminder output is ready for future Scheduler handoff
+- [x] Reflection can read Memory without owning Memory
+- [x] Existing Japanese / Finance / Creator / Hotel / Core route regressions
+- [ ] Multi-Tool Planning
+
+---
+
 ## v0.4.0-alpha.6 - Hotel Capability Alpha
 
 Jarvis gets its hospitality operations assistant capability.
@@ -65,7 +425,7 @@ Jarvis gets its hospitality operations assistant capability.
 - [x] `hotel_complaint_manual`
 - [x] Korean natural language routing
 - [x] Existing Japanese / Finance / Creator / Core route regressions
-- [ ] Life Capability Alpha
+- [x] Life Capability Alpha
 - [ ] Multi-Tool Planning
 
 ---

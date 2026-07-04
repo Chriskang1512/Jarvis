@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from jarvis.config.settings import ConversationConfig, JarvisConfig, MemoryStoreConfig
+from jarvis.config.settings import ConversationConfig, JarvisConfig, MemoryStoreConfig, STTConfig
 from jarvis.config.settings import TTSConfig
 
 
@@ -33,6 +33,7 @@ def read_json_file(path):
 def create_config_from_dict(config_data):
     """Create JarvisConfig using known keys from a dictionary."""
     tts_data = config_data.get("tts", {})
+    stt_data = config_data.get("stt", {})
     conversation_data = config_data.get("conversation", {})
     memory_store_data = config_data.get("memory_store", {})
 
@@ -42,8 +43,9 @@ def create_config_from_dict(config_data):
         temperature=config_data.get("temperature", 0.7),
         debug=config_data.get("debug", False),
         profile=config_data.get("profile", "jarvis"),
-        version=config_data.get("version", "v0.4.0-alpha.6"),
+        version=config_data.get("version", "v0.4.0"),
         tts=create_tts_config(tts_data),
+        stt=create_stt_config(stt_data),
         conversation=create_conversation_config(conversation_data),
         memory_store=create_memory_store_config(memory_store_data),
     )
@@ -57,6 +59,16 @@ def create_tts_config(tts_data):
         streaming=tts_data.get("streaming", True),
         piper_path=tts_data.get("piper_path", "piper"),
         model_path=tts_data.get("model_path", ""),
+    )
+
+
+def create_stt_config(stt_data):
+    """Create STTConfig using known keys from a dictionary."""
+    return STTConfig(
+        provider=stt_data.get("provider", "mock"),
+        language=stt_data.get("language", "ko-KR"),
+        device=stt_data.get("device", "default"),
+        openai_model=stt_data.get("openai_model", "gpt-4o-mini-transcribe"),
     )
 
 

@@ -122,3 +122,64 @@ The v0.4 alpha architecture is ready for the next capability after one note:
 legacy Brain agent routing should not be used as the model for new capabilities.
 New domains should follow the Capability app structure and expose tools through
 metadata only.
+
+## Final Addendum
+
+Result: Ready for v0.4 Alpha platform freeze.
+
+The final capability set is:
+
+- Japanese
+- Finance
+- Creator
+- Hotel
+- Life
+
+Consistency checklist:
+
+- Capability folder layout consistency: all five concrete capabilities include
+  `metadata.py`, `tools/`, `prompts/`, and `tests/`.
+- Metadata consistency: all five capabilities expose version, status, owner, and
+  tool lists through `CapabilityMetadata`.
+- Output contract consistency: each tool returns structured `ToolResult`
+  payloads. Life reflection and reminder now expose planner/scheduler-readable
+  contracts.
+- Prompt asset structure: each concrete capability has prompt assets under its
+  own `prompts/` folder.
+- Tool registration: all capability tools register through
+  `CapabilityRegistry.register_tools()` into the shared `ToolRegistry`.
+- Router metadata quality: capability tools expose aliases, supported intents,
+  examples, safety level, route confidence, version, priority, and deprecation
+  metadata.
+- Version/status/owner fields: concrete capabilities are marked alpha and owned
+  by Jarvis Team.
+- Tests: full regression suite covers capability discovery, registration,
+  routing, output contracts, lifecycle behavior, and core route regressions.
+- Documentation: README, overview, roadmap, changelog, architecture review, and
+  ADRs describe the v0.4 capability platform.
+- ADR numbering: historical ADR numbering contains earlier duplicate prefixes
+  and a reserved gap, but v0.4 platform ADRs are explicit:
+  `0005` Brain Tool Router, `0006` Capability Plugin Framework, `0007`
+  Japanese, `0008` Finance, `0010` Creator, `0011` Hotel, `0012` Memory
+  Ownership Rule, and `0013` Life.
+
+Memory ownership rule:
+
+```text
+Only Memory owns Memory.
+Capabilities never own Memory.
+Capabilities access Memory only through approved interfaces.
+Dependency Injection only.
+No direct coupling.
+```
+
+Capability philosophy:
+
+```text
+Brain decides.
+Capability specializes.
+Tool executes.
+Memory remembers.
+Permission protects.
+Dispatcher delivers.
+```

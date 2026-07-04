@@ -6,7 +6,762 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.4.0-alpha.6 - Hotel Capability Alpha
+v0.4.0 - Stable Release
+
+## v0.4.0 Stable Release
+
+v0.4.0 promotes the Release Candidate architecture to stable.
+
+Stable release status:
+
+```text
+Planner, Execution Kernel, Result Merge, Voice, Scheduler, and Agent Runtime
+are now the stable v0.4.0 architecture.
+```
+
+## v0.4.0 Release Candidate
+
+v0.4.0 RC does not add new features. Its goal is to freeze the stable v0.4.0
+architecture created from Beta.1 through Beta.7.
+
+Official goal:
+
+```text
+v0.4.0 RC freezes Planner, Execution Kernel, Result Merge, Voice, Scheduler,
+and Agent Runtime as the stable v0.4.0 architecture.
+```
+
+v0.4.0 is the point where Jarvis becomes a small framework:
+
+```text
+Planner
+  |
+Execution Kernel
+  |
+Scheduler
+  |
+Agent Runtime
+  |
+Voice
+```
+
+Release Candidate status:
+
+```text
+All Beta.1-Beta.7 tests pass.
+No new runtime feature is added in RC.
+Public APIs remain backward compatible.
+Import boundaries remain enforced by tests.
+```
+
+## v0.4.0 Release Note Draft
+
+v0.4.0 turns Jarvis from a feature collection into a layered orchestration
+framework.
+
+Included Beta milestones:
+
+- Beta.1 Intent Planner
+- Beta.2 Execution Graph Runtime
+- Beta.3 Capability Context
+- Beta.4 Result Merge
+- Beta.5 Voice Integration
+- Beta.6 Scheduler Foundation
+- Beta.7 Agent Runtime
+
+Core architecture:
+
+```text
+User
+  |
+Planner
+  |
+Execution Graph
+  |
+Execution Kernel
+  |
+UnifiedResult
+  |
+Voice
+```
+
+Lifecycle architecture:
+
+```text
+Agent Runtime
+  |
+Scheduler
+  |
+Execution Kernel
+  |
+UnifiedResult
+```
+
+Excluded from v0.4.0:
+
+- Permission Layer implementation
+- Memory Foundation implementation
+- new Tool Router implementation
+- Plugin System implementation
+- real OpenAI voice synthesis
+- real audio playback
+- persistence layer
+- background daemon
+- async loop
+- OS scheduler
+
+Next candidates for v0.5:
+
+- Permission Layer
+- Memory Foundation
+- Tool Router
+- Plugin System
+- first real tool calling
+- OpenAI Voice Provider actual implementation
+- real audio playback
+- persistence layer
+- EventBus async fan-out
+
+## v0.4.0 Stable Public APIs
+
+- `ExecutionGraphRunner.run()`
+- `ExecutionGraphRunner.run_unified()`
+- `ResultMerger.merge()`
+- `VoiceService.speak()`
+- `Scheduler.schedule()`
+- `Scheduler.get()`
+- `Scheduler.list()`
+- `Scheduler.cancel()`
+- `Scheduler.due_tasks()`
+- `Scheduler.trigger_due()`
+- `AgentRuntime.start()`
+- `AgentRuntime.stop()`
+- `AgentRuntime.tick()`
+
+## v0.4 Beta.7 - Agent Runtime
+
+Beta.7 introduces the first minimal Agent Runtime layer.
+
+AgentRuntime is not the executor. It is the Runtime Layer that manages the
+lifecycle between Scheduler and the Execution Kernel.
+
+Execution Kernel is Jarvis's common execution layer. It includes
+ExecutionRunner and ResultMerger. Planner, Scheduler, and AgentRuntime call the
+Execution Kernel to perform work. The Kernel returns `UnifiedResult`, the stable
+execution interface for downstream layers.
+
+```text
+Main pipeline:
+
+User
+  |
+Planner
+  |
+Execution Graph
+  |
+ExecutionRunner
+  |
+ResultMerge
+  |
+UnifiedResult
+  |
+Voice
+```
+
+```text
+Lifecycle path:
+
+AgentRuntime
+  |
+Scheduler.due_tasks(now)
+  |
+Scheduler.trigger_due(now)
+  |
+ExecutionRunner.run_unified()
+  |
+UnifiedResult
+```
+
+Agent Runtime knows Scheduler and an Execution Kernel interface only.
+
+Agent Runtime does not know Planner.
+
+Agent Runtime does not know Voice.
+
+Agent Runtime does not know Capabilities.
+
+Beta.7 supports manual ticks only:
+
+```text
+start()
+  |
+tick(now)
+  |
+due_tasks(now)
+  |
+trigger_due(now)
+  |
+IDLE
+```
+
+Beta.7 does not start a background loop, thread, asyncio loop, daemon, planner
+loop, autonomous memory loop, or automatic voice playback.
+
+Agent Runtime Philosophy:
+
+```text
+AgentRuntime coordinates lifecycle.
+AgentRuntime is not the executor.
+Execution Kernel executes.
+Scheduler owns schedule lifecycle.
+UnifiedResult remains the execution outcome.
+```
+
+Current core architecture:
+
+```text
+                User
+                  |
+                  v
+             Planner
+                  |
+                  v
+          Execution Graph
+                  |
+                  v
+        Execution Kernel
+        (Runner + Merge)
+          |        |
+          |        v
+          |   UnifiedResult
+          |        |
+          |      Voice
+          |
+          v
+      Scheduler
+          ^
+          |
+    Agent Runtime
+```
+
+## v0.4 Beta.6 - Scheduler Foundation
+
+Beta.6 introduces the Scheduler Foundation.
+
+Beta.6의 목표는 시간을 흐르게 만드는 것이 아니라, 예약 Task의 Lifecycle을
+모델링하는 것이다.
+
+Beta.6 does not run background threads, asyncio loops, cron parsers, OS
+schedulers, Windows Scheduler, background daemons, real notifications, or
+automatic voice playback.
+
+```text
+ScheduleRequest
+  |
+Schedule
+  |
+ScheduledTask
+  |
+TaskState
+  |
+SchedulerService / Scheduler
+  |
+due_tasks(now)
+  |
+ExecutionRunner.run_unified()
+  |
+UnifiedResult
+```
+
+Supported schedule type:
+
+```text
+one-shot run_at datetime only
+```
+
+Task lifecycle:
+
+```text
+PENDING
+READY
+RUNNING
+COMPLETED
+FAILED
+CANCELLED
+```
+
+Scheduler Foundation Philosophy:
+
+```text
+Scheduler models task lifecycle.
+Scheduler does not make time flow.
+Scheduler does not know Planner.
+Scheduler does not know Voice.
+Scheduler does not know Capabilities.
+Scheduler runs work only through ExecutionRunner.run_unified().
+Scheduler receives UnifiedResult.
+```
+
+Beta.6 manual trigger flow:
+
+```text
+ScheduleRequest
+  |
+InMemoryScheduler.schedule()
+  |
+ScheduledTask
+  |
+trigger_due(now)
+  |
+RUNNING
+  |
+ExecutionRunner.run_unified()
+  |
+COMPLETED or FAILED
+```
+
+## v0.4 Beta.5 - Voice Integration
+
+Beta.5 introduces the Voice Integration layer. Jarvis does not play audio yet;
+this sprint converts a `UnifiedResult` into a provider-generated `VoiceResult`.
+
+```text
+Planner
+  |
+Execution
+  |
+Merge
+  |
+UnifiedResult
+  |
+VoiceService
+  |
+VoiceProvider
+  |
+VoiceResult
+```
+
+Voice knows only `UnifiedResult`.
+
+Voice does not know Planner.
+
+Voice does not know Execution Graph.
+
+Voice does not know Capabilities.
+
+Voice result contract:
+
+```json
+{
+  "text": "3 capabilities completed",
+  "audio": null,
+  "provider": "mock",
+  "duration_ms": 0,
+  "metadata": {}
+}
+```
+
+Beta.5 scope:
+
+```text
+UnifiedResult
+  |
+VoiceService
+  |
+VoiceResult
+```
+
+Audio playback through speakers remains future work.
+
+Voice Integration Philosophy:
+
+```text
+Voice receives UnifiedResult only.
+Voice reads summary only.
+Voice delegates synthesis to a provider.
+Voice does not play audio in Beta.5.
+Providers are replaceable through DI.
+```
+
+Beta.5 completion status: implemented with MockVoiceProvider and provider
+placeholder for future OpenAI voice synthesis.
+
+## v0.4 Beta.4 - Result Merge
+
+Beta.4 introduces the Result Merge layer. Execution Graph still runs
+capabilities and returns ordered node results, but consumers can now ask for one
+merged `UnifiedResult` response.
+
+Status: Complete. Beta.4 is approved for closure and Jarvis can enter Beta.5
+Voice Integration.
+
+```text
+Planner
+  |
+Execution Graph
+  |
+Capabilities
+  |
+Result Merge
+  |
+UnifiedResult
+```
+
+Unified result contract:
+
+```json
+{
+  "summary": "3 capabilities completed",
+  "results": [],
+  "warnings": [],
+  "errors": [],
+  "metadata": {}
+}
+```
+
+Merge rules:
+
+```text
+success/completed -> results
+warning -> warnings
+failed/error -> errors
+```
+
+Metadata preserves execution details such as `execution_id`, `plan_id`, node
+count, elapsed time, completed node count, timestamp, and per-node timing.
+
+`UnifiedResult` is immutable after merge. `ResultMerger` receives execution
+results as input and returns a separate `UnifiedResult`; it is not stored inside
+`ExecutionRunResult`.
+
+Result Merge Philosophy:
+
+```text
+Merge receives results only.
+Merge never plans.
+Merge never executes tools.
+Merge never reads Memory.
+Merge never calls capabilities.
+Merge returns one UnifiedResult for Voice and UI.
+```
+
+`ExecutionGraphRunner.run()` remains the raw execution contract.
+`ExecutionGraphRunner.run_unified()` executes and merges through the configured
+`ResultMerger`.
+
+Beta.5 Voice Integration entry conditions:
+
+```text
+UnifiedResult.summary is stable for Voice output.
+UnifiedResult.results, warnings, errors, and metadata are stable for UI output.
+Result order follows plan execution order.
+Partial results are preserved when one node fails.
+Summary reports warning/error counts without embedding detailed issue text.
+Diagnostics metadata includes execution, plan, node, status, timing, and counts.
+```
+
+## v0.4 Beta.3 - Capability Context
+
+Beta.3 introduces Execution Context: temporary data that exists only during one
+execution run. It is not Memory.
+
+```text
+Finance
+  |
+Execution Context
+  |
+Japanese
+  |
+Execution Context
+  |
+Creator
+```
+
+Context contract:
+
+```json
+{
+  "context_version": "1.0",
+  "execution_id": "exec_xxx",
+  "values": {
+    "finance_001": {
+      "result": {}
+    }
+  }
+}
+```
+
+Tool input contract:
+
+```json
+{
+  "user_input": "",
+  "previous_results": [],
+  "execution_snapshot": {}
+}
+```
+
+`ExecutionInputData` is append-only. Existing fields remain backward compatible,
+and capabilities should ignore unknown fields.
+
+Execution order:
+
+```text
+Execute
+  |
+Result
+  |
+Context Update
+  |
+Next Node
+```
+
+Execution Context Philosophy:
+
+```text
+Execution Context is temporary.
+Execution Context belongs to the Runner.
+Capabilities never own execution context.
+Capabilities receive immutable execution snapshots.
+Capabilities never mutate execution context.
+Runner is the only owner of execution state.
+Execution Context is destroyed after execution.
+Memory remains long-term storage.
+```
+
+## v0.4 Beta.2 - Execution Graph Runtime
+
+Beta.2 introduces the Execution Layer. Planner still never executes. Runner
+walks a validated graph sequentially and delegates routing, authorization, and
+tool execution.
+
+```text
+User
+  |
+Brain
+  |
+Intent Planner
+  |
+Plan Validator
+  |
+Execution Graph Runner
+  |
+Capability Router
+  |
+Permission
+  |
+Dispatcher
+  |
+Tool Result
+```
+
+Runner result contract:
+
+```json
+{
+  "execution_id": "exec_xxx",
+  "plan_id": "plan_xxx",
+  "status": "completed",
+  "results": [
+    {
+      "node_id": "life_001",
+      "status": "completed",
+      "result": {},
+      "started_at": "",
+      "finished_at": ""
+    }
+  ]
+}
+```
+
+Execution Runner Philosophy:
+
+```text
+Runner executes.
+Runner never plans.
+Runner never validates.
+Runner never selects capabilities.
+Runner never selects tools.
+Runner delegates routing.
+Runner delegates authorization.
+Runner delegates execution.
+```
+
+## v0.4 Beta.1 - Intent Planner Contract
+
+Beta begins Capability Orchestration. Beta.1 does not execute multi-tool plans;
+it defines the stable planning contract that future execution can safely use.
+
+```text
+User
+  |
+Brain
+  |
+Intent Planner
+  |
+Capability Plan
+  |
+Plan Validator
+  |
+Capability Router
+  |
+Tool
+  |
+Permission
+  |
+Dispatcher
+```
+
+Detailed planning boundary:
+
+```text
+Brain
+  |
+Intent Planner
+  |
+Capability
+  |
+Intent
+  |
+Capability Router
+  |
+Tool
+```
+
+Planner output is capability-level only:
+
+```json
+{
+  "capability": "finance",
+  "intent": "compound simulation"
+}
+```
+
+Planner output must not name tools.
+
+Planning contract:
+
+```json
+{
+  "plan_id": "plan_xxx",
+  "planner_version": "0.1",
+  "graph_version": "1.0",
+  "goal": "",
+  "status": "CREATED",
+  "requires_planning": true,
+  "permission_mode": "SAFE",
+  "execution_mode": "sequential",
+  "graph": {
+    "nodes": [
+      {
+        "id": "finance_001",
+        "step": 1,
+        "capability": "finance",
+        "intent": "compound simulation",
+        "input": "VOO를 20년 적립",
+        "status": "CREATED",
+        "required": true,
+        "confidence": 0.82
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge_001",
+        "from": "finance_001",
+        "to": "jp_002",
+        "type": "sequential"
+      }
+    ],
+    "metadata": {}
+  }
+}
+```
+
+Planner Philosophy:
+
+```text
+Brain decides if planning is required.
+Planner decomposes goals.
+Planner knows capabilities.
+Capabilities own their tools.
+Permission authorizes.
+Dispatcher executes.
+Merge returns one response.
+```
+
+Planner Design Rules:
+
+```text
+1. Planner never knows tools.
+2. Planner plans at capability level.
+3. Planner never touches Memory.
+4. Planner never touches Dispatcher.
+5. Planner never bypasses Permission.
+6. Planner outputs executable capability tasks only.
+7. Planner produces a stable planning contract.
+8. Execution remains sequential in Beta.1.
+```
+
+## v0.4 Sprint 7 - Life Capability Alpha
+
+Life is the fifth real capability application. It is intentionally closer to
+Memory than the previous capability apps, but it still plugs into the same
+Capability -> ToolRegistry -> BrainToolRouter -> Permission -> Dispatcher path.
+
+```text
+Life Capability
+  |
+  |-- life_todo
+  |-- life_reminder
+  |-- life_routine
+  |-- life_habit
+  `-- life_reflection
+       |
+Memory-aware when available
+       |
+ToolMetadata
+       |
+Brain Tool Router
+       |
+Permission
+       |
+Dispatcher
+```
+
+Included SAFE tools:
+
+- `life_todo`: turns loose notes into prioritized todo lists.
+- `life_reminder`: prepares Scheduler-ready reminder payloads without creating
+  real reservations.
+- `life_routine`: drafts morning, evening, study, workout, or project routines.
+- `life_habit`: creates simple habit tracking templates.
+- `life_reflection`: summarizes a day or sprint into summary, wins, problems,
+  ideas, and next actions.
+
+Reminder outputs are ready for a future Scheduler:
+
+```json
+{
+  "message": "...",
+  "recommended_time": "tomorrow morning",
+  "priority": "normal",
+  "ready_for_scheduler": true
+}
+```
+
+Life may read Memory through approved Memory interfaces, but Memory remains Core.
+Life does not own Memory.
+
+## Capability Philosophy
+
+```text
+Brain decides.
+Capability specializes.
+Tool executes.
+Memory remembers.
+Permission protects.
+Dispatcher delivers.
+```
 
 ## v0.4 Sprint 6 - Hotel Capability Alpha
 

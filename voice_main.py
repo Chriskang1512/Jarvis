@@ -38,11 +38,9 @@ def main():
     )
 
     wake_word = os.environ.get("JARVIS_WAKE_WORD", "hey jarvis")
-    stt_provider_name = os.environ.get("JARVIS_STT_PROVIDER", "console")
-
     pipeline = VoicePipeline(
         wake_listener=WakeWordListener(wake_word=wake_word),
-        stt_provider=create_stt_provider(stt_provider_name),
+        stt_provider=create_stt_provider(config.stt),
         chat_service=chat_service,
         tts_provider=create_tts_provider(config.tts, diagnostics_collector=diagnostics_collector),
         diagnostics_collector=diagnostics_collector,

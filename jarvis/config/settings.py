@@ -13,6 +13,16 @@ class TTSConfig:
 
 
 @dataclass
+class STTConfig:
+    """Store runtime configuration for speech-to-text providers."""
+
+    provider: str = "mock"
+    language: str = "ko-KR"
+    device: str = "default"
+    openai_model: str = "gpt-4o-mini-transcribe"
+
+
+@dataclass
 class ConversationConfig:
     """Store short-term conversation memory settings."""
 
@@ -36,7 +46,8 @@ class JarvisConfig:
     temperature: float = 0.7
     debug: bool = False
     profile: str = "jarvis"
-    version: str = "v0.4.0-alpha.6"
+    version: str = "v0.4.0"
     tts: TTSConfig = field(default_factory=TTSConfig)
+    stt: STTConfig = field(default_factory=STTConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
     memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)
