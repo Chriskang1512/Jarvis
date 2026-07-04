@@ -1,6 +1,7 @@
 import inspect
 import unittest
 from copy import deepcopy
+from pathlib import Path
 from types import MappingProxyType
 
 from jarvis.capabilities import CapabilityLoader
@@ -188,16 +189,13 @@ class TestExecutionGraphRunner(unittest.TestCase):
 
     def test_capabilities_do_not_import_execution_context(self):
         """Check capabilities remain input-output and do not own execution context."""
-        import subprocess
-
-        completed = subprocess.run(
-            ["rg", "-n", "ExecutionContext|jarvis.execution.context", "jarvis/capabilities"],
-            capture_output=True,
-            text=True,
-            check=False,
+        capability_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in Path("jarvis").joinpath("capabilities").rglob("*.py")
         )
 
-        self.assertEqual(completed.stdout.strip(), "")
+        self.assertNotIn("ExecutionContext", capability_source)
+        self.assertNotIn("jarvis.execution.context", capability_source)
 
     def test_node_status_lifecycle_values_exist(self):
         """Check node lifecycle states are reserved."""
