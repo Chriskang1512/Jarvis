@@ -2,6 +2,7 @@ import unittest
 import io
 from contextlib import redirect_stdout
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from jarvis.runtime.planner import ExecutionPlan, ExecutionStep
 from jarvis.runtime.task import TaskState
@@ -44,8 +45,9 @@ class TestRuntimeTaskEngineSprint9(unittest.TestCase):
         )
         output = io.StringIO()
 
-        with redirect_stdout(output):
-            result = dispatcher.execute_plan(plan)
+        with patch.dict("os.environ", {"JARVIS_DEBUG_TRACE": "true", "JARVIS_TRACE_RAW": ""}, clear=False):
+            with redirect_stdout(output):
+                result = dispatcher.execute_plan(plan)
 
         logs = output.getvalue()
         self.assertIn(f"task={result.task.id}", logs)

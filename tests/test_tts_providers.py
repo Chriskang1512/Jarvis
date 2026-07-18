@@ -279,15 +279,18 @@ class TestTTSProviders(unittest.TestCase):
     def test_powershell_backend_uses_playsync(self):
         """Check PowerShell playback uses blocking SoundPlayer.PlaySync."""
         completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+        audio_path = "C:\\voice.wav"
 
         with patch("jarvis.voice.playback.os.name", "nt"):
-            with patch("jarvis.voice.playback.subprocess.run", return_value=completed) as run:
-                result = PowerShellPlaybackBackend(executable="powershell").play("voice.wav")
+            with patch("jarvis.voice.playback.resolve_audio_path", return_value=audio_path):
+                with patch("jarvis.voice.playback.get_file_size", return_value=0):
+                    with patch("jarvis.voice.playback.subprocess.run", return_value=completed) as run:
+                        result = PowerShellPlaybackBackend(executable="powershell").play("voice.wav")
 
         command = run.call_args.args[0]
         self.assertTrue(result.success)
         self.assertIn("PlaySync()", command[-1])
-        self.assertIn(str(Path("voice.wav").resolve()).replace("'", "''"), command[-1])
+        self.assertIn(audio_path.replace("'", "''"), command[-1])
 
     def test_composite_backend_records_failed_attempts(self):
         """Check all playback attempts are preserved for debug traces."""
