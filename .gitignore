@@ -8,7 +8,7 @@ venv/
 
 # Local memory and logs
 memory.txt
-memory/
+/memory/
 data/*.txt
 data/credentials/
 logs/*.log

@@ -1,0 +1,44 @@
+{
+  "id": "memory",
+  "name": "Memory",
+  "type": "native",
+  "permission": "safe",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Persistent user memory",
+  "capabilities": [
+    "memory_remember",
+    "memory_recall",
+    "memory_forget",
+    "memory_list",
+    "profile",
+    "preference",
+    "project_memory"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["remember", "recall", "forget", "list"]
+      },
+      "key": {
+        "type": "string"
+      },
+      "value": {
+        "type": "string"
+      },
+      "category": {
+        "type": "string"
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["session", "long_term", "project"]
+      },
+      "raw_text": {
+        "type": "string"
+      }
+    }
+  },
+  "output_schema": "MemoryResult"
+}
