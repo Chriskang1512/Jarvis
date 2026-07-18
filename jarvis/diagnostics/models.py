@@ -55,6 +55,31 @@ class HealthStatus:
 
 
 @dataclass
+class IntentRuntimeStatus:
+    """Store the latest v0.5 intent runtime trace."""
+
+    input_text: str = ""
+    input_source: str = "text"
+    detected_intent: str = ""
+    selected_tool: str = ""
+    permission_status: str = ""
+    execution_result: str = ""
+    response: str = ""
+    tts_output: str = "unknown"
+    error_logs: list = field(default_factory=list)
+    elapsed: float = 0.0
+
+
+@dataclass
+class PublishedEvent:
+    """Store one collector-published runtime event."""
+
+    event_type: str
+    payload: dict = field(default_factory=dict)
+    timestamp: str = ""
+
+
+@dataclass
 class EventLogEntry:
     """Store one diagnostics event log entry."""
 
@@ -71,8 +96,10 @@ class DiagnosticSnapshot:
     provider: ProviderMetadata = field(default_factory=ProviderMetadata)
     performance: PerformanceMetadata = field(default_factory=PerformanceMetadata)
     pipeline: PipelineStatus = field(default_factory=PipelineStatus)
+    intent_runtime: IntentRuntimeStatus = field(default_factory=IntentRuntimeStatus)
     health: HealthStatus = field(default_factory=HealthStatus)
     events: list = field(default_factory=list)
+    published_events: list = field(default_factory=list)
 
 
 def current_time():

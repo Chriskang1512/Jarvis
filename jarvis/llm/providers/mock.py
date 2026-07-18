@@ -10,7 +10,7 @@ class MockLLMProvider:
         self.provider = MockChatProvider()
         self.last_metadata = self.provider.last_metadata
 
-    def generate(self, prompt):
+    def generate(self, prompt, **options):
         """Generate one mock response."""
         reply = self.provider.generate_reply(prompt)
         self.last_metadata = self.provider.last_metadata
@@ -32,6 +32,6 @@ class MockLLMProvider:
             supports_reasoning=False,
         )
 
-    def generate_reply(self, message):
+    def generate_reply(self, message, **options):
         """Backward-compatible chat provider method."""
-        return self.generate(message)
+        return self.generate(message, **options)

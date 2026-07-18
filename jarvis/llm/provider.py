@@ -4,7 +4,7 @@ from typing import Protocol
 class LLMProvider(Protocol):
     """Common contract for every Jarvis LLM provider."""
 
-    def generate(self, prompt):
+    def generate(self, prompt, **options):
         """Generate one complete response."""
         ...
 

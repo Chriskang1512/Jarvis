@@ -1,5 +1,293 @@
 # Changelog
 
+## [v0.6.0-sprint.17.0] - Google OAuth + Google Calendar Read Vertical Slice
+
+### Added
+
+- Google OAuth foundation with credential load, auth status, token refresh, and
+  read-only scope validation.
+- `GoogleCalendarProvider` behind the existing Calendar Provider boundary.
+- Google Calendar event mapping into internal `CalendarEvent` / `CalendarResult`
+  contracts.
+- Provider selection through runtime calendar config and
+  `JARVIS_CALENDAR_PROVIDER=google`.
+- Safe Google provider error codes for auth, scope, timeout, unavailable, and
+  invalid response cases.
+- Manual auth script: `scripts/google_calendar_auth.py`.
+- Google Calendar setup and manual verification documentation.
+
+### Fixed
+
+- Calendar list phrases such as `오늘 일정을 알려줘` no longer route to
+  Reminder creation.
+- `다음 주 일정 알려줘` routes to `calendar.list` with `next_week`.
+- `다음 일정 알려줘` routes to the next upcoming event query.
+- Follow-up navigation such as `다음 일정은?` remains list navigation instead
+  of becoming a fresh query.
+- Planner legacy mojibake tokens that caused import/runtime syntax failures
+  were normalized to UTF-8-safe Korean patterns.
+
+### Verified
+
+- OAuth completed against the real account `lab810108@gmail.com`.
+- Today query returned `2026-07-18 20:00 테스트`.
+- Next week query returned `2026-07-19 15:00 테스트1`.
+- Sensitive credential files are ignored by git.
+- Full regression suite: `624 tests OK (skipped=2)`.
+
+### Scope
+
+- Google Calendar write actions remain blocked in Sprint 17.0.
+- Mock Calendar remains available as the safe default provider.
+- Google API objects and credentials stay inside the provider boundary.
+
+## [v0.6.0-sprint.8] - AI Intent Parser Foundation
+
+### Added
+
+- `jarvis.runtime.intent` package with common Intent Parser contracts.
+- `StructuredIntent`, `IntentContext`, and `IntentParseResult` models.
+- Intent Registry that constrains allowed ability/action pairs.
+- Rule Intent Parser for high-confidence deterministic commands.
+- AI Intent Parser that accepts JSON-only structured output through the existing LLM provider abstraction.
+- Hybrid Intent Parser that uses Rule first and AI fallback when rule confidence is low or missing.
+- Intent metrics collector for Rule Hit %, AI Hit %, Fallback %, Clarification %, and Average Confidence.
+- Intent Validator for schema, registry, required parameters, date/time format, unsupported conditionals, and forbidden URL/provider output.
+- Confidence policy:
+  - `>= 0.85`: executable candidate.
+  - `0.70 <= confidence < 0.85`: safe reads may proceed, writes require clarification.
+  - `< 0.70`: clarification/fallback.
+- Planner adapter that converts structured intents into existing `ExecutionPlan` / `ExecutionStep` objects.
+- Clarification plans for missing required user details such as calendar create without time.
+- Intent debug traces for rule match, AI request, AI parse, validation, selected source, and latency/token metrics.
+- Intent stats trace that summarizes cumulative parser routing metrics.
+
+### Verified
+
+- Integration health variants map to `integration.health`.
+- Integration execute variants map to `integration.execute`.
+- Calendar, Reminder, and Memory examples map to structured intents.
+- Multi-intent AI output maps to ordered Planner steps.
+- Invalid AI outputs are blocked before execution.
+- Conditional execution remains unsupported and safe.
+- AI provider failure falls back to high-confidence Rule parsing when possible.
+- Full unit test suite passes.
+
+### Scope
+
+- AI structures intent only.
+- Planner, Dispatcher, Permission Layer, Ability Registry, Providers, and result validation still own execution.
+- No direct AI tool calling.
+- No permission bypass.
+- No autonomous agent loop.
+
+## [v0.6.0-sprint.7] - Integration Bridge Foundation
+
+### Added
+
+- `integration_n8n` Ability for Integration Ability routing through the n8n Bridge boundary.
+- Mock Integration Bridge provider for offline and test execution.
+- Foundation workflows: `system.health`, `system.echo`, and `notification.test`.
+- Integration request/result contracts with `conversation_id`, `session_id`, `request_id`, and `workflow_id`.
+- Retry policy fields in the integration request contract.
+- Provider capability metadata for health, execute, confirmation, stream, and async support.
+- Integration metrics for success, failure, timeout count, and average latency.
+- Voice aliases and STT corrections for common `n8n` and `system.echo` recognition variants.
+
+### Verified
+
+- `Planner -> Dispatcher -> Integration Ability -> Provider` path works through the Ability contract.
+- `system.health` and `system.echo` execute successfully through the Mock Provider.
+- Permission, validation, fail-closed unknown workflow behavior, and metrics paths are covered by tests.
+- Full unit test suite passes for the Sprint 7 closure.
+
+### Scope
+
+- Sprint 7 closes the Integration Bridge Foundation.
+- Remaining failures around phrases such as `n8n`, `system echo`, and broad automation wording are classified as Natural Language Understanding limits, not Bridge contract defects.
+- The next layer should parse natural language into structured intent before Planner/Dispatcher execution.
+
+### Next
+
+- Add an AI Intent Parser / NLU layer:
+  `STT -> user vocabulary correction -> AI Intent Parser -> structured Intent -> Planner -> Dispatcher -> Ability`.
+- AI may structure the user's request, but must not bypass Registry validation, Permission Layer checks, workflow confirmation, execution, or result validation.
+
+## [internal] - Jarvis Core v1 Complete
+
+### Added
+
+- ROADMAP internal milestone declaring Jarvis Core v1 complete after v0.5.0 Beta.5.3.
+- Ability Era direction defining Native Abilities and Integration Abilities.
+- Integration principle that external services should prefer Automation Provider -> n8n Bridge.
+
+## [v0.5.0-beta.5.3] - Follow-up Conversation Mode
+
+### Added
+
+- `ConversationSession` model for wake-word conversation lifecycle tracking.
+- Conversation states: `IDLE`, `LISTENING`, `THINKING`, `SPEAKING`, `FOLLOW_UP`, and `CLOSED`.
+- Configurable `conversation.follow_up_timeout`, defaulting to 8 seconds.
+- VoicePipeline follow-up loop that can process additional speech without repeating the wake word.
+- Diagnostics events: `conversation.started`, `conversation.follow_up`, and `conversation.closed`.
+- Runtime Dev Console conversation section with session ID, state, and remaining follow-up time.
+- Unit tests for session creation, follow-up timeout, wake-word-free follow-up questions, idle return, and console rendering.
+
+### Scope
+
+- Runtime remains unaware of conversation sessions.
+- Excludes memory, multi-turn context, conversation history, and AI memory.
+
+## [v0.5.0-beta.5.2] - Voice Identity Foundation
+
+### Added
+
+- `VoiceProfile` contract for reusable voice identity metadata.
+- `VoiceRegistry` with built-in `jarvis_default` and `friday` profiles.
+- `jarvis_default` identity metadata: JARVIS-inspired original, British-inspired, low-mid/slightly-slow direction, calm/composed/witty, private butler / hotel concierge.
+- Config support for top-level `tts_provider` and `voice_profile`.
+- OpenAI TTS provider using `gpt-4o-mini-tts`, voice profile selection, and WAV playback.
+- Voice profile config fields for voice, speed, pitch, volume, language, and reserved emotion.
+- Unit tests for profile lookup, OpenAI TTS provider selection, and mocked OpenAI speech generation.
+
+### Changed
+
+- TTS provider selection now resolves a VoiceProfile before constructing the provider.
+- `config.json` now selects OpenAI TTS with the `jarvis_default` voice profile for demo use.
+
+### Scope
+
+- Excludes SSML, streaming TTS, voice cloning, emotional rendering, and Edge TTS.
+
+## [v0.5.0-beta.5.1] - TTS Debug
+
+### Added
+
+- VoicePipeline now prints the full response text before TTS.
+- VoicePipeline now prints the exact TTS input text and character length.
+- VoicePipeline now prints `len(tts_text)` after TTS playback.
+- Unit test coverage for TTS debug output blocks and final length printing.
+- TTS text normalizer that converts simple Markdown headings, emphasis, bullets, links, and code markers to plain text before playback.
+- Unit test coverage proving the original response is preserved while TTS receives normalized text.
+- Pyttsx3 playback now queues every speech chunk before one `runAndWait()` call, avoiding first-line-only playback on some Windows SAPI setups.
+
+### Verified
+
+- Existing Runtime and VoicePipeline tests remain compatible.
+
+## [v0.5.0-beta.5] - OpenAI Runtime Provider
+
+### Added
+
+- `OpenAIChatProvider` as the explicit chat provider contract for OpenAI.
+- Backward-compatible `OpenAIProvider` alias kept for existing imports.
+- `chat_provider` configuration alias for selecting the active chat provider while preserving the existing `provider` key.
+- Runtime Dev Console provider rendering for Mock/OpenAI visibility.
+- VoicePipeline now passes the active chat provider name into the Runtime Dev Console.
+- Unit tests for OpenAI provider generation using a mocked SDK response.
+- Unit tests for config-based OpenAI provider selection and provider console output.
+
+### Verified
+
+- Mock provider remains unchanged and remains the default CI path.
+- OpenAI provider tests do not call the real API.
+- Runtime and Planner behavior remain unchanged.
+
+## [v0.5.0-beta.4] - Execution Engine Enhancement
+
+### Added
+
+- `RetryPolicy` abstraction with default `max_retries=0`.
+- `ExecutionContext` for plan-step execution metadata after planning.
+- `ExecutionMetrics` for execution time, router time, dispatcher time, retry count, and fallback usage.
+- `PlanStep.timeout_ms` contract for future step timeout handling.
+- Reserved `CANCELLED` execution status.
+- `execute_parallel(plan)` placeholder interface for future parallel execution.
+- Runtime Dev Console execution metrics section for execution, retry, timeout, elapsed, and fallback visibility.
+- Unit tests for retry policy, execution metrics, timeout contract, execution context, parallel placeholder, cancelled status, and console rendering.
+
+### Verified
+
+- Current Runtime behavior remains unchanged.
+- Beta.4 execution engine tests pass.
+
+## [v0.5.0-beta.3] - Planner Foundation
+
+### Added
+
+- `Plan`, `PlanStep`, and rule-based `Planner` foundation.
+- Short Plan IDs such as `P-001A` for diagnostics and replay.
+- PlanStep status values for PENDING, RUNNING, COMPLETED, and FAILED.
+- Runtime now creates a Plan from the parsed Intent before resolving tools.
+- Runtime executes Plan steps sequentially while preserving current single-step behavior.
+- Runtime Dev Console version header updated to `v0.5.0 Beta.3`.
+- Planner lifecycle events: `plan.created`, `plan.started`, and `plan.completed`.
+- Runtime Dev Console plan rendering with plan ID, goal, steps, and step status.
+- Tests for planner creation, runtime planner integration, single-step execution, empty-plan fallback, lifecycle events, and plan rendering.
+
+### Verified
+
+- Current Runtime behavior remains backward compatible.
+- Full test suite passes.
+
+## [v0.5.0-beta.2.5] - Runtime Dev Console
+
+### Added
+
+- `RuntimeDevConsole` renderer for readable RuntimeResult / RuntimeDiagnostics summaries.
+- `RuntimeDevConsole.render(..., theme="simple")` API for future rich/json/minimal themes.
+- Jarvis Runtime version header in the dev console.
+- Runtime ID and Session ID output in the runtime dev console.
+- Optional VoicePipeline runtime console output when debugging is enabled.
+- `voice_main.py` now wires the default IntentRuntime so runtime flow can be inspected during voice execution.
+- Unit tests for success, fallback, theme handling, Runtime/Session IDs, and VoicePipeline console output.
+
+### Verified
+
+- Voice runtime behavior remains unchanged when the dev console is disabled.
+- Full test suite passes.
+
+## [v0.5.0-beta.1] - Intent Runtime Foundation
+
+### Added
+
+- `IntentParser` and source-agnostic `IntentRuntime` for Input -> Intent -> Permission -> Router -> Dispatcher -> Response flow.
+- `RuntimeContext` for text, source, language, session, user, wake word, conversation, and timestamp metadata.
+- Standard `Intent` object with name, confidence, source, parameters, raw text, tool name, and permission level.
+- `RuntimeResult` and `RuntimeDiagnostics` contracts for intent, permission, tool, response, diagnostics, and elapsed time.
+- Immutable intent parameters for diagnostics and replay safety.
+- VoicePipeline hook that uses the shared runtime before LLM fallback.
+- Diagnostics fields for input text, input source, detected intent, selected tool, permission status, execution result, response, TTS output, elapsed time, and error logs.
+- Generic `DiagnosticsCollector.publish()` events for runtime.started, intent.parsed, permission.checked, tool.executed, response.generated, runtime.completed, and runtime.finished.
+- Confirm-required approval path through `_confirmed=True` request metadata.
+- v0.5 test pack for RuntimeContext, immutable Intent, parser contract, source-agnostic runtime use, permission-before-router ordering, safe tool execution, confirm-required blocking, TTS handoff, collector events, and diagnostics rendering.
+
+### Changed
+
+- Time tool runtime intent is now exposed as `time.lookup`.
+
+### Verified
+
+- Full test suite passes.
+
+## [v0.5.0-beta.2] - Tool Router Interface
+
+### Added
+
+- `jarvis.tools.router` module with `ToolRouter`, `ToolRoute`, and `RegistryToolRouter`.
+- Runtime now depends on the `router.resolve(intent)` contract instead of Brain routing helpers.
+- Resolve-only router test proving Runtime only needs the ToolRouter interface.
+
+### Changed
+
+- Shared routing helper functions moved under `jarvis.tools.router`.
+- `BrainToolRouter` now reuses the shared routing helper while remaining a legacy Brain entrypoint.
+
+### Verified
+
+- Runtime source no longer imports `jarvis.brain.tool_router` or names `BrainToolRouter`.
+- Full test suite passes.
+
 Jarvis 프로젝트의 변경 기록입니다.
 
 이 문서는 Keep a Changelog 형식을 참고합니다.

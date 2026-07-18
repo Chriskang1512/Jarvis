@@ -1,0 +1,8 @@
+{
+  "id": "runtime_planner",
+  "name": "Runtime Planner",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Rule-based multi-tool execution planner",
+  "capabilities": ["multi_tool_planning", "ordered_steps", "result_merge"]
+}

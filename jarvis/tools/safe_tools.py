@@ -15,9 +15,9 @@ class TimeTool:
         domain="core",
         permission_level=PermissionLevel.SAFE,
         safe=True,
-        capability="time.current",
+        capability="time.lookup",
         aliases=["time", "current time", "show time"],
-        supported_intents=["what time is it", "what's the time", "현재 시간"],
+        supported_intents=["what time is it", "what's the time", "time.lookup", "현재 시간"],
         examples=["오늘 몇 시야", "지금 몇 시야", "현재 시간"],
         input_mode="none",
     )

@@ -1,28 +1,63 @@
 {
   "provider": "mock",
-  "model": "mock",
+  "chat_provider": "openai",
+  "tts_provider": "openai",
+  "voice_profile": "jarvis_cinematic",
+  "model": "gpt-4o-mini",
   "temperature": 0.7,
   "debug": false,
   "profile": "jarvis",
   "version": "v0.4.0",
   "tts": {
-    "provider": "pyttsx3",
+    "provider": "openai",
+    "voice_profile": "jarvis_cinematic",
     "voice": "default",
+    "speed": 1.12,
+    "pitch": 0,
+    "volume": 1.0,
+    "language": "ko",
+    "openai_model": "gpt-4o-mini-tts",
+    "response_format": "wav",
     "streaming": true,
     "piper_path": "piper",
     "model_path": ""
   },
   "stt": {
-    "provider": "microphone",
+    "provider": "openai",
     "language": "ko-KR",
     "device": "default",
-    "openai_model": "gpt-4o-mini-transcribe"
+    "openai_model": "gpt-4o-transcribe",
+    "openai_language": "ko"
   },
   "conversation": {
     "max_turns": 6,
-    "max_tokens": 1200
+    "max_tokens": 1200,
+    "follow_up_timeout": 8
   },
   "memory_store": {
     "path": "data/memory_store.json"
+  },
+  "weather": {
+    "provider": "openweather",
+    "fallback_to_mock": true,
+    "openweather_lang": "kr",
+    "default_location": "강릉"
+  },
+  "calendar": {
+    "provider": "mock",
+    "allow_mock_fallback": false,
+    "timezone": "Asia/Seoul",
+    "google_credentials_path": "data/credentials/google_token.json",
+    "google_client_secret_path": "client_secret.json"
+  },
+  "ai_intent": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "timeout": 8,
+    "min_confidence": 0.7,
+    "max_output_tokens": 300,
+    "reasoning_effort": "low",
+    "verbosity": "low"
   }
 }

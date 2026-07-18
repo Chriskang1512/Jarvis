@@ -1,4 +1,3 @@
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -58,8 +57,15 @@ class TestMemoryStore(unittest.TestCase):
 
     def test_json_memory_store_persists_across_instances(self):
         """Check JSON-backed memory persists across manager instances."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "memory_store.json"
+        tmp_root = Path("tmp") / "tests"
+        tmp_root.mkdir(parents=True, exist_ok=True)
+
+        path = tmp_root / "memory_store_persistence_test.json"
+
+        try:
+            if path.exists():
+                path.unlink()
+
             first_manager = MemoryManager(store=JsonMemoryStore(path))
             first_manager.load()
             first_manager.remember("Persistent memory.", title="Persistent Title", category="fact", tags=["persist"])
@@ -71,6 +77,9 @@ class TestMemoryStore(unittest.TestCase):
             self.assertEqual(loaded[0].title, "Persistent Title")
             self.assertEqual(loaded[0].content, "Persistent memory.")
             self.assertEqual(loaded[0].category, MemoryCategory.FACT)
+        finally:
+            if path.exists():
+                path.unlink()
 
     def test_memory_diagnostics_events(self):
         """Check memory lifecycle diagnostics events."""

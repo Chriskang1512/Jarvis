@@ -4,8 +4,10 @@ from jarvis.diagnostics.models import (
     DiagnosticSnapshot,
     EventLogEntry,
     HealthStatus,
+    IntentRuntimeStatus,
     PerformanceMetadata,
     PipelineStatus,
+    PublishedEvent,
     ProviderMetadata,
     SessionMetadata,
     current_time,
@@ -62,6 +64,49 @@ class DiagnosticsCollector:
             overall=overall,
         )
 
+    def publish_intent_runtime(
+        self,
+        input_text=None,
+        input_source=None,
+        detected_intent=None,
+        selected_tool=None,
+        permission_status=None,
+        execution_result=None,
+        response=None,
+        tts_output=None,
+        error=None,
+        elapsed=None,
+    ):
+        """Publish v0.5 intent runtime trace metadata."""
+        current = self.snapshot.intent_runtime
+        error_logs = list(current.error_logs)
+
+        if error not in [None, ""]:
+            error_logs.append(str(error))
+
+        self.snapshot.intent_runtime = IntentRuntimeStatus(
+            input_text=choose_value(input_text, current.input_text),
+            input_source=choose_value(input_source, current.input_source),
+            detected_intent=choose_value(detected_intent, current.detected_intent),
+            selected_tool=choose_value(selected_tool, current.selected_tool),
+            permission_status=choose_value(permission_status, current.permission_status),
+            execution_result=choose_value(execution_result, current.execution_result),
+            response=choose_value(response, current.response),
+            tts_output=choose_value(tts_output, current.tts_output),
+            error_logs=error_logs[-10:],
+            elapsed=choose_value(elapsed, current.elapsed),
+        )
+
+    def publish(self, event_type, payload):
+        """Publish a generic collector event for diagnostics/history subscribers."""
+        self.snapshot.published_events.append(
+            PublishedEvent(
+                event_type=str(event_type),
+                payload=dict(payload),
+                timestamp=current_time(),
+            )
+        )
+
     def increment_request_count(self):
         """Increase the total request count."""
         self.snapshot.session.request_count += 1
@@ -82,3 +127,11 @@ class DiagnosticsCollector:
 def create_session_id():
     """Create a short readable session ID."""
     return str(uuid4()).split("-", 1)[0].upper()
+
+
+def choose_value(new_value, current_value):
+    """Keep the current value when no new value is provided."""
+    if new_value is None:
+        return current_value
+
+    return new_value

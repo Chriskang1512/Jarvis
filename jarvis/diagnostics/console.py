@@ -44,6 +44,22 @@ class DiagnosticsConsole:
         )
         append_section(
             lines,
+            "Intent Runtime",
+            [
+                f"Input     : {snapshot.intent_runtime.input_text}",
+                f"Source    : {snapshot.intent_runtime.input_source}",
+                f"Intent    : {snapshot.intent_runtime.detected_intent}",
+                f"Tool      : {snapshot.intent_runtime.selected_tool}",
+                f"Permission: {snapshot.intent_runtime.permission_status}",
+                f"Result    : {snapshot.intent_runtime.execution_result}",
+                f"Response  : {snapshot.intent_runtime.response}",
+                f"TTS       : {snapshot.intent_runtime.tts_output}",
+                f"Elapsed   : {snapshot.intent_runtime.elapsed:.2f} sec",
+                f"Errors    : {format_error_logs(snapshot.intent_runtime.error_logs)}",
+            ],
+        )
+        append_section(
+            lines,
             "Performance",
             [
                 f"LLM       : {snapshot.performance.llm_latency:.2f} sec",
@@ -88,3 +104,11 @@ def format_events(events):
         return ["No events yet."]
 
     return [f"{event.timestamp}  {event.message}" for event in events[-10:]]
+
+
+def format_error_logs(error_logs):
+    """Format intent runtime errors for one-line display."""
+    if len(error_logs) == 0:
+        return "none"
+
+    return " | ".join(str(error) for error in error_logs[-3:])

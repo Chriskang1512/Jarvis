@@ -48,7 +48,10 @@ STT provider selection follows the same replaceable-provider principle.
 - `mock`
 - `microphone`
 - `openai`
+- `hybrid`
 
-The current microphone provider is local and replaceable. The OpenAI provider
-name is reserved for a future sprint. Voice remains an input/output layer and
-must not bypass Brain, Capability routing, Permission, or Dispatcher.
+OpenAI STT is the v0.6 default provider for the best current voice test
+experience. Google/SpeechRecognition remains available through `microphone`,
+and `hybrid` remains available for A/B testing or fallback experiments. Voice
+remains an input/output layer and must not bypass Brain, Capability routing,
+Permission, or Dispatcher.

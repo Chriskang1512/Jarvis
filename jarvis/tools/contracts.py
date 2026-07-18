@@ -17,6 +17,8 @@ class ToolMetadata:
     safe: bool = True
     deprecated: bool = False
     priority: int = 0
+    priority_label: str = "normal"
+    provider: str = ""
     capability: str = ""
     aliases: list[str] = field(default_factory=list)
     supported_intents: list[str] = field(default_factory=list)

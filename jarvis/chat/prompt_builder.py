@@ -30,9 +30,13 @@ class PromptBuilder:
         """Create a prompt builder with one Jarvis prompt profile."""
         self.profile = profile
 
-    def build(self, user_message, mode=PromptMode.DEFAULT, conversation_history=""):
+    def build(self, user_message, mode=PromptMode.DEFAULT, conversation_history="", runtime_context=""):
         """Build the final prompt sent to a ChatProvider."""
         history_section = "\n\n"
+        runtime_section = ""
+
+        if runtime_context != "":
+            runtime_section = f"\n\nRuntime Context:\n{runtime_context}"
 
         if conversation_history != "":
             history_section = f"\n\nConversation History:\n{conversation_history}\n\n"
@@ -42,6 +46,7 @@ class PromptBuilder:
             f"{format_section('Core Rules', self.profile.core_rules)}\n\n"
             f"{format_section('Personality', self.profile.personality)}\n\n"
             f"{format_section('Special Mode', self.get_mode_rules(mode))}"
+            f"{runtime_section}"
             f"{history_section}"
             f"User Message:\n{user_message}"
         )

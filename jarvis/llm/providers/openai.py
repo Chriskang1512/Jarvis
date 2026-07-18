@@ -1,4 +1,4 @@
-from jarvis.chat.providers import OpenAIProvider
+from jarvis.chat.providers import OpenAIChatProvider
 from jarvis.llm.metadata import LLMProviderMetadata
 
 
@@ -7,16 +7,16 @@ class OpenAILLMProvider:
 
     def __init__(self, model, temperature, env_path=".env"):
         """Create an OpenAI LLM provider."""
-        self.provider = OpenAIProvider(
+        self.provider = OpenAIChatProvider(
             model=model,
             temperature=temperature,
             env_path=env_path,
         )
         self.last_metadata = self.provider.last_metadata
 
-    def generate(self, prompt):
+    def generate(self, prompt, **options):
         """Generate one OpenAI response."""
-        reply = self.provider.generate_reply(prompt)
+        reply = self.provider.generate_reply(prompt, **options)
         self.last_metadata = self.provider.last_metadata
         return reply
 
@@ -36,6 +36,6 @@ class OpenAILLMProvider:
             supports_reasoning=True,
         )
 
-    def generate_reply(self, message):
+    def generate_reply(self, message, **options):
         """Backward-compatible chat provider method."""
-        return self.generate(message)
+        return self.generate(message, **options)

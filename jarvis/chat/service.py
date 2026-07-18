@@ -1,4 +1,5 @@
 from jarvis.memory import ConversationContext
+from jarvis.date_calculator import current_time, get_runtime_timezone, today
 
 
 class ChatService:
@@ -49,7 +50,11 @@ class ChatService:
         if history != "":
             self.log_event("conversation.context.injected")
 
-        prompt = self.prompt_builder.build(message, conversation_history=history)
+        prompt = self.prompt_builder.build(
+            message,
+            conversation_history=history,
+            runtime_context=build_runtime_context(),
+        )
         self.log_event("llm.request.started")
         try:
             reply = generate_provider_reply(self.provider, prompt)
@@ -169,3 +174,15 @@ def generate_provider_reply(provider, prompt):
         return provider.generate(prompt)
 
     return provider.generate_reply(prompt)
+
+
+def build_runtime_context():
+    """Return runtime date/time context for LLM fallback prompts."""
+    timezone = get_runtime_timezone()
+    return "\n".join(
+        [
+            f"- current_date={today(timezone=timezone)}",
+            f"- current_time={current_time(timezone=timezone)}",
+            f"- timezone={timezone}",
+        ]
+    )

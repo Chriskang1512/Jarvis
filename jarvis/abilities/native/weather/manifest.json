@@ -1,0 +1,26 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "type": "native",
+  "permission": "safe",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Current weather",
+  "capabilities": [
+    "current_weather",
+    "forecast",
+    "humidity",
+    "wind",
+    "temperature",
+    "precipitation"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "text": {"type": "string"},
+      "location": {"type": "string"}
+    },
+    "required": ["text"]
+  },
+  "output_schema": "WeatherResult"
+}

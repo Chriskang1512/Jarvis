@@ -15,6 +15,7 @@ architecture tracks. New v0.4 orchestration ADRs continue from 0014 onward.
 - 0019 - Voice Integration Architecture
 - 0020 - Scheduler Foundation Architecture
 - 0021 - Agent Runtime Architecture
+- 0022 - AI Intent Parser Boundary
 
 ## Release Candidate Review
 

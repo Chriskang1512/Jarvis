@@ -2,3 +2,6 @@ openai
 anthropic
 SpeechRecognition
 pyttsx3
+google-auth
+google-auth-oauthlib
+google-api-python-client

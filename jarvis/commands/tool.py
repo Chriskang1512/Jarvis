@@ -106,6 +106,9 @@ def format_domain_list(domains):
 
 def format_tool_output(output):
     """Format tool output for the CLI."""
+    if hasattr(output, "to_natural_language"):
+        return output.to_natural_language()
+
     if isinstance(output, dict):
         return "\n".join([f"{key}: {value}" for key, value in output.items()])
 

@@ -1,0 +1,12 @@
+{
+  "id": "runtime_tool_dispatcher",
+  "name": "Runtime Tool Dispatcher",
+  "version": "1.0",
+  "description": "Select and execute Jarvis native and future external tools.",
+  "capabilities": [
+    "tool_selection",
+    "tool_execution",
+    "multi_tool_planning",
+    "priority_ordering"
+  ]
+}

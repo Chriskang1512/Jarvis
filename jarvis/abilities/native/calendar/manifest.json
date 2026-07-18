@@ -1,0 +1,20 @@
+{
+  "id": "calendar",
+  "name": "Calendar",
+  "type": "native",
+  "permission": "safe",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Calendar schedule management",
+  "capabilities": [
+    "calendar",
+    "schedule",
+    "appointment",
+    "event",
+    "meeting"
+  ],
+  "input_schema": {
+    "type": "CalendarQuery"
+  },
+  "output_schema": "CalendarResult"
+}

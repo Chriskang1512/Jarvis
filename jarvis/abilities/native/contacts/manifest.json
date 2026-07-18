@@ -1,0 +1,55 @@
+{
+  "id": "contacts",
+  "name": "contacts",
+  "type": "native",
+  "permission": "safe",
+  "version": "0.1.0",
+  "author": "Jarvis",
+  "description": "Contact entity storage and lookup",
+  "capabilities": [
+    "contacts",
+    "contact",
+    "person",
+    "address_book"
+  ],
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": "ContactResult",
+  "aliases": [
+    "contacts",
+    "contact",
+    "연락처",
+    "주소록",
+    "이메일",
+    "전화번호",
+    "생일"
+  ],
+  "supported_intents": [
+    "contacts.create",
+    "contacts.update",
+    "contacts.get",
+    "contacts.delete",
+    "아야 연락처 알려줘",
+    "유이 이메일 알려줘",
+    "아야 생일 언제야",
+    "아야를 연락처에 저장해",
+    "아야 연락처 삭제해"
+  ],
+  "examples": [
+    "아야를 연락처에 저장해",
+    "유이 이메일은 test@test.com이야",
+    "아야 생일은 2월 28일이야",
+    "아야 연락처 알려줘",
+    "유이 이메일 알려줘",
+    "아야 생일 언제야",
+    "아야 연락처 삭제해"
+  ],
+  "input_prefixes": [
+    "contacts",
+    "contact",
+    "연락처",
+    "주소록"
+  ],
+  "route_confidence": 0.75
+}

@@ -35,6 +35,14 @@ class PermissionLayer:
             )
 
         if level == PermissionLevel.CONFIRM:
+            if request is not None and request.input_data.get("_confirmed") is True:
+                self.log_event("permission.confirm.approved")
+                return PermissionDecision(
+                    status=PermissionStatus.ALLOWED,
+                    level=level,
+                    reason="Tool execution was confirmed.",
+                )
+
             self.log_event("permission.confirm.required")
             return PermissionDecision(
                 status=PermissionStatus.CONFIRM_REQUIRED,

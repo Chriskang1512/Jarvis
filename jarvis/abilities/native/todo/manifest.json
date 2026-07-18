@@ -1,0 +1,32 @@
+{
+  "id": "todo",
+  "name": "todo",
+  "type": "native",
+  "permission": "safe",
+  "version": "0.1.0",
+  "author": "Jarvis",
+  "description": "Todo task management",
+  "capabilities": ["todo", "todos", "task", "tasks", "할 일", "투두"],
+  "input_schema": {"type": "object"},
+  "output_schema": "TodoResult",
+  "aliases": ["todo", "todos", "task", "tasks", "할 일", "투두", "해야 할 일"],
+  "supported_intents": [
+    "todo.create",
+    "todo.update",
+    "todo.complete",
+    "todo.delete",
+    "todo.list",
+    "todo.restore",
+    "우유 사기 추가해",
+    "오늘 할 일 알려줘",
+    "첫 번째 완료했어"
+  ],
+  "examples": [
+    "우유 사기 추가해",
+    "오늘 할 일 알려줘",
+    "첫 번째 완료했어",
+    "내일 오후 5시에 약 사기 추가해"
+  ],
+  "input_prefixes": ["todo", "todos", "할 일", "투두"],
+  "route_confidence": 0.78
+}

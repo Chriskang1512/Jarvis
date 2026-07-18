@@ -1,5 +1,397 @@
 # Jarvis Roadmap
 
+## Internal Milestone - Jarvis Core v1 Complete
+
+Status: Complete after v0.5.0 Beta.5.3 Follow-up Conversation Mode.
+
+External versioning can continue through v0.5.0, but the internal architecture
+baseline is now:
+
+```text
+Jarvis Core
+  |
+  v
+Runtime -> Planner -> Execution -> Router -> Dispatcher -> Diagnostics
+  |
+  v
+Provider -> VoiceProfile -> Conversation Lifecycle
+```
+
+Core is now considered stable enough that future work should primarily grow
+Jarvis through abilities rather than by adding more core scaffolding.
+
+Guiding rule:
+
+```text
+Core is the brain.
+Abilities are the fingers.
+n8n is the external hand for integrations.
+```
+
+## Ability Era
+
+Future development moves from `Core` to `Ability`.
+
+```text
+          Jarvis Core
+               |
+    +----------+----------+
+    |                     |
+    v                     v
+ Native Ability     Integration Ability
+    |                     |
+    v                     v
+ Memory             Gmail
+ Japanese           Calendar
+ Finance            Discord
+ Hotel              Notion
+ Creator            Slack
+ Vision             Home Assistant
+                          |
+                          v
+                     n8n Bridge
+```
+
+Native Abilities live inside Jarvis and can own local logic, models, prompts,
+domain rules, and first-party tools.
+
+Examples:
+
+- Memory
+- Japanese
+- Finance
+- Hotel
+- Vision
+- Creator Logic
+
+Integration Abilities connect Jarvis to external services. These should prefer
+the automation-provider path and execute through the `n8n Bridge` unless there
+is a clear product reason to build a direct native integration.
+
+Examples:
+
+- Gmail
+- Google Calendar
+- Discord
+- Notion
+- Slack
+- Home Assistant
+
+This keeps Jarvis Core clean: Core decides, plans, routes, and speaks; Native
+Abilities provide internal capabilities; Integration Abilities delegate external
+work through automation infrastructure.
+
+## v0.6.0 - Ability Expansion
+
+Status: In progress.
+
+Completed Sprint milestones:
+
+- [x] Sprint 1 - Weather Ability foundation
+- [x] Sprint 2 - Memory Ability foundation
+- [x] Sprint 3 - Calendar Ability foundation
+- [x] Sprint 4 - Native Reminder / Scheduler
+- [x] Sprint 5 - Runtime Tool Dispatcher
+- [x] Sprint 6 - Runtime Planner / Multi-Tool Planning
+- [x] Sprint 7 - n8n Integration Bridge Foundation
+- [x] Sprint 8 - AI Intent Parser / NLU Foundation
+- [x] Sprint 9 - Agent Runtime Task Engine
+- [x] Sprint 10 - Calendar Conversation Task Engine
+- [x] Sprint 11 - Conversation Update Engine
+- [x] Sprint 12 - STT v2 / Replay / Metrics
+- [x] Sprint 13 - Semantic Transcript Layer
+- [x] Sprint 14 - Contact Memory Foundation
+- [x] Sprint 15 - Core Event Bus Foundation
+- [x] Sprint 16 - Todo Ability Vertical Slice
+- [x] Sprint 17.0 - Google OAuth + Google Calendar Read Vertical Slice
+
+Sprint 17.0 closure:
+
+```text
+Voice
+  |
+STT
+  |
+Semantic
+  |
+Intent / Planner
+  |
+Dispatcher
+  |
+Calendar Ability
+  |
+CalendarProvider
+  |
+GoogleCalendarProvider
+  |
+Structured Result
+  |
+TTS
+```
+
+Verified:
+
+- Google OAuth completes against a real user account.
+- Google Calendar read-only provider returns internal Calendar models.
+- Today, next week, and next-event queries work through the Jarvis runtime.
+- Mock Calendar remains the default provider and regression path.
+- Sensitive client secrets and tokens are ignored by git.
+- Full regression suite passes.
+
+Sprint 7 closure:
+
+```text
+STT
+  |
+User Vocabulary Correction
+  |
+Rule Parser / Planner
+  |
+Dispatcher
+  |
+Integration Ability
+  |
+n8n Bridge Provider
+```
+
+Verified:
+
+- Integration Bridge contract is stable.
+- Mock Provider is stable for offline tests.
+- `system.health` and `system.echo` run through the Integration Ability.
+- Permission, validation, provider capability, retry contract, correlation IDs,
+  and metrics paths are covered.
+- Planner -> Dispatcher -> Integration Ability flow is functional.
+
+Sprint 7 known boundary:
+
+```text
+Ambiguous spoken phrases are no longer a Bridge bug.
+They are an NLU problem.
+```
+
+Continuing to add regex aliases for every phrase such as `n8n`,
+`system echo`, `external automation`, or misheard Korean variants has
+diminishing returns. The next step should be a natural-language intent layer.
+
+Sprint 8 foundation:
+
+```text
+STT
+  |
+User Vocabulary Correction
+  |
+AI Intent Parser
+  |
+Structured Intent
+  |
+Planner
+  |
+Dispatcher
+  |
+Ability
+```
+
+AI Intent Parser rule:
+
+```text
+AI structures intent.
+Core validates and executes.
+```
+
+The AI parser may convert a phrase such as:
+
+```text
+외부 자동으로 테스트 메시지 보내줘
+```
+
+into:
+
+```json
+{
+  "intent": "integration.execute",
+  "workflow_key": "notification.test",
+  "payload": {
+    "message": "테스트 메시지"
+  }
+}
+```
+
+But execution must still go through Registry validation, Permission Layer,
+confirmation rules, Dispatcher, Provider, and result validation.
+
+Implemented Sprint 8 baseline:
+
+- `jarvis.runtime.intent` parser package.
+- Structured Intent models.
+- Intent Registry.
+- Rule / AI / Hybrid parser split.
+- AI JSON output parsing through the LLM provider abstraction.
+- Validation layer for registry, required parameters, date/time, forbidden URLs,
+  unsupported conditionals, and invalid action combinations.
+- Confidence policy and clarification handling.
+- Planner conversion from Structured Intent to ExecutionPlan.
+- Debug traces for `[Intent]`.
+
+Remaining future work:
+
+- Add true provider-level Structured Outputs / Function Calling support where the
+  selected LLM provider exposes it.
+- Wire AI Intent Parser into the default voice bootstrap behind
+  `JARVIS_AI_INTENT_ENABLED`.
+- Expand conversation follow-up merging for clarification answers.
+- Keep Rule Parser for fast, deterministic high-confidence commands.
+
+## v0.5.0 - Local Assistant Runtime
+
+Jarvis v0.5.0 connects the usable assistant pipeline:
+
+```text
+Voice/Text/CLI/API -> Intent -> Planner -> Plan -> Permission -> Router -> Dispatcher -> Execution Metrics -> Response -> Diagnostics
+```
+
+Beta plan:
+
+- [x] Beta.1 Intent Runtime Foundation
+- [x] Beta.2 Tool Router Integration
+- [x] Beta.2.5 Runtime Visibility / Dev Console
+- [x] Beta.3 Planner Foundation
+- [x] Beta.4 Execution Engine Enhancement
+- [x] Beta.5 OpenAI Runtime Provider
+- [ ] Beta.6 Diagnostics Console v2
+- [ ] Beta.7 Real Scenario Test Pack
+- [ ] v0.5.0 Release
+
+Completion target:
+
+- [x] Wake-word time requests route to `time.lookup`
+- [x] safe tool execution can produce a spoken response
+- [x] confirm-required tools stop before execution
+- [x] diagnostics records the end-to-end trace
+- [x] Intent object standardized for future keyword/rule/OpenAI/local LLM parsers
+- [x] RuntimeContext added for source/session/user/conversation metadata
+- [x] Intent parameters are immutable for diagnostics and replay safety
+- [x] RuntimeResult object carries intent, permission, tool, response, diagnostics, and elapsed time
+- [x] permission is evaluated before tool routing
+- [x] Collector publishes `runtime.completed`
+- [x] Collector publishes runtime stage events
+- [x] Runtime is shared by voice, text, CLI, and API callers
+- [x] Runtime Dev Console renders input, intent, permission, tool, fallback, response, elapsed time, runtime ID, and session ID
+- [x] Runtime Dev Console shows `Jarvis Runtime` and current runtime version in the header
+- [x] Runtime Dev Console supports `theme="simple"` as the first renderer theme
+- [x] Planner creates a single-step Plan from one Intent
+- [x] Plan includes a short ID for diagnostics and replay
+- [x] PlanStep includes execution status
+- [x] Runtime executes through Planner before ToolRouter
+- [x] Runtime publishes plan.created, plan.started, and plan.completed
+- [x] Runtime Dev Console renders Plan ID, goal, steps, and step status
+- [x] RetryPolicy contract exists with default retry count of zero
+- [x] ExecutionContext separates plan execution metadata from RuntimeContext
+- [x] RuntimeResult carries execution metrics for execution, router, dispatcher, retry, and fallback
+- [x] PlanStep includes timeout_ms for future timeout handling
+- [x] Runtime reserves CANCELLED execution status
+- [x] Runtime exposes execute_parallel(plan) as a future interface placeholder
+- [x] Runtime Dev Console renders execution metrics, retry, timeout, elapsed, and fallback state
+- [x] OpenAIChatProvider implements the existing chat provider contract
+- [x] `chat_provider` config can select Mock or OpenAI without changing Runtime
+- [x] Runtime Dev Console renders active chat provider
+- [x] General conversation can use OpenAI while tool requests still use Runtime -> ToolRouter
+- [x] TTS debug output shows full response text, exact TTS input, and character length
+- [x] TTS receives normalized plain text instead of raw Markdown
+- [x] VoiceProfile separates Jarvis voice identity from TTS provider implementation
+- [x] VoiceRegistry can resolve built-in profiles such as Jarvis and Friday
+- [x] OpenAI TTS provider can generate audio through the shared TTS provider contract
+- [x] Follow-up Conversation Mode keeps Jarvis awake after speaking
+- [x] ConversationSession tracks IDLE, LISTENING, THINKING, SPEAKING, FOLLOW_UP, and CLOSED
+- [x] Runtime Dev Console renders conversation session, state, and remaining follow-up time
+- [ ] interactive user confirmation prompt
+
+Beta.2 focus:
+
+- [x] remove Brain router dependency from IntentRuntime
+- [x] formalize `ToolRouter.resolve(intent)`
+- [x] add `ToolRoute` as the common route contract
+- [ ] standardize PermissionLayer check around tool and intent
+- [ ] keep Runtime as flow manager, Router as tool selector, Dispatcher as executor
+
+Beta.3 reserved direction:
+
+```text
+User -> Runtime -> Planner -> Plan -> ToolRouter -> Executor
+```
+
+Goal-based multi-step execution should let Jarvis split one request into
+ordered tool steps, such as Weather -> Condition -> Calendar.
+
+Beta.3 completed foundation:
+
+```text
+User -> Runtime -> Planner -> Plan -> ToolRouter -> Dispatcher -> RuntimeResult
+```
+
+The planner is intentionally rule-based and single-step in Beta.3.
+
+Beta.4 completed foundation:
+
+```text
+Runtime -> Planner -> Plan -> ExecutionContext -> ToolRouter -> Dispatcher -> RuntimeResult
+```
+
+Execution remains single-step and sequential, but now has contracts for retry
+policy, step timeout, cancellation status, metrics, and future parallel
+execution.
+
+Beta.5 completed foundation:
+
+```text
+General Chat -> ChatProvider(OpenAI)
+Tool Intent  -> Runtime -> Planner -> ToolRouter -> Dispatcher
+```
+
+Beta.5 intentionally excludes streaming, function calling, tool calling through
+OpenAI, memory, weather APIs, and fallback provider switching.
+
+Beta.5.1 TTS Debug:
+
+```text
+LLM Response -> TTS Input -> TTS playback -> len(tts_text)
+```
+
+This makes the first demo easier to diagnose when text reaches GPT correctly
+but TTS output is unclear or truncated.
+
+TTS Markdown normalization now happens only at the TTS boundary. Runtime
+responses and console diagnostics keep the original model response available.
+
+Pyttsx3 playback queues all normalized speech chunks before a single playback
+run so multi-line responses do not stop after the first line on Windows SAPI.
+
+Beta.5.2 Voice Identity Foundation:
+
+```text
+VoicePipeline -> TTSProvider -> VoiceProfile -> Playback
+```
+
+Jarvis can now switch voice identity by profile while keeping the same
+VoicePipeline contract. OpenAI TTS is the first real provider behind this
+abstraction; Edge TTS remains a future candidate.
+
+`jarvis_default` is defined as a JARVIS-inspired original voice identity:
+British-inspired, calm, composed, witty, and styled as a private butler / hotel
+concierge.
+
+Beta.5.3 Follow-up Conversation Mode:
+
+```text
+Wake -> Listening -> Thinking -> Speaking -> Follow-up -> Closed -> Idle
+```
+
+Jarvis can now accept additional voice turns during a configurable follow-up
+window without requiring the wake word again. Runtime remains session-agnostic;
+the conversation lifecycle lives in the Voice layer.
+
+---
+
 Jarvis 프로젝트는 날짜가 아니라 마일스톤 기준으로 버전을 관리합니다.
 
 ## Sprint Codenames

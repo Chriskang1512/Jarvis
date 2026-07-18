@@ -6,7 +6,52 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.4.0 - Stable Release
+v0.6.0 - Sprint 17.0 Google Calendar Read Vertical Slice
+
+## v0.6.0 Sprint 17.0
+
+Sprint 17.0 connects Jarvis to a real Google Calendar account through the
+existing Calendar Ability provider boundary.
+
+Current voice/runtime path:
+
+```text
+Voice Session
+  |
+OpenAI STT
+  |
+Semantic Transcript Layer
+  |
+Intent Parser
+  |
+Planner
+  |
+RuntimeTask / Dispatcher
+  |
+Calendar Ability
+  |
+CalendarProvider
+  |
+MockCalendarProvider / GoogleCalendarProvider
+  |
+Structured CalendarResult
+  |
+Formatter / TTS
+```
+
+Google Calendar support in this sprint is read-only. Jarvis can query today,
+tomorrow, this week, next week, and the next upcoming Google Calendar event
+through the same result contract used by the mock provider.
+
+Verified manual integration:
+
+- OAuth authentication completed for `lab810108@gmail.com`.
+- Today query returned `2026-07-18 20:00 테스트`.
+- Next week query returned `2026-07-19 15:00 테스트1`.
+- Full regression test suite passes: `624 tests OK (skipped=2)`.
+
+Configuration details are documented in
+[`docs/google-calendar.md`](docs/google-calendar.md).
 
 ## v0.4.0 Stable Release
 

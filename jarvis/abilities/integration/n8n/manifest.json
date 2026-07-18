@@ -1,0 +1,27 @@
+{
+  "id": "integration_n8n",
+  "name": "n8n Integration",
+  "type": "integration",
+  "permission": "safe",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Execute allowed external automation workflows through the n8n Bridge",
+  "capabilities": [
+    "integration",
+    "n8n",
+    "workflow",
+    "system.echo",
+    "system.health",
+    "notification.test"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "workflow_key": {"type": "string"},
+      "action": {"type": "string"},
+      "payload": {"type": "object"},
+      "text": {"type": "string"}
+    }
+  },
+  "output_schema": "N8nAbilityResult"
+}

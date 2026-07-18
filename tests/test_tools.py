@@ -46,12 +46,14 @@ class TestTools(unittest.TestCase):
 
         core_tool_names = [tool.metadata.name for tool in registry.list_by_domain("core")]
         memory_tool_names = [tool.metadata.name for tool in registry.list_by_domain("memory")]
+        ability_tool_names = [tool.metadata.name for tool in registry.list_by_domain("ability.native")]
 
         self.assertIn("time", core_tool_names)
         self.assertIn("calculator", core_tool_names)
         self.assertIn("diagnostics", core_tool_names)
         self.assertIn("memory_read", memory_tool_names)
-        self.assertEqual(registry.list_domains(), ["core", "memory"])
+        self.assertIn("weather", ability_tool_names)
+        self.assertEqual(registry.list_domains(), ["ability.integration", "ability.native", "core", "memory"])
 
     def test_dispatcher_executes_calculator_tool(self):
         """Check that dispatcher executes a registered safe tool."""

@@ -8,11 +8,18 @@ venv/
 
 # Local memory and logs
 memory.txt
+memory/
 data/*.txt
+data/credentials/
 logs/*.log
+output/
+tmp/
 
 # Environment secrets
 .env
+client_secret*.json
+credentials*.json
+*token*.json
 
 # Editor files
 .vscode/

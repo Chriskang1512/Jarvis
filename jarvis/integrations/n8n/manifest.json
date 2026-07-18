@@ -1,0 +1,8 @@
+{
+  "id": "n8n",
+  "name": "n8n Bridge Provider",
+  "type": "integration_provider",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "External automation bridge through n8n workflows"
+}

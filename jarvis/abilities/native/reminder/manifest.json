@@ -1,0 +1,28 @@
+{
+  "id": "reminder",
+  "name": "Reminder",
+  "type": "native",
+  "permission": "safe",
+  "version": "1.0",
+  "author": "Jarvis",
+  "description": "Schedule reminders and notification triggers.",
+  "capabilities": ["reminder", "schedule", "notification", "remind_before"],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {"type": "string"},
+      "title": {"type": "string"},
+      "datetime": {"type": "string"},
+      "remind_before": {"type": "integer"},
+      "calendar_id": {"type": "string"},
+      "trigger_time": {"type": "string"},
+      "status": {"type": "string"},
+      "created_at": {"type": "string"},
+      "updated_at": {"type": "string"},
+      "recurrence": {"type": "string"},
+      "snooze_until": {"type": "string"},
+      "priority": {"type": "string"}
+    }
+  },
+  "output_schema": "ReminderResult"
+}
