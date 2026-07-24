@@ -18,9 +18,13 @@ from jarvis.runtime.planner.cost import (
     EffectiveExecutionProfile,
     ExecutionCost,
     ExecutionSelectionPolicy,
+    HealthReason,
+    HealthRecoveryPolicy,
+    RecoveryDecision,
     RuntimeMetric,
     estimate_plan_cost,
     operation_cost,
+    normalize_health_reason,
 )
 from jarvis.runtime.planner.journal import (
     PlanValidationJournalEntry,
@@ -64,6 +68,9 @@ __all__ = [
     "Availability",
     "EffectiveExecutionProfile",
     "ExecutionSelectionPolicy",
+    "HealthReason",
+    "HealthRecoveryPolicy",
+    "RecoveryDecision",
     "RuntimeMetric",
     "ExecutionStep",
     "AgentPlan",
@@ -105,5 +112,6 @@ __all__ = [
     "compare_contract_versions",
     "normalize_contract_version",
     "normalize_sunset_date",
+    "normalize_health_reason",
     "operation_cost",
 ]

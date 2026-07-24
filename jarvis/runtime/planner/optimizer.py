@@ -263,6 +263,15 @@ class SmartPlanOptimizer:
             )
             selected_profile = self.cost_model.profile(selected)
             current_target = step.execution_target or primary.implementation_id
+            current = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if candidate.implementation_id == current_target
+                ),
+                primary,
+            )
+            current_profile = self.cost_model.profile(current)
             if selected.implementation_id != current_target:
                 selections[step.step_id] = {
                     "before": current_target,
@@ -273,6 +282,8 @@ class SmartPlanOptimizer:
                     "availability": selected_profile.availability.value,
                     "reliability_score": selected_profile.reliability_score,
                     "metric_samples": selected_profile.metric_samples,
+                    "health_reason_before": current_profile.health_reason.value,
+                    "health_reason_after": selected_profile.health_reason.value,
                 }
                 steps.append(replace(step, execution_target=selected.implementation_id))
             else:

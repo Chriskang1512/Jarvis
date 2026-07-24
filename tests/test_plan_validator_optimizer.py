@@ -8,6 +8,8 @@ from jarvis.runtime.planner import (
     AdaptiveExecutionCostModel,
     Availability,
     ExecutionSelectionPolicy,
+    HealthReason,
+    HealthRecoveryPolicy,
     PlanBinding,
     PlanCompiler,
     PlanStep,
@@ -442,6 +444,7 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
             success=False,
             latency_ms=2000,
             cost=1.0,
+            health_reason=HealthReason.TIMEOUT,
         )
         plan = AgentPlan(
             goal_id="goal-1",
@@ -455,6 +458,8 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
 
         self.assertEqual(result.plan.steps[0].execution_target, "cache:calendar")
         self.assertEqual(selection["availability"], "ONLINE")
+        self.assertEqual(selection["health_reason_before"], "TIMEOUT")
+        self.assertEqual(selection["health_reason_after"], "NONE")
 
     def test_dynamic_latency_updates_candidate_ranking(self):
         primary = self.registry.get_operation("calendar", "list")
@@ -521,6 +526,52 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertFalse(result.execution_ready)
         self.assertEqual(result.status, ValidationStatus.BLOCKED)
         self.assertIn("OPERATION_OFFLINE", {issue.code for issue in result.original_validation.issues})
+
+    def test_health_recovery_policy_maps_stable_reason_codes(self):
+        policy = HealthRecoveryPolicy()
+
+        timeout = policy.evaluate(HealthReason.TIMEOUT)
+        rate_limit = policy.evaluate(HealthReason.RATE_LIMIT)
+        auth = policy.evaluate(HealthReason.AUTH_FAILURE)
+        network = policy.evaluate(HealthReason.NETWORK)
+        server = policy.evaluate(HealthReason.SERVER_ERROR)
+        unknown = policy.evaluate(HealthReason.UNKNOWN)
+
+        self.assertEqual((timeout.action, timeout.retry_after_seconds), ("RETRY_BACKOFF", 30))
+        self.assertEqual((rate_limit.action, rate_limit.retry_after_seconds), ("RETRY_AFTER", 300))
+        self.assertFalse(auth.retry_allowed)
+        self.assertTrue(auth.requires_reauthentication)
+        self.assertEqual(auth.action, "REAUTHENTICATE")
+        self.assertEqual(network.action, "WAIT_FOR_NETWORK")
+        self.assertFalse(network.retry_allowed)
+        self.assertEqual((server.action, server.retry_after_seconds), ("RETRY_BACKOFF", 60))
+        self.assertEqual(unknown.action, "REQUIRE_VERIFICATION")
+        self.assertFalse(unknown.retry_allowed)
+
+    def test_successful_runtime_observation_clears_health_reason(self):
+        primary = self.registry.get_operation("calendar", "list")
+        metrics = AdaptiveExecutionCostModel()
+        metrics.observe(
+            primary.id,
+            primary.implementation_id,
+            False,
+            latency_ms=1000,
+            health_reason=HealthReason.NETWORK,
+        )
+        self.assertEqual(
+            metrics.profile(primary).health_reason,
+            HealthReason.NETWORK,
+        )
+
+        metrics.observe(
+            primary.id,
+            primary.implementation_id,
+            True,
+            latency_ms=10,
+        )
+
+        self.assertEqual(metrics.profile(primary).health_reason, HealthReason.NONE)
+        self.assertEqual(metrics.profile(primary).availability, Availability.ONLINE)
 
 
 if __name__ == "__main__":

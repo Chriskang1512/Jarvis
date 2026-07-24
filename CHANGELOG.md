@@ -23,6 +23,11 @@
   cost, and availability.
 - Compiler fallback to equivalent ONLINE candidates and fail-closed blocking
   when every compatible implementation is OFFLINE.
+- Stable health reason codes for timeout, rate limit, authentication, network,
+  server, and unknown failures.
+- Structured Recovery Decisions for retry backoff, rate-limit delay, OAuth
+  reauthentication, network wait, and verification-required states.
+- Health reason propagation into Validator issues and `OPT-005` audit entries.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
 - `PlanCompiler` original validation, optimization, revalidation, and
@@ -67,7 +72,7 @@
 
 ### Verified
 
-- Full regression suite: `753 tests OK (skipped=2)`.
+- Full regression suite: `755 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

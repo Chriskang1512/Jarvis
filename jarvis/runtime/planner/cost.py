@@ -9,6 +9,46 @@ class Availability(str, Enum):
     OFFLINE = "OFFLINE"
 
 
+class HealthReason(str, Enum):
+    NONE = "NONE"
+    TIMEOUT = "TIMEOUT"
+    RATE_LIMIT = "RATE_LIMIT"
+    AUTH_FAILURE = "AUTH_FAILURE"
+    NETWORK = "NETWORK"
+    SERVER_ERROR = "SERVER_ERROR"
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass(frozen=True)
+class RecoveryDecision:
+    retry_allowed: bool
+    action: str
+    retry_after_seconds: int | None = None
+    requires_reauthentication: bool = False
+
+
+class HealthRecoveryPolicy:
+    """Map stable health reasons to recovery behavior."""
+
+    def evaluate(self, reason):
+        normalized = normalize_health_reason(reason)
+        decisions = {
+            HealthReason.NONE: RecoveryDecision(True, "NONE", 0),
+            HealthReason.TIMEOUT: RecoveryDecision(True, "RETRY_BACKOFF", 30),
+            HealthReason.RATE_LIMIT: RecoveryDecision(True, "RETRY_AFTER", 300),
+            HealthReason.AUTH_FAILURE: RecoveryDecision(
+                False,
+                "REAUTHENTICATE",
+                None,
+                requires_reauthentication=True,
+            ),
+            HealthReason.NETWORK: RecoveryDecision(False, "WAIT_FOR_NETWORK"),
+            HealthReason.SERVER_ERROR: RecoveryDecision(True, "RETRY_BACKOFF", 60),
+            HealthReason.UNKNOWN: RecoveryDecision(False, "REQUIRE_VERIFICATION"),
+        }
+        return decisions[normalized]
+
+
 @dataclass(frozen=True)
 class ExecutionSelectionPolicy:
     reliability_first: bool = True
@@ -28,6 +68,7 @@ class EffectiveExecutionProfile:
     availability: Availability
     reliability_score: float
     metric_samples: int = 0
+    health_reason: HealthReason = HealthReason.NONE
 
 
 @dataclass(frozen=True)
@@ -66,8 +107,17 @@ class AdaptiveExecutionCostModel:
         self.window_size = max(1, int(window_size))
         self._metrics = {}
         self._availability = {}
+        self._health_reasons = {}
 
-    def observe(self, operation_id, implementation_id, success, latency_ms, cost=0.0):
+    def observe(
+        self,
+        operation_id,
+        implementation_id,
+        success,
+        latency_ms,
+        cost=0.0,
+        health_reason=HealthReason.UNKNOWN,
+    ):
         key = (str(operation_id), str(implementation_id))
         samples = self._metrics.setdefault(key, deque(maxlen=self.window_size))
         samples.append(
@@ -80,10 +130,29 @@ class AdaptiveExecutionCostModel:
         self._availability[key] = (
             Availability.ONLINE if success else Availability.DEGRADED
         )
+        self._health_reasons[key] = (
+            HealthReason.NONE if success else normalize_health_reason(health_reason)
+        )
 
-    def set_availability(self, operation_id, implementation_id, availability):
+    def set_availability(
+        self,
+        operation_id,
+        implementation_id,
+        availability,
+        health_reason=HealthReason.NONE,
+    ):
         key = (str(operation_id), str(implementation_id))
         self._availability[key] = normalize_availability(availability)
+        normalized_availability = self._availability[key]
+        if normalized_availability == Availability.ONLINE:
+            self._health_reasons[key] = HealthReason.NONE
+        else:
+            normalized_reason = normalize_health_reason(health_reason)
+            self._health_reasons[key] = (
+                HealthReason.UNKNOWN
+                if normalized_reason == HealthReason.NONE
+                else normalized_reason
+            )
 
     def profile(self, metadata):
         key = (metadata.id, metadata.implementation_id)
@@ -91,6 +160,10 @@ class AdaptiveExecutionCostModel:
         availability = self._availability.get(
             key,
             normalize_availability(metadata.availability),
+        )
+        health_reason = self._health_reasons.get(
+            key,
+            normalize_health_reason(metadata.health_reason),
         )
         if not samples:
             return EffectiveExecutionProfile(
@@ -100,6 +173,7 @@ class AdaptiveExecutionCostModel:
                 network_required=bool(metadata.network_required),
                 availability=availability,
                 reliability_score=float(metadata.reliability_score),
+                health_reason=health_reason,
             )
         successes = sum(1 for sample in samples if sample.success)
         return EffectiveExecutionProfile(
@@ -112,6 +186,7 @@ class AdaptiveExecutionCostModel:
             availability=availability,
             reliability_score=successes / len(samples),
             metric_samples=len(samples),
+            health_reason=health_reason,
         )
 
     def rank(self, metadata, policy):
@@ -144,6 +219,12 @@ def normalize_availability(value):
     if isinstance(value, Availability):
         return value
     return Availability(str(value or "").upper())
+
+
+def normalize_health_reason(value):
+    if isinstance(value, HealthReason):
+        return value
+    return HealthReason(str(value or "").upper())
 
 
 def estimate_plan_cost(plan, ability_registry, cost_model=None):

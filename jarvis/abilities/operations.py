@@ -50,6 +50,7 @@ class CapabilityOperationMetadata:
     network_required: bool = False
     availability: str = "ONLINE"
     reliability_score: float = 1.0
+    health_reason: str = "NONE"
 
     def __post_init__(self):
         object.__setattr__(self, "required_predecessors", tuple(self.required_predecessors))
@@ -67,6 +68,23 @@ class CapabilityOperationMetadata:
         object.__setattr__(self, "availability", availability)
         if not 0.0 <= float(self.reliability_score) <= 1.0:
             raise ValueError("reliability_score must be between 0.0 and 1.0.")
+        health_reason = str(self.health_reason or "").upper()
+        valid_health_reasons = {
+            "NONE",
+            "TIMEOUT",
+            "RATE_LIMIT",
+            "AUTH_FAILURE",
+            "NETWORK",
+            "SERVER_ERROR",
+            "UNKNOWN",
+        }
+        if health_reason not in valid_health_reasons:
+            raise ValueError("Unknown health_reason.")
+        if availability == "ONLINE" and health_reason != "NONE":
+            raise ValueError("ONLINE operation health_reason must be NONE.")
+        if availability != "ONLINE" and health_reason == "NONE":
+            health_reason = "UNKNOWN"
+        object.__setattr__(self, "health_reason", health_reason)
 
     @property
     def id(self):

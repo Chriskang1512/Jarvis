@@ -313,6 +313,7 @@ def execution_target_compatible(primary, target):
 
 def validate_operation_availability(step, active, primary, candidates, cost_model):
     active_availability = operation_availability(active, cost_model)
+    active_reason = operation_health_reason(active, cost_model)
     if active_availability == "ONLINE":
         return []
     compatible_alternatives = [
@@ -330,18 +331,32 @@ def validate_operation_availability(step, active, primary, candidates, cost_mode
                 step.step_id,
                 "availability",
                 expected="ONLINE alternative",
-                actual=active_availability,
+                actual=f"{active_availability}:{active_reason}",
             )
         ]
     code = "OPERATION_OFFLINE" if active_availability == "OFFLINE" else "OPERATION_DEGRADED"
     severity = "error" if active_availability == "OFFLINE" else "warning"
-    return [ValidationIssue(code, severity, step.step_id, "availability")]
+    return [
+        ValidationIssue(
+            code,
+            severity,
+            step.step_id,
+            "availability",
+            actual=f"{active_availability}:{active_reason}",
+        )
+    ]
 
 
 def operation_availability(metadata, cost_model):
     if cost_model is None:
         return metadata.availability
     return cost_model.profile(metadata).availability.value
+
+
+def operation_health_reason(metadata, cost_model):
+    if cost_model is None:
+        return metadata.health_reason
+    return cost_model.profile(metadata).health_reason.value
 
 
 def _has_cycle(steps):

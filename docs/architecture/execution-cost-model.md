@@ -104,6 +104,39 @@ health check or provider outage.
 Metric records contain implementation IDs and numeric operational data only.
 They must not contain user input or provider payloads.
 
+## Health Reason and Recovery
+
+Non-ONLINE profiles carry one stable reason:
+
+```text
+TIMEOUT
+RATE_LIMIT
+AUTH_FAILURE
+NETWORK
+SERVER_ERROR
+UNKNOWN
+```
+
+ONLINE profiles always use `NONE`. A successful observation clears the prior
+reason. A non-ONLINE state without an explicit reason normalizes to `UNKNOWN`.
+
+`HealthRecoveryPolicy` maps reasons to structured actions:
+
+| Reason | Action | Automatic retry |
+| --- | --- | --- |
+| `TIMEOUT` | 30-second backoff | yes |
+| `RATE_LIMIT` | retry after 300 seconds | yes |
+| `AUTH_FAILURE` | OAuth reauthentication | no |
+| `NETWORK` | wait for network restoration | no |
+| `SERVER_ERROR` | 60-second backoff | yes |
+| `UNKNOWN` | require verification | no |
+
+Recovery decisions are policy data; Cost Model does not sleep, refresh OAuth,
+or retry by itself. Sprint 18.3 Task State Machine consumes these decisions.
+
+Validator issues include availability and reason. `OPT-005` Journal entries
+record the health reason before and after target selection.
+
 ## Optimization Journal
 
 An `OPT-005` entry records:
