@@ -28,7 +28,8 @@ legacy runtime:
 - fail-closed Registry, dependency, side-effect, verification, and idempotency
   validation;
 - an auditable no-op optimizer that rejects semantic fingerprint changes;
-- a compatibility adapter from the current `ExecutionPlan`.
+- a compatibility adapter from the current `ExecutionPlan`;
+- contract version negotiation with explicit multi-version Adapter paths.
 
 ## Current Version
 

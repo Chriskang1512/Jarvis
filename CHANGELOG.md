@@ -4,6 +4,12 @@
 
 ### Added
 
+- Contract support declarations and version negotiation for Planner and Runtime
+  components.
+- A deterministic Version Adapter Registry supporting explicit multi-step
+  conversion paths such as `3.0 -> 2.0 -> 1.0`.
+- Fail-closed `CONTRACT_VERSION_NOT_NEGOTIABLE` handling when no common version
+  or registered adapter path exists.
 - Versioned `GoalEnvelope`, `AgentPlan`, `PlanStep`, and `PlanBinding`
   contracts alongside the current runtime Planner.
 - Fail-closed Plan validation for Registry capability resolution, dependency

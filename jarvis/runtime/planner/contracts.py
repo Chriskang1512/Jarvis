@@ -6,6 +6,7 @@ from uuid import uuid4
 
 
 CONTRACT_VERSION = "1.0"
+SUPPORTED_CONTRACT_VERSIONS = (CONTRACT_VERSION,)
 
 
 @dataclass(frozen=True)

@@ -18,6 +18,40 @@ GoalEnvelope
   -> RuntimeTask
 ```
 
+## Contract Version Negotiation
+
+Planner and Runtime declare their supported and preferred contract versions
+before a proposed plan is accepted:
+
+```text
+Planner ContractSupport
+  -> highest common version
+  -> registered Version Adapter path when no common version exists
+  -> fail closed when neither is available
+```
+
+Versions normalize to stable labels such as `1.0`, `2.0`, and `2.1`.
+`v2` and `2` both normalize to `2.0`.
+
+Direct negotiation selects the highest common version. When no version is
+shared, Core searches the directed `VersionAdapterRegistry` for the shortest
+deterministic conversion path. For example:
+
+```text
+AgentPlan 3.0
+  -> adapter 3.0-to-2.0
+  -> adapter 2.0-to-1.0
+  -> Runtime supporting 1.0
+```
+
+Adapters are explicit, deterministic Core code. Duplicate conversion edges,
+missing paths, and unsupported preferred versions are rejected. The stable
+failure code for an unresolvable producer/consumer pair is
+`CONTRACT_VERSION_NOT_NEGOTIABLE`.
+
+Negotiation changes representation only. It must not change the goal,
+permissions, side effects, bindings, or semantic fingerprint.
+
 ## Goal Envelope
 
 Minimum fields:
