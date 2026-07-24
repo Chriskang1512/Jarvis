@@ -1,4 +1,4 @@
-"""Run Google Calendar read-only OAuth for Jarvis."""
+"""Run Google Calendar OAuth for Jarvis."""
 
 import sys
 from pathlib import Path
@@ -9,17 +9,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from jarvis.config.loader import ConfigurationLoader
 from jarvis.providers.google.auth import GoogleAuthManager
-from jarvis.providers.google.config import GOOGLE_CALENDAR_READONLY_SCOPE, GoogleProviderConfig
+from jarvis.providers.google.config import GOOGLE_CALENDAR_SCOPE, GoogleProviderConfig
 from jarvis.providers.google.errors import GoogleProviderError
 
 
 def main():
-    """Authorize Google Calendar read-only access."""
+    """Authorize Google Calendar read/write access."""
     config = ConfigurationLoader().load()
     google_config = GoogleProviderConfig(
         credentials_path=config.calendar.google_credentials_path,
         client_secret_path=config.calendar.google_client_secret_path,
-        scopes=(GOOGLE_CALENDAR_READONLY_SCOPE,),
+        scopes=(GOOGLE_CALENDAR_SCOPE,),
         timezone=config.calendar.timezone,
     )
     manager = GoogleAuthManager(google_config)

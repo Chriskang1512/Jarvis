@@ -1,5 +1,153 @@
 # Changelog
 
+## [v0.6.0-sprint.17.5] - Google Gmail Send & Reply
+
+### Added
+
+- Gmail `gmail.send` OAuth scope while retaining `gmail.readonly`.
+- Provider-independent `OutgoingMail` and `MailSendResult` contracts.
+- `GoogleMailProvider.send_message()` and `reply_message()` with RFC 5322 MIME
+  generation and Gmail thread-aware replies.
+- Compose parsing for explicit addresses, Google Contacts recipients, generated
+  predictable subjects, and reply context.
+- Draft-first preview and confirmation flow that sends the exact stored draft.
+- Per-pending-action duplicate-send fingerprints.
+- Metadata-only post-send verification for recipient, subject, message ID, and
+  thread ID.
+
+### Safety
+
+- Send and reply never call Gmail before explicit confirmation.
+- Missing, invalid, email-less, and ambiguous recipients are blocked.
+- Cancellation clears the pending action with zero provider calls.
+- Logs contain masked recipients, subject hashes, and body lengths only.
+- Sensitive preview TTS audio is discarded by the existing privacy policy.
+- Delete, trash, archive, labels, attachments, forward, scheduled send, and bulk
+  send remain out of scope.
+
+### Verified
+
+- Unit coverage includes compose parsing, address validation, Contacts
+  resolution, confirmation, cancellation, reply context, duplicate blocking,
+  MIME mapping, post-send verification, error contracts, and PII-safe traces.
+
+## [v0.6.0-sprint.17.4] - Google Gmail Read Vertical Slice
+
+### Added
+
+- Gmail read-only OAuth scope support with
+  `https://www.googleapis.com/auth/gmail.readonly`.
+- `GoogleMailProvider` for Gmail `list`, `search`, and `get` read paths.
+- Native Mail Ability package with `MailQuery`, `MailResult`, formatter, parser,
+  and provider selection through `JARVIS_MAIL_PROVIDER`.
+- Planner and AI intent registry routing for `mail.list`, `mail.search`, and
+  `mail.get`.
+- Manual auth script: `scripts/google_gmail_auth.py`.
+- Gmail setup and manual verification documentation.
+
+### Safety
+
+- Gmail lists read sender and subject only by default.
+- Selected message reads use internal `MailMessage` summaries; Gmail API objects
+  stay inside the provider boundary.
+- Send, delete, archive, label modification, and attachment download remain out
+  of scope.
+
+### Verified
+
+- Fake Gmail API provider tests cover search hydration, empty results, selected
+  message get, sender/subject/body mapping, unread labels, and attachment
+  metadata.
+- Mail Ability tests cover planner routing, list formatting, and ordinal
+  follow-up reads.
+
+## [v0.6.0-sprint.17.3] - Google Contacts Write & Safety
+
+### Added
+
+- Google Contacts write OAuth scope support with
+  `https://www.googleapis.com/auth/contacts`.
+- `GoogleContactsProvider.create_contact()` for confirmed Google People API
+  contact creation.
+- `GoogleContactsProvider.update_contact()` for confirmed phone, email, and
+  birthday updates.
+- `ContactQuery.external_id` so provider-native `people/...` resource names can
+  flow through the Ability contract.
+- Contact Ability routing to provider-backed create/update when
+  `JARVIS_CONTACTS_PROVIDER=google`.
+
+### Safety
+
+- Google Contacts update resolves to a `people/...` resourceName before calling
+  `updateContact`.
+- Ambiguous partial matches stop with `contact_ambiguous`; Jarvis does not update
+  the first returned contact.
+- Create and update remain `confirm_required`.
+- Contact write traces avoid logging raw phone or email fields.
+
+### Verified
+
+- Fake Google People API tests cover create, phone update, non-Google ID
+  rejection, ambiguous update blocking, and confirmation gating.
+- Full regression suite: `664 tests OK (skipped=2)`.
+
+## [v0.6.0-sprint.17.2] - Google Contacts Read Vertical Slice
+
+### Added
+
+- Google People API read-only scope support for Contacts lookup.
+- `GoogleContactsProvider` behind the existing Contact Ability result
+  boundary.
+- Shared Google client creation reused through `GoogleClientFactory`.
+- Google People API payload mapping into internal Jarvis `Contact` objects.
+- Runtime provider selection with `JARVIS_CONTACTS_PROVIDER=google`.
+- Manual auth script: `scripts/google_contacts_auth.py`.
+- Google Contacts setup and manual verification documentation.
+
+### Verified
+
+- Fake Google People API provider tests cover contact search, phone lookup, and
+  email lookup.
+- Contact Ability can route read requests to the Google provider while keeping
+  writes on the existing repository path.
+- Full regression suite: `642 tests OK (skipped=2)`.
+
+### Scope
+
+- Contacts write and sync are not implemented in Sprint 17.2.
+- Calendar-specific logic stays outside the shared Google components.
+- Google People API objects stay inside the provider boundary.
+
+## [v0.6.0-sprint.17.1] - Google Calendar Write Vertical Slice
+
+### Added
+
+- Google Calendar `create_event`, `update_event`, and `delete_event` provider
+  implementations behind the existing Calendar Provider contract.
+- Google Calendar write OAuth scope support through
+  `scripts/google_calendar_auth.py`.
+- Google reminder override mapping for phrases such as `1시간 전에 알려줘`,
+  `30분 전에 알려줘`, `10분 전에 알려줘`, and `하루 전에 알려줘`.
+- Create/update/delete verification by re-reading the Google Calendar event
+  before reporting success.
+- Planner propagation of calendar-relative reminder offsets onto
+  `calendar.create` steps for Google Calendar notification persistence.
+- Safe write error codes: `EVENT_NOT_FOUND`, `CREATE_FAILED`,
+  `UPDATE_FAILED`, `DELETE_FAILED`, and `REMINDER_NOT_SUPPORTED`.
+
+### Verified
+
+- Unit tests cover Google create/update/delete fake-client writes and reminder
+  override persistence.
+- Planner regression covers `내일 오후 3시에 우수 만나기 일정 잡고 1시간 전에 알려줘`.
+- Existing Google read provider tests and runtime planner tests pass.
+
+### Scope
+
+- Write operations still require Permission Layer confirmation.
+- Google Calendar is the write target; phone clock alarms are outside this
+  sprint. Phone notifications are delivered through Google Calendar sync.
+
 ## [v0.6.0-sprint.17.0] - Google OAuth + Google Calendar Read Vertical Slice
 
 ### Added

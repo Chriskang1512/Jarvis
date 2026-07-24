@@ -325,6 +325,25 @@ class TestAIIntentParserSprint8(unittest.TestCase):
                 self.assertFalse(result.success)
                 self.assertEqual(result.error_code, error_code)
 
+    def test_validator_allows_current_weather_temporal_expressions(self):
+        """Weather queries may use Korean current-time words without ISO datetime."""
+        validator = IntentValidator()
+        intent = StructuredIntent(
+            "weather.query",
+            "weather",
+            "query",
+            parameters={"location": "강릉", "time": "지금", "metric": "precipitation"},
+            confidence=0.96,
+            source="ai",
+            raw_text="강릉 지금 비와?",
+            normalized_text="강릉 지금 비와?",
+        )
+
+        result = validator.validate_result(IntentParseResult(success=True, intents=(intent,), source="ai", confidence=0.96))
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.first_intent.key, "weather.query")
+
     def test_validator_blocks_ungrounded_todo_create(self):
         """AI cannot invent Todo creation when the transcript has no create signal."""
         validator = IntentValidator()
@@ -356,6 +375,25 @@ class TestAIIntentParserSprint8(unittest.TestCase):
         self.assertEqual(unsafe_result.error_code, MISSING_REQUIRED_PARAMETER)
         self.assertTrue(safe_result.success)
         self.assertEqual(safe_result.first_intent.key, "todo.create")
+
+    def test_validator_allows_purchase_todo_title_without_extra_suffix(self):
+        """A grounded purchase phrase can create a Todo with title only."""
+        validator = IntentValidator()
+        intent = StructuredIntent(
+            "todo.create",
+            "todo",
+            "create",
+            parameters={"title": "약 사기"},
+            confidence=0.95,
+            source="ai",
+            raw_text="약 사기",
+            normalized_text="약 사기",
+        )
+
+        result = validator.validate_result(IntentParseResult(success=True, intents=(intent,), source="ai", confidence=0.95))
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.first_intent.key, "todo.create")
 
     def test_conditional_execution_is_not_planned(self):
         """Unsupported conditional commands stay blocked."""

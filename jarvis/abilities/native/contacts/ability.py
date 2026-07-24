@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from time import perf_counter
 
@@ -20,11 +21,12 @@ CONFIRM_REQUIRED_ACTIONS = {"create", "update", "delete", "merge"}
 class ContactAbility:
     """Native Contact Ability backed by ContactRepository."""
 
-    def __init__(self, repository=None, metadata=None, parser=None):
+    def __init__(self, repository=None, metadata=None, parser=None, provider=None, config=None):
         """Create Contact Ability."""
         self.repository = repository or ContactRepository()
         self.metadata = metadata or load_contact_metadata()
         self.parser = parser or ContactIntentParser()
+        self.provider = provider if provider is not None else create_contact_read_provider(config=config)
 
     @property
     def id(self):
@@ -112,6 +114,9 @@ class ContactAbility:
     @property
     def provider_name(self):
         """Return the current contact backend provider name."""
+        if self.provider is not None:
+            return getattr(self.provider, "provider_name", "contacts_provider")
+
         storage = getattr(self.repository, "storage", None)
         name = getattr(storage, "provider_name", "")
 
@@ -123,14 +128,29 @@ class ContactAbility:
     def execute_query(self, query):
         """Execute one normalized ContactQuery."""
         if query.action == "create":
+            provider_result = self.create_with_provider(query)
+
+            if provider_result is not None:
+                return provider_result
+
             contact = self.repository.ensure(query.display_name, aliases=query.aliases, source=query.source)
             return self.create_result("create", contact, changed_fields=("id", "display_name"))
 
         if query.action == "update":
+            provider_result = self.update_with_provider(query)
+
+            if provider_result is not None:
+                return provider_result
+
             contact = self.update_contact(query)
             return self.create_result("update", contact, changed_fields=query_changed_fields(query))
 
         if query.action == "get":
+            provider_result = self.read_from_provider(query)
+
+            if provider_result is not None:
+                return provider_result
+
             contact = self.resolve_contact(query)
             return ContactResult(
                 success=contact is not None,
@@ -161,6 +181,11 @@ class ContactAbility:
         )
 
         if query.action == "list":
+            provider_result = self.list_from_provider(query)
+
+            if provider_result is not None:
+                return provider_result
+
             contacts = tuple(self.repository.list())
             return ContactResult(success=True, action="list", contacts=contacts)
 
@@ -215,6 +240,34 @@ class ContactAbility:
 
         return None
 
+    def read_from_provider(self, query):
+        """Return a provider-backed read result when configured."""
+        if self.provider is None or not hasattr(self.provider, "get_contact"):
+            return None
+
+        return self.provider.get_contact(query)
+
+    def create_with_provider(self, query):
+        """Return a provider-backed create result when configured."""
+        if self.provider is None or not hasattr(self.provider, "create_contact"):
+            return None
+
+        return self.provider.create_contact(query)
+
+    def update_with_provider(self, query):
+        """Return a provider-backed update result when configured."""
+        if self.provider is None or not hasattr(self.provider, "update_contact"):
+            return None
+
+        return self.provider.update_contact(query)
+
+    def list_from_provider(self, query):
+        """Return a provider-backed list result when configured."""
+        if self.provider is None or not hasattr(self.provider, "list_contacts"):
+            return None
+
+        return self.provider.list_contacts(query)
+
     def health(self):
         """Return repository health."""
         return AbilityHealth(status="ok", provider="contact_repository", message="Contact repository is ready.")
@@ -247,6 +300,39 @@ def load_contact_metadata():
 def create_ability(repository=None):
     """Create Contact Ability."""
     return ContactAbility(repository=repository)
+
+
+def create_contact_read_provider(config=None):
+    """Create optional Google Contacts read provider from config or environment."""
+    provider_name = str(
+        os.environ.get("JARVIS_CONTACTS_PROVIDER", "")
+        or getattr(config, "provider", "")
+        or ""
+    ).lower()
+
+    if provider_name != "google":
+        return None
+
+    from jarvis.providers.google.config import GOOGLE_CONTACTS_SCOPE, GoogleProviderConfig
+    from jarvis.providers.google.contacts import GoogleContactsProvider
+
+    config = GoogleProviderConfig(
+        credentials_path=os.environ.get(
+            "JARVIS_GOOGLE_CREDENTIALS_PATH",
+            getattr(config, "google_credentials_path", "data/credentials/google_token.json"),
+        ),
+        client_secret_path=os.environ.get(
+            "JARVIS_GOOGLE_CLIENT_SECRET_PATH",
+            getattr(config, "google_client_secret_path", "client_secret.json"),
+        ),
+        scopes=(GOOGLE_CONTACTS_SCOPE,),
+    )
+    return GoogleContactsProvider(config=config)
+
+
+def create_contact_read_provider_from_env():
+    """Create optional Google Contacts read provider from environment."""
+    return create_contact_read_provider()
 
 
 def query_changed_fields(query):

@@ -71,6 +71,24 @@ class CalendarConfig:
 
 
 @dataclass
+class ContactsConfig:
+    """Store Contacts Ability provider settings."""
+
+    provider: str = "memory"
+    google_credentials_path: str = "data/credentials/google_token.json"
+    google_client_secret_path: str = "client_secret.json"
+
+
+@dataclass
+class MailConfig:
+    """Store Mail Ability provider settings."""
+
+    provider: str = "mock"
+    google_credentials_path: str = "data/credentials/google_token.json"
+    google_client_secret_path: str = "client_secret.json"
+
+
+@dataclass
 class AIIntentConfig:
     """Store AI Intent Parser settings."""
 
@@ -101,4 +119,6 @@ class JarvisConfig:
     memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     calendar: CalendarConfig = field(default_factory=CalendarConfig)
+    contacts: ContactsConfig = field(default_factory=ContactsConfig)
+    mail: MailConfig = field(default_factory=MailConfig)
     ai_intent: AIIntentConfig = field(default_factory=AIIntentConfig)

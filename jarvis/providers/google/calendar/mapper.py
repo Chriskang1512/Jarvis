@@ -26,6 +26,7 @@ class GoogleCalendarMapper:
         location = str(item.get("location") or "")
         attendees = [attendee_label(attendee) for attendee in item.get("attendees", []) or []]
         attendees = [value for value in attendees if value]
+        reminder_minutes = google_reminder_minutes(item)
 
         if "date" in start:
             event_date = parse_google_date(start.get("date"))
@@ -37,6 +38,7 @@ class GoogleCalendarMapper:
                 description=description,
                 location=location,
                 participants=attendees,
+                reminder_minutes=reminder_minutes,
             )
 
         if "dateTime" in start:
@@ -50,6 +52,7 @@ class GoogleCalendarMapper:
                 description=description,
                 location=location,
                 participants=attendees,
+                reminder_minutes=reminder_minutes,
             )
 
         raise GoogleProviderError(INVALID_PROVIDER_RESPONSE)
@@ -100,3 +103,24 @@ def google_exclusive_end_display_date(value):
 def attendee_label(attendee):
     """Return a stable attendee label."""
     return str(attendee.get("displayName") or attendee.get("email") or "").strip()
+
+
+def google_reminder_minutes(item):
+    """Return explicit Google reminder override minutes."""
+    reminders = item.get("reminders") or {}
+
+    if not isinstance(reminders, dict):
+        return []
+
+    values = []
+
+    for override in reminders.get("overrides", []) or []:
+        if not isinstance(override, dict):
+            continue
+
+        try:
+            values.append(int(override.get("minutes")))
+        except (TypeError, ValueError):
+            continue
+
+    return values

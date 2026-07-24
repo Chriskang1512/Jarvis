@@ -12,6 +12,10 @@ class ContactIntentParser:
         raw_text = str(text or "").strip()
         normalized = normalize_text(raw_text)
 
+        query = parse_clean_korean_contact(normalized, raw_text)
+        if query is not None:
+            return query
+
         query = parse_delete(normalized, raw_text)
         if query is not None:
             return query
@@ -187,6 +191,7 @@ def normalize_query(input_data, parser=None):
             phone=str(input_data.get("phone", "")),
             birthday=str(input_data.get("birthday", "")),
             attribute=str(input_data.get("attribute", "contact")),
+            external_id=str(input_data.get("external_id", "")),
             source=str(input_data.get("source", "user")),
             confirmed=bool(input_data.get("_confirmed", input_data.get("confirmed", False))),
             raw_text=str(input_data.get("raw_text", "")),
@@ -200,6 +205,161 @@ def normalize_query(input_data, parser=None):
 
     parser = parser or ContactIntentParser()
     return parser.parse(raw_text)
+
+
+def parse_clean_korean_contact(text, raw_text):
+    """Parse readable Korean contact read/write commands."""
+    query = parse_clean_delete(text, raw_text)
+    if query is not None:
+        return query
+
+    query = parse_clean_email(text, raw_text)
+    if query is not None:
+        return query
+
+    query = parse_clean_phone(text, raw_text)
+    if query is not None:
+        return query
+
+    query = parse_clean_birthday(text, raw_text)
+    if query is not None:
+        return query
+
+    query = parse_clean_store(text, raw_text)
+    if query is not None:
+        return query
+
+    return parse_clean_get(text, raw_text)
+
+
+def parse_clean_store(text, raw_text):
+    """Parse contact create commands in readable Korean."""
+    match = re.search(r"(?P<name>[\w가-힣]+)(?:를|을)?\s*연락처(?:에)?\s*(?:저장|등록)", text)
+
+    if not match:
+        return None
+
+    name = clean_name(match.group("name"))
+    return ContactQuery(action="create", display_name=name, contact_id=contact_id_for_name(name), raw_text=raw_text)
+
+
+def parse_clean_delete(text, raw_text):
+    """Parse contact delete commands in readable Korean."""
+    if not any(token in text for token in ["삭제", "지워"]):
+        return None
+
+    match = re.search(r"(?P<name>[\w가-힣]+)\s*연락처", text)
+
+    if not match:
+        return None
+
+    name = clean_name(match.group("name"))
+    return ContactQuery(action="delete", display_name=name, contact_id=contact_id_for_name(name), raw_text=raw_text)
+
+
+def parse_clean_email(text, raw_text):
+    """Parse email update or recall in readable Korean."""
+    email_match = re.search(r"(?P<email>[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})", text)
+    name = extract_clean_name_before_token(text, "이메일")
+
+    if not name:
+        name = extract_clean_name_before_token(text, "메일")
+
+    if email_match and name:
+        return ContactQuery(
+            action="update",
+            display_name=name,
+            contact_id=contact_id_for_name(name),
+            email=email_match.group("email"),
+            attribute="email",
+            raw_text=raw_text,
+        )
+
+    if name and is_clean_recall_text(text):
+        return ContactQuery(action="get", display_name=name, contact_id=contact_id_for_name(name), attribute="email", raw_text=raw_text)
+
+    return None
+
+
+def parse_clean_phone(text, raw_text):
+    """Parse phone update or recall in readable Korean."""
+    name = extract_clean_name_before_token(text, "전화번호")
+    phone_match = re.search(r"(?P<phone>(?:\+?\d[\d -]{7,}\d))", text)
+
+    if phone_match and name:
+        return ContactQuery(
+            action="update",
+            display_name=name,
+            contact_id=contact_id_for_name(name),
+            phone=normalize_phone(phone_match.group("phone")),
+            attribute="phone",
+            raw_text=raw_text,
+        )
+
+    if name and is_clean_recall_text(text):
+        return ContactQuery(action="get", display_name=name, contact_id=contact_id_for_name(name), attribute="phone", raw_text=raw_text)
+
+    return None
+
+
+def parse_clean_birthday(text, raw_text):
+    """Parse birthday update or recall in readable Korean."""
+    name = extract_clean_name_before_token(text, "생일")
+    birthday = extract_clean_birthday(text)
+
+    if birthday and name and not is_clean_recall_text(text):
+        return ContactQuery(
+            action="update",
+            display_name=name,
+            contact_id=contact_id_for_name(name),
+            birthday=birthday,
+            attribute="birthday",
+            raw_text=raw_text,
+        )
+
+    if name and "생일" in text and is_clean_recall_text(text):
+        return ContactQuery(action="get", display_name=name, contact_id=contact_id_for_name(name), attribute="birthday", raw_text=raw_text)
+
+    return None
+
+
+def parse_clean_get(text, raw_text):
+    """Parse general contact lookup in readable Korean."""
+    match = re.search(r"(?P<name>[\w가-힣]+)\s*연락처\s*(?:알려|찾아|보여|조회)", text)
+
+    if not match:
+        return None
+
+    name = clean_name(match.group("name"))
+    return ContactQuery(action="get", display_name=name, contact_id=contact_id_for_name(name), attribute="contact", raw_text=raw_text)
+
+
+def extract_clean_name_before_token(text, token):
+    """Return a name-like phrase before a clean Korean field token."""
+    match = re.search(rf"(?P<name>[\w가-힣]+)\s*{token}", text)
+    return clean_name(match.group("name")) if match else ""
+
+
+def extract_clean_birthday(text):
+    """Extract readable Korean birthday as MM-DD or YYYY-MM-DD."""
+    full = re.search(r"(?P<year>\d{4})\s*년\s*(?P<month>\d{1,2})\s*월\s*(?P<day>\d{1,2})\s*일", text)
+    if full:
+        return f"{int(full.group('year')):04d}-{int(full.group('month')):02d}-{int(full.group('day')):02d}"
+
+    month_day = re.search(r"(?P<month>\d{1,2})\s*월\s*(?P<day>\d{1,2})\s*일", text)
+    if month_day:
+        return f"{int(month_day.group('month')):02d}-{int(month_day.group('day')):02d}"
+
+    iso = re.search(r"(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})", text)
+    if iso:
+        return f"{int(iso.group('year')):04d}-{int(iso.group('month')):02d}-{int(iso.group('day')):02d}"
+
+    return ""
+
+
+def is_clean_recall_text(text):
+    """Return whether readable Korean text asks to retrieve a contact value."""
+    return any(token in text for token in ["알려", "찾아", "보여", "조회", "언제", "뭐", "주소"])
 
 
 def extract_name_before_token(text, token):

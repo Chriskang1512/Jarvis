@@ -20,6 +20,7 @@ class ContactResult(BaseAbilityResult):
     message: str = ""
     requires_confirmation: bool = False
     provider: str = "contact_repository"
+    external_id: str = ""
 
     def to_natural_language(self):
         """Return the formatted response without embedding language here."""

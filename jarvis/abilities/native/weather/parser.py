@@ -17,7 +17,7 @@ DATE_TOKENS = {
     "\ub0b4\uc77c": WEATHER_DATE_TOMORROW,
     "\ubaa8\ub808": WEATHER_DATE_DAY_AFTER_TOMORROW,
 }
-CURRENT_TOKENS = ["\uc9c0\uae08", "\ud604\uc7ac"]
+CURRENT_TOKENS = ["\uc9c0\uae08", "\ud604\uc7ac", "\ub2f9\uc7a5"]
 COMMAND_TOKENS = [
     "\ub0a0\uc528",
     "\uc54c\ub824\uc918",
@@ -26,7 +26,13 @@ COMMAND_TOKENS = [
     "\ub9d0\ud574 \uc918",
     "\uc5b4\ub54c",
     "\uc5b4\ub5a4\uc9c0",
+    "\uc9c0\uae08",
     "\ud604\uc7ac",
+    "\ub2f9\uc7a5",
+    "\ubc16\uc5d0\ub294",
+    "\ubc16\uc5d0",
+    "\ubc16\uc740",
+    "\ubc16",
     "\uc624\ub298",
     "\ub0b4\uc77c",
     "\ubaa8\ub808",

@@ -67,6 +67,8 @@ class CalendarAbility:
                 title=query.title,
                 participants=list(getattr(query, "participants", []) or []),
                 location=getattr(query, "location", ""),
+                time_scope=getattr(query, "time_scope", ""),
+                position=getattr(query, "position", ""),
             )
 
             past_decision = past_calendar_create_decision(query, self.now_provider())
@@ -158,7 +160,10 @@ class CalendarAbility:
         remind_before = None
 
         if query.action in {"create", "update"} and not should_suppress_auto_reminder(input_data):
-            remind_before = parse_remind_before_minutes(getattr(query, "raw_text", ""))
+            remind_before = query.remind_before_minutes
+
+            if remind_before is None:
+                remind_before = parse_remind_before_minutes(getattr(query, "raw_text", ""))
 
         event = BaseEvent(
             event_type=event_type,
@@ -227,7 +232,7 @@ def normalize_query(input_data, parser=None):
     if isinstance(input_data, dict) and "action" in input_data:
         from jarvis.abilities.native.calendar.query import CalendarQuery
 
-        return CalendarQuery(
+        query = CalendarQuery(
             date=str(input_data.get("date", "")),
             time=str(input_data.get("time", "")),
             action=str(input_data.get("action", "list")),
@@ -242,7 +247,11 @@ def normalize_query(input_data, parser=None):
             timezone=str(input_data.get("timezone", "Asia/Seoul")),
             limit=input_data.get("limit"),
             order_by=str(input_data.get("order_by", "start_time")),
+            remind_before_minutes=read_remind_before_minutes(input_data),
+            time_scope=str(input_data.get("time_scope", "")),
+            position=str(input_data.get("position", "")),
         )
+        return enrich_calendar_query_for_polish(query, query.raw_text)
 
     parser = parser or CalendarIntentParser()
     raw_text = ""
@@ -252,7 +261,50 @@ def normalize_query(input_data, parser=None):
     else:
         raw_text = str(input_data or "")
 
-    return parser.parse(raw_text)
+    return enrich_calendar_query_for_polish(parser.parse(raw_text), raw_text)
+
+
+def enrich_calendar_query_for_polish(query, raw_text):
+    """Attach non-destructive calendar UX hints from the original utterance."""
+    time_scope = parse_calendar_time_scope(raw_text)
+    position = parse_calendar_position(raw_text)
+
+    if time_scope == "" and position == "":
+        return query
+
+    return replace(query, time_scope=time_scope or getattr(query, "time_scope", ""), position=position or getattr(query, "position", ""))
+
+
+def parse_calendar_time_scope(raw_text):
+    """Return morning/afternoon/evening query scope from Korean text."""
+    text = str(raw_text or "")
+
+    if any(token in text for token in ["오전 일정", "아침 일정", "아침에", "오전만"]):
+        return "morning"
+
+    if any(token in text for token in ["오후 일정", "오후만", "낮 일정"]):
+        return "afternoon"
+
+    if any(token in text for token in ["저녁 일정", "밤 일정", "저녁에", "밤에"]):
+        return "evening"
+
+    return ""
+
+
+def parse_calendar_position(raw_text):
+    """Return first/last/next positional hint from Korean text."""
+    text = str(raw_text or "")
+
+    if any(token in text for token in ["첫 일정", "첫번째 일정", "첫 번째 일정"]):
+        return "first"
+
+    if any(token in text for token in ["마지막 일정", "끝 일정"]):
+        return "last"
+
+    if "다음 주" not in text and any(token in text for token in ["다음 일정", "다가오는 일정"]):
+        return "next"
+
+    return ""
 
 
 def is_confirmed(input_data):
@@ -270,15 +322,156 @@ def should_suppress_auto_reminder(input_data):
 
 def parse_remind_before_minutes(text):
     """Return remind-before minutes from text, defaulting to 30."""
-    hour_match = re.search(r"(\d+)\s*시간\s*전", str(text or ""))
+    normalized = str(text or "")
+
+    day_match = re.search(r"(\d+)\s*일\s*전", normalized)
+
+    if day_match:
+        return int(day_match.group(1)) * 24 * 60
+
+    if any(token in normalized for token in ["하루 전", "하루전에", "하루 전에"]):
+        return 24 * 60
+
+    hour_match = re.search(r"(\d+)\s*시간\s*전", normalized)
 
     if hour_match:
         return int(hour_match.group(1)) * 60
 
-    minute_match = re.search(r"(\d+)\s*분\s*전", str(text or ""))
+    minute_match = re.search(r"(\d+)\s*분\s*전", normalized)
 
     if minute_match:
         return int(minute_match.group(1))
+
+    return 30
+
+
+def read_remind_before_minutes(input_data):
+    """Return reminder override minutes from structured or raw calendar input."""
+    if not isinstance(input_data, dict):
+        return None
+
+    for key in ["remind_before_minutes", "remind_before", "reminder_minutes"]:
+        value = input_data.get(key)
+
+        if value in [None, ""]:
+            continue
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+
+    raw_text = str(input_data.get("raw_text") or input_data.get("text") or "")
+
+    if raw_text:
+        return parse_remind_before_minutes(raw_text)
+
+    return None
+
+
+def parse_remind_before_minutes(text):
+    """Return remind-before minutes from text, defaulting to 30."""
+    normalized = str(text or "")
+
+    day_match = re.search(r"(\d+)\s*일\s*전", normalized)
+
+    if day_match:
+        return int(day_match.group(1)) * 1440
+
+    if any(token in normalized for token in ["하루 전", "하루전에", "하루 전에"]):
+        return 1440
+
+    hour_match = re.search(r"(\d+)\s*시간\s*전", normalized)
+
+    if hour_match:
+        return int(hour_match.group(1)) * 60
+
+    minute_match = re.search(r"(\d+)\s*분\s*전", normalized)
+
+    if minute_match:
+        return int(minute_match.group(1))
+
+    return 30
+
+
+def read_remind_before_minutes(input_data):
+    """Return reminder override minutes from structured or raw calendar input."""
+    if not isinstance(input_data, dict):
+        return None
+
+    for key in ["remind_before_minutes", "remind_before", "reminder_minutes"]:
+        value = input_data.get(key)
+
+        if value in [None, ""]:
+            continue
+
+        if isinstance(value, (list, tuple)) and value:
+            value = value[0]
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+
+    raw_text = str(input_data.get("raw_text") or input_data.get("text") or "")
+
+    if raw_text:
+        return parse_remind_before_minutes(raw_text)
+
+    return None
+
+
+CALENDAR_KOREAN_NUMBER_WORDS = {
+    "\ud55c": 1,
+    "\ud558\ub098": 1,
+    "\ub450": 2,
+    "\ub458": 2,
+    "\uc138": 3,
+    "\uc14b": 3,
+    "\ub124": 4,
+    "\ub137": 4,
+    "\ub2e4\uc12f": 5,
+    "\uc5ec\uc12f": 6,
+    "\uc77c\uacf1": 7,
+    "\uc5ec\ub35f": 8,
+    "\uc544\ud649": 9,
+    "\uc5f4": 10,
+}
+
+
+def parse_calendar_korean_number_word(value):
+    """Return integer for a small Korean native number word."""
+    return CALENDAR_KOREAN_NUMBER_WORDS.get(str(value or "").strip())
+
+
+def parse_remind_before_minutes(text):
+    """Return remind-before minutes from text, defaulting to 30."""
+    normalized = str(text or "")
+
+    day_match = re.search(r"(\d+)\s*\uc77c\s*\uc804", normalized)
+    if day_match:
+        return int(day_match.group(1)) * 1440
+
+    if any(token in normalized for token in ["\ud558\ub8e8 \uc804", "\ud558\ub8e8\uc804\uc5d0", "\ud558\ub8e8 \uc804\uc5d0"]):
+        return 1440
+
+    hour_match = re.search(r"(\d+)\s*\uc2dc\uac04\s*\uc804", normalized)
+    if hour_match:
+        return int(hour_match.group(1)) * 60
+
+    minute_match = re.search(r"(\d+)\s*\ubd84\s*\uc804", normalized)
+    if minute_match:
+        return int(minute_match.group(1))
+
+    word_pattern = "|".join(re.escape(word) for word in sorted(CALENDAR_KOREAN_NUMBER_WORDS, key=len, reverse=True))
+
+    word_hour_match = re.search(rf"({word_pattern})\s*\uc2dc\uac04\s*\uc804", normalized)
+    if word_hour_match:
+        return parse_calendar_korean_number_word(word_hour_match.group(1)) * 60
+
+    word_minute_match = re.search(rf"({word_pattern})\s*\ubd84\s*\uc804", normalized)
+    if word_minute_match:
+        return parse_calendar_korean_number_word(word_minute_match.group(1))
 
     return 30
 

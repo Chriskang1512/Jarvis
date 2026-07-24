@@ -24,6 +24,7 @@ from jarvis.voice.providers import (
     create_tts_provider,
     extract_transcription_metadata,
     is_suspicious_tts_duration,
+    record_microphone_wav_bytes,
     record_until_silence,
     select_stt_fallback_text,
     transcribe_confirmation_audio,
@@ -369,6 +370,32 @@ class TestTTSProviders(unittest.TestCase):
             provider_file_cleanup(audio_path)
             restore_env("JARVIS_KEEP_TTS_AUDIO", previous)
 
+    def test_sensitive_tts_audio_is_not_retained_by_default(self):
+        """Check contact PII audio is discarded even when debug retention is on."""
+        profile = VoiceRegistry().get_profile("jarvis_default")
+        client = FakeOpenAITTSClient()
+        playback = FakePlaybackBackend()
+        provider = OpenAITextToSpeechProvider(
+            profile=profile,
+            model="gpt-4o-mini-tts",
+            response_format="wav",
+            client_factory=lambda api_key: client,
+            api_key_reader=lambda: "test-key",
+            playback_backend=playback,
+        )
+        previous_keep = os.environ.get("JARVIS_KEEP_TTS_AUDIO")
+        previous_sensitive = os.environ.get("JARVIS_RETAIN_SENSITIVE_TTS_AUDIO")
+        os.environ["JARVIS_KEEP_TTS_AUDIO"] = "true"
+        os.environ.pop("JARVIS_RETAIN_SENSITIVE_TTS_AUDIO", None)
+
+        try:
+            provider.speak_stream("아야의 전화번호는 010-5508-8235입니다.")
+            self.assertEqual(playback.played_count, 1)
+            self.assertFalse(playback.paths[0].exists())
+        finally:
+            restore_env("JARVIS_KEEP_TTS_AUDIO", previous_keep)
+            restore_env("JARVIS_RETAIN_SENSITIVE_TTS_AUDIO", previous_sensitive)
+
     def test_console_provider_speak_stream_contract(self):
         """Check console TTS streaming chunks and diagnostics events."""
         diagnostics = DiagnosticsCollector()
@@ -579,6 +606,22 @@ class TestTTSProviders(unittest.TestCase):
         self.assertFalse(metadata["speech_started"])
         self.assertEqual(metadata["end_reason"], "max_seconds")
         self.assertEqual(recording.shape[0], 30)
+
+    def test_record_microphone_wav_bytes_skips_stt_audio_when_no_speech(self):
+        """Check no-speech microphone audio is not sent onward as a WAV."""
+        np = __import__("numpy")
+        sd = FakeSoundDevice([np.zeros((10, 1), dtype=np.int16) for _ in range(3)])
+
+        with patch.dict(sys.modules, {"numpy": np, "sounddevice": sd}):
+            result = record_microphone_wav_bytes(
+                sample_rate=10,
+                min_record_seconds=1.0,
+                max_record_seconds=3.0,
+                silence_timeout=1.0,
+        )
+
+        self.assertEqual(result, "Speech recognition failed: no speech detected")
+        self.assertEqual(sd.record_calls, 15)
 
     def test_config_selects_openai_stt_provider(self):
         """Check OpenAI STT provider can be selected for microphone transcription."""

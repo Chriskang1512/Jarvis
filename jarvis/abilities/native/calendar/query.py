@@ -19,3 +19,6 @@ class CalendarQuery:
     timezone: str = "Asia/Seoul"
     limit: int | None = None
     order_by: str = "start_time"
+    remind_before_minutes: int | None = None
+    time_scope: str = ""
+    position: str = ""

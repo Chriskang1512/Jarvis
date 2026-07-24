@@ -1,7 +1,7 @@
-# Google Calendar Read Provider
+# Google Calendar Provider
 
-Sprint 17.0 adds a Google OAuth foundation and a read-only Google Calendar
-provider behind the existing Calendar Ability contract.
+Sprint 17.1 extends the Google OAuth foundation with verified Google Calendar
+read and write operations behind the existing Calendar Ability contract.
 
 The core boundary stays unchanged:
 
@@ -47,11 +47,14 @@ To create the token interactively:
 python scripts/google_calendar_auth.py
 ```
 
-Only this Sprint 17.0 scope is allowed:
+Sprint 17.1 write support uses this scope:
 
 ```text
-https://www.googleapis.com/auth/calendar.readonly
+https://www.googleapis.com/auth/calendar
 ```
+
+If an older read-only token was created during Sprint 17.0, re-run
+`python scripts/google_calendar_auth.py` and grant the updated Calendar access.
 
 ## Credential Files
 
@@ -73,17 +76,17 @@ Implemented:
 
 - `list_events`
 - `get_event`
-- today / tomorrow / this week / next-event windows
-- timed and all-day event mapping
-- provider metadata and safe error codes
-
-Blocked for Sprint 17.0:
-
 - `create_event`
 - `update_event`
 - `delete_event`
+- today / tomorrow / this week / next-event windows
+- timed and all-day event mapping
+- Google Calendar reminder overrides
+- provider metadata and safe error codes
 
-Write attempts return `FEATURE_NOT_ENABLED` as a structured `CalendarResult`.
+Write operations must be confirmed by the Permission Layer before the provider
+is called. Create and update operations read the event back and verify title,
+time, and explicit reminder override before reporting success.
 
 ## Manual Verification
 
@@ -107,12 +110,35 @@ Expected trace shape:
 [Calendar] result provider=google success=YES
 ```
 
+Write verification:
+
+```text
+내일 오후 3시에 우수 만나기 일정 잡고 1시간 전에 알려줘
+응
+그 일정 4시로 변경해줘
+응
+그 일정 삭제해줘
+응
+```
+
+Expected write trace shape:
+
+```text
+[Calendar] permission action=create permission=confirm_required
+[GoogleCalendar] request action=create provider=google
+[GoogleCalendar] request action=get provider=google
+[Calendar] result action=create provider=google success=YES
+```
+
 Error checks:
 
 - Remove token file -> `AUTH_REQUIRED`
 - Request unsupported scope -> `SCOPE_INSUFFICIENT`
 - Provider timeout -> `PROVIDER_TIMEOUT`
 - Malformed response -> `INVALID_PROVIDER_RESPONSE`
+- Missing event target -> `EVENT_NOT_FOUND`
+- Failed create/update/delete verification -> `CREATE_FAILED`, `UPDATE_FAILED`,
+  or `DELETE_FAILED`
 
 ## Manual Integration Notes
 

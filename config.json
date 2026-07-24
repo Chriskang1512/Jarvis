@@ -12,7 +12,7 @@
     "provider": "openai",
     "voice_profile": "jarvis_cinematic",
     "voice": "default",
-    "speed": 1.12,
+    "speed": 1.20,
     "pitch": 0,
     "volume": 1.0,
     "language": "ko",
@@ -44,9 +44,19 @@
     "default_location": "강릉"
   },
   "calendar": {
-    "provider": "mock",
+    "provider": "google",
     "allow_mock_fallback": false,
     "timezone": "Asia/Seoul",
+    "google_credentials_path": "data/credentials/google_token.json",
+    "google_client_secret_path": "client_secret.json"
+  },
+  "contacts": {
+    "provider": "google",
+    "google_credentials_path": "data/credentials/google_token.json",
+    "google_client_secret_path": "client_secret.json"
+  },
+  "mail": {
+    "provider": "google",
     "google_credentials_path": "data/credentials/google_token.json",
     "google_client_secret_path": "client_secret.json"
   },

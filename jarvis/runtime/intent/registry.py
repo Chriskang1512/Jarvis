@@ -79,6 +79,12 @@ def create_default_intent_registry():
     registry.register(IntentActionSpec("contacts", "delete", "contacts.delete", "contacts", write=True, required_parameters=("display_name",)))
     registry.register(IntentActionSpec("contacts", "list", "contacts.list", "contacts"))
 
+    registry.register(IntentActionSpec("mail", "list", "mail.list", "mail"))
+    registry.register(IntentActionSpec("mail", "search", "mail.search", "mail"))
+    registry.register(IntentActionSpec("mail", "get", "mail.get", "mail"))
+    registry.register(IntentActionSpec("mail", "send", "mail.send", "mail"))
+    registry.register(IntentActionSpec("mail", "reply", "mail.reply", "mail"))
+
     registry.register(IntentActionSpec("todo", "create", "todo.create", "todo", write=True, required_parameters=("title",)))
     registry.register(IntentActionSpec("todo", "update", "todo.update", "todo", write=True))
     registry.register(IntentActionSpec("todo", "complete", "todo.complete", "todo", write=True))

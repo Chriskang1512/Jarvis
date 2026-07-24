@@ -40,3 +40,27 @@ def redact_mapping(value):
             result[key] = item
 
     return result
+
+
+class GoogleCredentialStore:
+    """Small credential store wrapper used by Google providers."""
+
+    def __init__(self, path):
+        """Create store for one token JSON path."""
+        self.path = str(path or "")
+
+    def load(self):
+        """Load token data from disk."""
+        return load_token_json(self.path)
+
+    def save(self, data):
+        """Save token data to disk."""
+        return save_token_json(self.path, data)
+
+    def exists(self):
+        """Return whether the token file exists."""
+        return Path(self.path).exists()
+
+    def redact(self, data):
+        """Return log-safe credential data."""
+        return redact_mapping(data)

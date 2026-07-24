@@ -117,6 +117,51 @@ class TestAbilities(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertIn("\ub0b4\uc77c \uc77c\uc815\uc740 1\uac74\uc785\ub2c8\ub2e4", result.data.to_natural_language())
+        self.assertIn("1. \ub0b4\uc77c \uc624\ud6c4 3\uc2dc meeting", result.data.to_natural_language())
+
+    def test_calendar_polish_filters_afternoon_and_first_event(self):
+        """Check coarse time and position hints polish list output."""
+        today_value = date.today().isoformat()
+        provider = MockCalendarProvider(
+            events=[
+                CalendarEvent(id="morning", title="\uc544\uce68 \ud68c\uc758", date=today_value, time="09:00"),
+                CalendarEvent(id="afternoon", title="\uc624\ud6c4 \ud68c\uc758", date=today_value, time="15:00"),
+                CalendarEvent(id="evening", title="\uc800\ub141 \ud68c\uc758", date=today_value, time="19:00"),
+            ]
+        )
+        ability = CalendarAbility(provider=provider)
+
+        afternoon = ability.execute({"text": "\uc624\ud6c4 \uc77c\uc815 \uc54c\ub824\uc918"})
+        first = ability.execute({"text": "\uc624\ub298 \uccab \uc77c\uc815 \uc54c\ub824\uc918"})
+
+        self.assertEqual([event.id for event in afternoon.data.events], ["afternoon"])
+        self.assertIn("1. \uc624\ub298 \uc624\ud6c4 3\uc2dc \uc624\ud6c4 \ud68c\uc758", afternoon.data.to_natural_language())
+        self.assertEqual([event.id for event in first.data.events], ["morning"])
+
+    def test_calendar_mutation_ambiguous_same_title_requires_clarification(self):
+        """Check duplicate title mutations are not executed blindly."""
+        today_value = date.today().isoformat()
+        provider = MockCalendarProvider(
+            events=[
+                CalendarEvent(id="one", title="\ud14c\uc2a4\ud2b8", date=today_value, time="10:00"),
+                CalendarEvent(id="two", title="\ud14c\uc2a4\ud2b8", date=today_value, time="15:00"),
+            ]
+        )
+        ability = CalendarAbility(provider=provider)
+
+        result = ability.execute(
+            {
+                "action": "delete",
+                "date": today_value,
+                "title": "\ud14c\uc2a4\ud2b8",
+                "_confirmed": True,
+            }
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.data.error_code, "AMBIGUOUS_EVENT")
+        self.assertEqual(len(provider.events), 2)
+        self.assertIn("\uc5b4\ub5a4 \uc77c\uc815", result.data.to_natural_language())
 
     def test_calendar_mutating_actions_require_confirmation(self):
         """Check create/delete/update are not automatically executed."""
@@ -400,6 +445,19 @@ class TestAbilities(unittest.TestCase):
         request = BrainToolRouter().plan("\ubaa8\ub808 \uc11c\uc6b8 \ube44 \uc640?", registry=registry)
 
         self.assertEqual(request.tool_name, "weather")
+
+    def test_weather_query_removes_current_time_word_from_location(self):
+        """Check current-time words are not sent to providers as locations."""
+        current_only = WeatherIntentParser().parse("\uc9c0\uae08 \ube44\uc640?")
+        with_location = WeatherIntentParser().parse("\uac15\ub989 \uc9c0\uae08 \ube44\uc640?")
+        outside = WeatherIntentParser().parse("\uc9c0\uae08 \ubc16\uc5d0 \ube44\uc640?")
+
+        self.assertIsNone(current_only.location)
+        self.assertIsNone(outside.location)
+        self.assertEqual(current_only.capability, "precipitation")
+        self.assertEqual(outside.capability, "precipitation")
+        self.assertEqual(with_location.location, "\uac15\ub989")
+        self.assertEqual(with_location.capability, "precipitation")
 
     def test_weather_query_parses_location_only_weather(self):
         """Check bare location weather request defaults to current today."""

@@ -31,6 +31,73 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
         self.assertEqual([step.action for step in plan.steps], ["create", "create"])
         self.assertEqual(plan.steps[1].depends_on, (1,))
         self.assertEqual(plan.steps[1].input_data["remind_before"], 30)
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 30)
+
+    def test_planner_copies_korean_word_hour_reminder_override_to_calendar_step(self):
+        """Check spoken 'one hour before' Korean phrasing is not treated as ambiguous."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "\u0038\uc6d4 \u0031\u0034\uc77c \uc624\ud6c4 \u0032\uc2dc\uc5d0 \uc544\uc57c \ub9cc\ub098\uae30 \uc77c\uc815 \uc7a1\uace0 \ud55c \uc2dc\uac04 \uc804\uc5d0 \uc54c\ub824 \uc918",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "reminder"])
+        self.assertEqual([step.action for step in plan.steps], ["create", "create"])
+        self.assertFalse(plan.requires_clarification)
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        self.assertEqual(plan.steps[1].input_data["remind_before"], 60)
+
+    def test_planner_routes_meeting_alarm_registration_to_calendar(self):
+        """Check STT saying 'alarm registration' does not steal meeting calendar intent."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "\ub0b4\uc77c \uc624\ud6c4 \u0032\uc2dc\uc5d0 \uce5c\uad6c \ub9cc\ub098\uae30 \uc54c\ub78c \ub4f1\ub85d\ud558\uace0 \ud55c \uc2dc\uac04 \uc804\uc5d0 \uc54c\ub824 \uc918",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "reminder"])
+        self.assertEqual([step.action for step in plan.steps], ["create", "create"])
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        self.assertEqual(plan.steps[1].input_data["remind_before"], 60)
+
+    def test_planner_routes_meeting_alarm_insert_to_calendar(self):
+        """Check STT saying 'add alarm too' still means calendar create with a reminder."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "내일 오후 2시에 친구 만나기 알람도 넣고 한 시간 전 알려줘.",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "reminder"])
+        self.assertEqual([step.action for step in plan.steps], ["create", "create"])
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        self.assertEqual(plan.steps[1].input_data["remind_before"], 60)
+        self.assertIn("일정", plan.steps[0].raw_text)
+        self.assertNotIn("줘", str(plan.steps[0].input_data.get("title", "")))
+
+    def test_planner_treats_relative_notice_as_calendar_reminder_modifier(self):
+        """Check event plus relative notice does not route as standalone Reminder."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "내일 오후 2시에 친구 만나기 한 시간 전 알려줘.",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "reminder"])
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        self.assertEqual(plan.steps[1].input_data["remind_before"], 60)
+
+    def test_planner_copies_hour_reminder_override_to_calendar_step(self):
+        """Check Google Calendar create can receive the user reminder override."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "내일 오후 3시에 우수 만나기 일정 잡고 1시간 전에 알려줘",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "reminder"])
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        self.assertEqual(plan.steps[1].input_data["remind_before"], 60)
 
     def test_planner_splits_spoken_calendar_reminder_before_ai(self):
         """Check spoken '잡고 30분 전 알려 줘' is handled by rules first."""
@@ -49,6 +116,13 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
         self.assertEqual([step.action for step in plan.steps], ["create", "create"])
         self.assertEqual(plan.steps[0].raw_text, "\ub0b4\uc77c 3\uc2dc\uc5d0 \uc57d\uc18d \uc7a1\uc544 \uc918")
         self.assertEqual(plan.steps[1].input_data["remind_before"], 30)
+
+    def test_planner_does_not_create_reminder_from_plain_tell_me(self):
+        """Check plain tell-me wording without time is not standalone Reminder create."""
+        planner = RuntimePlanner()
+        plan = planner.plan("택배일 알려줘", create_sprint6_registry()[0])
+
+        self.assertFalse(any(step.tool_name == "reminder" and step.action == "create" for step in plan.steps))
 
     def test_dispatcher_executes_calendar_then_reminder_plan(self):
         """Check Dispatcher executes planned steps and merges responses."""
@@ -136,6 +210,17 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
 
         self.assertEqual(plan.unsupported_reason, "unsupported_conditional")
         self.assertEqual(len(plan.steps), 0)
+
+    def test_planner_routes_current_rain_question_to_weather(self):
+        """Check current rain questions do not fall into datetime validation failure."""
+        planner = RuntimePlanner()
+        registry = create_sprint6_registry()[0]
+
+        plan = planner.plan("강릉 지금 비와?", registry)
+
+        self.assertEqual(plan.step_count, 1)
+        self.assertEqual(plan.steps[0].tool_name, "weather")
+        self.assertEqual(plan.steps[0].action, "query")
 
     def test_dispatcher_returns_safe_response_for_unsupported_conditional(self):
         """Check unsupported conditionals return a safe response."""

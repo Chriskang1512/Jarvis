@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from jarvis.providers.google.config import GoogleProviderConfig, validate_allowed_scopes
+from jarvis.providers.google.config import GoogleProviderConfig, missing_required_scopes, validate_allowed_scopes
 from jarvis.providers.google.credentials import save_token_json
 from jarvis.providers.google.errors import AUTH_REFRESH_FAILED, AUTH_REQUIRED, SCOPE_INSUFFICIENT, GoogleProviderError
 
@@ -161,7 +161,7 @@ class GoogleAuthManager:
             return GoogleAuthState(GoogleAuthStatus.AUTH_REQUIRED, tuple(self.config.scopes), self.config.credentials_path)
 
         credential_scopes = tuple(getattr(credentials, "scopes", None) or self.config.scopes or ())
-        missing = set(self.config.scopes or ()) - set(credential_scopes)
+        missing = missing_required_scopes(self.config.scopes, credential_scopes)
         if missing:
             return GoogleAuthState(GoogleAuthStatus.SCOPE_INSUFFICIENT, credential_scopes, self.config.credentials_path)
 

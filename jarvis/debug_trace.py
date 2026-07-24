@@ -86,6 +86,21 @@ def format_trace_event(event, payload):
             f"provider={payload.get('provider') or 'google'}"
         )
 
+    if event == "google_contacts.request":
+        return (
+            "[GoogleContacts] request "
+            f"action={payload.get('action') or '-'} "
+            f"query={payload.get('query') or '-'} "
+            f"provider={payload.get('provider') or 'google_contacts'}"
+        )
+
+    if event == "google_contacts.response":
+        return (
+            "[GoogleContacts] response "
+            f"contacts={payload.get('contacts', 0)} "
+            f"provider={payload.get('provider') or 'google_contacts'}"
+        )
+
     if event == "memory.query":
         if not is_memory_verbose_trace_enabled():
             return None
@@ -449,6 +464,31 @@ def format_trace_event(event, payload):
 
     if event == "planner.parse":
         return f"[Planner] parse raw={payload.get('raw_text')}"
+
+    if event == "intent_rule.candidates":
+        return f"[IntentRule] candidates={payload.get('candidates') or '-'}"
+
+    if event == "intent_ai.result":
+        details = []
+
+        if payload.get("requires_clarification"):
+            details.append("clarification=YES")
+
+        if payload.get("intent_error"):
+            details.append(f"error={payload.get('intent_error')}")
+
+        suffix = f" {' '.join(details)}" if details else ""
+        return f"[IntentAI] result={payload.get('result') or '-'} steps={payload.get('step_count', 0)}{suffix}"
+
+    if event == "intent_resolve.selected":
+        clarification = " clarification=YES" if payload.get("requires_clarification") else ""
+        return (
+            "[IntentResolve] "
+            f"selected={payload.get('selected') or '-'} "
+            f"reason={payload.get('reason') or '-'} "
+            f"steps={payload.get('step_count', 0)}"
+            f"{clarification}"
+        )
 
     if event == "planner.step":
         return (
@@ -938,6 +978,13 @@ def format_trace_event(event, payload):
 
     if event == "voice.pending_action.retry":
         return f"[Voice] pending_action retry reason={payload.get('reason')}"
+
+    if event == "voice.follow_up.skipped":
+        return (
+            "[Voice] follow_up skipped "
+            f"reason={payload.get('reason') or '-'} "
+            f"text={payload.get('text') or '-'}"
+        )
 
     if event == "voice.confirmation.decision":
         return (

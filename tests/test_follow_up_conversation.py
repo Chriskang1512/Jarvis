@@ -1,11 +1,15 @@
 import unittest
 import os
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from jarvis.abilities import AbilityRegistry
 from jarvis.abilities.native.calendar import CalendarAbility, MockCalendarProvider
+from jarvis.abilities.native.calendar.result import CalendarEvent, CalendarResult
 from jarvis.abilities.native.memory import InMemoryStorage, MemoryAbility
 from jarvis.abilities.native.reminder import ReminderAbility
+from jarvis.abilities.native.todo import TodoAbility
+from jarvis.abilities.result import AbilityResult
 from jarvis.brain import IntentRuntime
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.diagnostics.runtime_console import RuntimeDevConsole
@@ -25,7 +29,15 @@ from jarvis.runtime.conversation_task import (
     should_start_calendar_conversation,
     update_calendar_conversation_task,
 )
-from jarvis.voice.pipeline import VoicePipeline, build_calendar_update_input, confirmation_decision
+from jarvis.voice.pipeline import (
+    VoicePipeline,
+    build_calendar_update_input,
+    confirmation_decision,
+    extract_pending_action,
+    is_unprompted_short_follow_up_noise,
+    runtime_result_from_plan_result,
+    should_skip_embedded_google_calendar_reminder_continuation,
+)
 
 
 class TestFollowUpConversationMode(unittest.TestCase):
@@ -57,6 +69,12 @@ class TestFollowUpConversationMode(unittest.TestCase):
         """Check one-syllable yes aliases do not confirm unrelated words."""
         self.assertEqual(confirmation_decision("다음"), "unknown")
         self.assertEqual(calendar_confirmation_decision("다음"), "")
+
+    def test_unprompted_short_follow_up_noise_blocks_bare_todo_subject(self):
+        """Check a bare Todo subject is ignored unless it has an action verb."""
+        self.assertTrue(is_unprompted_short_follow_up_noise("\ud560 \uc77c"))
+        self.assertTrue(is_unprompted_short_follow_up_noise("\ud560\uc77c"))
+        self.assertFalse(is_unprompted_short_follow_up_noise("\ud560 \uc77c \uc54c\ub824\uc918"))
 
     def test_calendar_confirmation_noise_does_not_overwrite_title(self):
         """Check unknown short confirmation noise is not stored as a title."""
@@ -468,6 +486,58 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertEqual(reminders[0].remind_before, 30)
         self.assertIn("\u0033\u0030\ubd84 \uc804 \uc54c\ub9bc\ub3c4 \ub4f1\ub85d\ud588\uc2b5\ub2c8\ub2e4", tts_provider.spoken[-1])
 
+    def test_calendar_pending_confirmation_preserves_reminder_override(self):
+        """Check Google Calendar confirmation keeps planner-owned reminder minutes."""
+        provider = MockCalendarProvider(events=[])
+        engine = ReminderEngine(queue=ReminderQueue())
+        tool_registry = ToolRegistry()
+        ability_registry = AbilityRegistry()
+        ability_registry.register(CalendarAbility(provider=provider))
+        ability_registry.register(ReminderAbility(engine=engine))
+        ability_registry.register_tools(tool_registry)
+        dispatcher = RuntimeToolDispatcher(tool_registry)
+        plan = dispatcher.create_plan(
+            "\ub0b4\uc77c \uc624\ud6c4 \u0032\uc2dc\uc5d0 \uc544\uc57c \ub9cc\ub098\uae30 \uc77c\uc815 \uc7a1\uace0 \ud55c \uc2dc\uac04 \uc804\uc5d0 \uc54c\ub824 \uc918"
+        )
+
+        self.assertEqual(plan.steps[0].input_data["remind_before_minutes"], 60)
+        plan_result = dispatcher.execute_plan(plan)
+        runtime_result = runtime_result_from_plan_result(plan_result, plan)
+        pending_action = extract_pending_action(runtime_result)
+
+        self.assertIsNotNone(pending_action)
+        self.assertEqual(pending_action["input_data"]["remind_before_minutes"], 60)
+        self.assertTrue(pending_action["input_data"]["_suppress_auto_reminder"])
+
+    def test_google_calendar_embedded_reminder_skips_local_continuation(self):
+        """Check Google Calendar reminder override does not run a duplicate local reminder."""
+        pending_action = {
+            "ability": "calendar",
+            "action": "create",
+            "input_data": {
+                "action": "create",
+                "remind_before_minutes": 60,
+                "_suppress_auto_reminder": True,
+            },
+        }
+        calendar_result = CalendarResult(
+            success=True,
+            action="create",
+            provider="google",
+            events=[
+                CalendarEvent(
+                    id="google-1",
+                    title="meeting",
+                    date="2099-07-19",
+                    time="14:00",
+                    reminder_minutes=[60],
+                )
+            ],
+        )
+        tool_result = SimpleNamespace(output=AbilityResult(success=True, data=calendar_result))
+
+        self.assertTrue(should_skip_embedded_google_calendar_reminder_continuation(pending_action, tool_result))
+
     def test_calendar_conversation_task_collects_missing_fields_and_confirms(self):
         """Check Calendar conversation task collects fields before one final confirmation."""
         provider = MockCalendarProvider(events=[])
@@ -722,6 +792,10 @@ class TestFollowUpConversationMode(unittest.TestCase):
 
     def test_calendar_conversation_task_does_not_use_command_as_title_and_parses_day_only_date(self):
         """Check command-only create text keeps title missing and parses day-only dates."""
+        today = datetime.now().date()
+        if today.day >= 28:
+            self.skipTest("day-only future date check needs a future day in the current month")
+        day_only_target = today.replace(day=today.day + 1)
         provider = MockCalendarProvider(events=[])
         tool_registry = ToolRegistry()
         ability_registry = AbilityRegistry()
@@ -734,7 +808,7 @@ class TestFollowUpConversationMode(unittest.TestCase):
             stt_provider=FollowUpSTTProvider(
                 first="\uc77c\uc815 \ub4f1\ub85d\ud574",
                 follow_ups=[
-                    "\u0032\u0030\uc77c \uc624\uc804 10\uc2dc",
+                    f"{day_only_target.day}\uc77c \uc624\uc804 10\uc2dc",
                     "\uc2e4\uc5c5 \uae09\uc5ec",
                     "\uc798 \ubab0\ub77c",
                     "\uc751",
@@ -749,17 +823,10 @@ class TestFollowUpConversationMode(unittest.TestCase):
 
         pipeline.run_once()
 
-        expected_date = datetime.now().date().replace(day=20)
-        if expected_date < datetime.now().date():
-            if expected_date.month == 12:
-                expected_date = expected_date.replace(year=expected_date.year + 1, month=1)
-            else:
-                expected_date = expected_date.replace(month=expected_date.month + 1)
-
         self.assertGreaterEqual(len(tts_provider.spoken), 4)
         self.assertIn("\uc5b4\ub5a4 \uc77c\uc815", tts_provider.spoken[1])
         self.assertEqual(len(provider.events), 1)
-        self.assertEqual(provider.events[0].date, expected_date.isoformat())
+        self.assertEqual(provider.events[0].date, day_only_target.isoformat())
         self.assertEqual(provider.events[0].time, "10:00")
         self.assertEqual(provider.events[0].title, "\uc2e4\uc5c5\uae09\uc5ec")
         self.assertEqual(provider.events[0].participants, [])

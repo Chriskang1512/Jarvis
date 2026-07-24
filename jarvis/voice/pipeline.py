@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import re
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -35,6 +35,7 @@ from jarvis.voice.conversation import CONVERSATION_THINKING, create_conversation
 from jarvis.voice.semantic import SemanticTranscriptContext, SemanticTranscriptNormalizer
 from jarvis.voice.text_normalizer import normalize_tts_text
 from jarvis.voice.user_vocabulary import format_corrections, normalize_stt_text
+from jarvis.privacy import redact_sensitive_text
 
 
 class VoicePipeline:
@@ -163,11 +164,10 @@ class VoicePipeline:
             )
             self.publish_pipeline(llm="skipped", current_stage="tts")
         elif reply is None:
-            if is_alarm_like_request(user_message):
-                reply = "알림 시간을 다시 말씀해 주세요."
-                self.publish_pipeline(llm="skipped", current_stage="tts")
-            elif is_todo_like_failed_request(user_message):
-                reply = "할 일 내용과 추가할지를 다시 말씀해 주세요."
+            safe_reply = safe_tool_like_failed_request_reply(user_message)
+
+            if safe_reply is not None:
+                reply = safe_reply
                 self.publish_pipeline(llm="skipped", current_stage="tts")
             else:
                 fallback = self.get_fallback_name()
@@ -190,7 +190,7 @@ class VoicePipeline:
         self.publish_pipeline(tts="started", current_stage="tts")
         self.log_event("voice.tts.started")
         self.print_llm_response_debug(reply)
-        trace_event("voice.tts.final_text", final_tts_text=reply)
+        trace_event("voice.tts.final_text", final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)))
         self.speak_reply(reply)
         self.publish_intent_tts_output(intent_result)
         tts_latency = perf_counter() - tts_start
@@ -236,6 +236,11 @@ class VoicePipeline:
                         return
                     continue
 
+                self.close_conversation_session()
+                return
+
+            if self.should_skip_unprompted_follow_up(follow_up_text):
+                trace_event("voice.follow_up.skipped", reason="unprompted_short_noise", text=str(follow_up_text or ""))
                 self.close_conversation_session()
                 return
 
@@ -294,11 +299,10 @@ class VoicePipeline:
             )
             self.publish_pipeline(llm="skipped", current_stage="tts")
         elif reply is None:
-            if is_alarm_like_request(user_message):
-                reply = "알림 시간을 다시 말씀해 주세요."
-                self.publish_pipeline(llm="skipped", current_stage="tts")
-            elif is_todo_like_failed_request(user_message):
-                reply = "할 일 내용과 추가할지를 다시 말씀해 주세요."
+            safe_reply = safe_tool_like_failed_request_reply(user_message)
+
+            if safe_reply is not None:
+                reply = safe_reply
                 self.publish_pipeline(llm="skipped", current_stage="tts")
             else:
                 fallback = self.get_fallback_name()
@@ -321,7 +325,7 @@ class VoicePipeline:
         self.publish_pipeline(tts="started", current_stage="tts")
         self.log_event("voice.tts.started")
         self.print_llm_response_debug(reply)
-        trace_event("voice.tts.final_text", final_tts_text=reply)
+        trace_event("voice.tts.final_text", final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)))
         self.speak_reply(reply)
         self.publish_intent_tts_output(intent_result)
         tts_latency = perf_counter() - tts_start
@@ -363,7 +367,7 @@ class VoicePipeline:
             return reply
 
         if task is not None and getattr(task, "task_state", "") == CALENDAR_TASK_EXPIRED:
-            return "일정 등록 작업이 만료되었습니다. 다시 말씀해 주세요."
+            return "?쇱젙 ?깅줉 ?묒뾽??留뚮즺?섏뿀?듬땲?? ?ㅼ떆 留먯???二쇱꽭??"
 
         if should_start_calendar_conversation(user_message):
             task = start_calendar_conversation_task(user_message)
@@ -375,12 +379,12 @@ class VoicePipeline:
     def execute_calendar_conversation_task(self, task):
         """Execute a collected Calendar conversation task."""
         if self.intent_runtime is None:
-            return "실행할 수 있는 런타임이 없습니다."
+            return "?ㅽ뻾?????덈뒗 ?고??꾩씠 ?놁뒿?덈떎."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None or not hasattr(dispatcher, "execute"):
-            return "실행할 수 있는 디스패처가 없습니다."
+            return "?ㅽ뻾?????덈뒗 ?붿뒪?⑥쿂媛 ?놁뒿?덈떎."
 
         input_data = build_calendar_input(task, confirmed=True)
         started = perf_counter()
@@ -396,7 +400,7 @@ class VoicePipeline:
             if hasattr(data, "to_natural_language"):
                 return data.to_natural_language()
 
-            return getattr(result, "error", "") or "실행에 실패했습니다."
+            return getattr(result, "error", "") or "?ㅽ뻾???ㅽ뙣?덉뒿?덈떎."
 
         if not getattr(result, "success", False):
             trace_event(
@@ -410,7 +414,7 @@ class VoicePipeline:
             )
             trace_event("task.completed", task_id=task.id, status="FAILED", step_count=1, retry_count=0, duration_ms=duration_ms)
             trace_event("task.summary", task_id=task.id, status="FAILED", step_count=1, retry_count=0, duration_ms=duration_ms)
-            return getattr(result, "error", "일정 등록에 실패했습니다.")
+            return getattr(result, "error", "?쇱젙 ?깅줉???ㅽ뙣?덉뒿?덈떎.")
 
         output = getattr(result, "output", None)
         data = getattr(output, "data", None)
@@ -446,7 +450,7 @@ class VoicePipeline:
         if hasattr(data, "to_natural_language"):
             return data.to_natural_language()
 
-        return str(data or "일정을 등록했습니다.")
+        return str(data or "?쇱젙???깅줉?덉뒿?덈떎.")
 
     def store_calendar_conversation_task_history(self, dispatcher, task, duration_ms):
         """Store a lightweight RuntimeTask snapshot for a Conversation Calendar execution."""
@@ -535,20 +539,22 @@ class VoicePipeline:
     def print_llm_response_debug(self, response):
         """Print the response text before it is sent to TTS."""
         text = str(response)
+        redacted_text = sanitize_debug_text(redact_sensitive_text(text))
         print(DEBUG_SEPARATOR)
         print("LLM Response")
         print("")
-        print(text)
+        print(redacted_text)
         print("")
         print(f"(전체 길이 : {len(text)} chars)")
         print(DEBUG_SEPARATOR)
 
     def print_tts_input_debug(self, tts_text):
         """Print the exact text sent into TTS."""
+        redacted_text = sanitize_debug_text(redact_sensitive_text(tts_text))
         print(DEBUG_SEPARATOR)
         print("TTS Input")
         print("")
-        print(tts_text)
+        print(redacted_text)
         print("")
         print("Length")
         print("")
@@ -717,6 +723,16 @@ class VoicePipeline:
         )
         return semantic.semantic_text
 
+    def should_skip_unprompted_follow_up(self, message):
+        """Return whether an unprompted follow-up looks like STT noise."""
+        if self.has_pending_action() or self.has_calendar_conversation_task():
+            return False
+
+        if self.conversation_session is not None and self.conversation_session.get_pending_clarification() is not None:
+            return False
+
+        return is_unprompted_short_follow_up_noise(message)
+
     def configure_stt_prompt_context(self, confirmation=False):
         """Pass short runtime context to STT providers that support it."""
         if not hasattr(self.stt_provider, "set_prompt_context"):
@@ -756,7 +772,7 @@ class VoicePipeline:
 
         parts.append("known_people=아야,유이,유리")
         parts.append("known_places=서울역,잠실,롯데월드,강릉 고용보험공단")
-        parts.append("todo_words=할 일,할일,우유 사기,약 사기,장보기")
+        parts.append("todo_words=할일,우유 사기,약 사기,장보기")
         return "; ".join(parts)
 
     def create_semantic_transcript_context(self):
@@ -819,6 +835,9 @@ class VoicePipeline:
         if pending is None:
             return None
 
+        if pending.get("kind", "") == "contact_ambiguous":
+            return self.try_contact_ambiguous_clarification_reply(pending, user_message)
+
         if pending.get("kind", "") != "reminder_time":
             return None
 
@@ -826,22 +845,48 @@ class VoicePipeline:
 
         if minutes is None:
             self.conversation_session.advance_pending_clarification_turn()
-            return "몇 분 뒤에 알려드릴까요?"
+            return "紐?遺??ㅼ뿉 ?뚮젮?쒕┫源뚯슂?"
 
         self.conversation_session.clear_pending_clarification()
         return self.execute_pending_reminder_clarification(pending, minutes, user_message)
 
+    def try_contact_ambiguous_clarification_reply(self, pending, user_message):
+        """Resolve a pending ambiguous contact candidate with a follow-up answer."""
+        decision = confirmation_decision(user_message)
+        trace_event(
+            "voice.pending_clarification.contact_ambiguous",
+            decision=decision,
+            candidates=len(pending.get("contacts", []) or []),
+        )
+
+        if decision == "no":
+            self.conversation_session.clear_pending_clarification()
+            return "痍⑥냼?덉뒿?덈떎."
+
+        if decision != "yes":
+            self.conversation_session.advance_pending_clarification_turn()
+            return pending.get("question", "") or "?대뼡 ?곕씫泥섎? 留먯??섏떊 嫄닿???"
+
+        contacts = list(pending.get("contacts", []) or [])
+
+        if len(contacts) != 1:
+            self.conversation_session.advance_pending_clarification_turn()
+            return pending.get("question", "") or "?대뼡 ?곕씫泥섎? 留먯??섏떊 嫄닿???"
+
+        self.conversation_session.clear_pending_clarification()
+        return format_confirmed_contact_candidate(contacts[0], pending.get("attribute", "contact"))
+
     def execute_pending_reminder_clarification(self, pending, minutes, user_message):
         """Create a reminder after the user supplies the missing delay."""
         if self.intent_runtime is None:
-            return "알림을 등록할 수 없습니다."
+            return "?뚮┝???깅줉?????놁뒿?덈떎."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None:
-            return "알림을 등록할 수 없습니다."
+            return "?뚮┝???깅줉?????놁뒿?덈떎."
 
-        title = pending.get("title", "") or "알림"
+        title = pending.get("title", "") or "?뚮┝"
         reminder_time = (datetime.now() + timedelta(minutes=int(minutes))).isoformat(timespec="seconds")
         trace_event(
             "voice.pending_clarification.resolved",
@@ -863,7 +908,7 @@ class VoicePipeline:
         )
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "알림 등록에 실패했습니다.")
+            return getattr(result, "error", "?뚮┝ ?깅줉???ㅽ뙣?덉뒿?덈떎.")
 
         output = getattr(result, "output", None)
 
@@ -970,12 +1015,12 @@ class VoicePipeline:
     def execute_pending_action(self, pending_action):
         """Execute a confirmed pending action."""
         if self.intent_runtime is None:
-            return "실행할 수 있는 런타임이 없습니다."
+            return "?ㅽ뻾?????덈뒗 ?고??꾩씠 ?놁뒿?덈떎."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None:
-            return "실행할 수 있는 도구가 없습니다."
+            return "?ㅽ뻾?????덈뒗 ?꾧뎄媛 ?놁뒿?덈떎."
 
         started = perf_counter()
         result = dispatcher.execute(
@@ -987,7 +1032,7 @@ class VoicePipeline:
         duration_ms = int((perf_counter() - started) * 1000)
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "실행에 실패했습니다.")
+            return getattr(result, "error", "?ㅽ뻾???ㅽ뙣?덉뒿?덈떎.")
 
         output = getattr(result, "output", None)
         self.remember_calendar_tool_output(pending_action, output)
@@ -1046,6 +1091,14 @@ class VoicePipeline:
         step_index = int(pending_action.get("step_index", 0) or 0)
 
         if plan is None or step_index <= 0 or step_index >= len(getattr(plan, "steps", []) or []):
+            return ""
+
+        if should_skip_embedded_google_calendar_reminder_continuation(pending_action, confirmed_tool_result):
+            trace_event(
+                "voice.pending_plan.continuation_skipped",
+                reason="google_calendar_reminder_embedded",
+                remind_before=pending_action.get("input_data", {}).get("remind_before_minutes", ""),
+            )
             return ""
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
@@ -1261,14 +1314,14 @@ class VoicePipeline:
         )
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "알림 등록에 실패했습니다.")
+            return getattr(result, "error", "?뚮┝ ?깅줉???ㅽ뙣?덉뒿?덈떎.")
 
         output = getattr(result, "output", None)
 
         if hasattr(output, "to_natural_language"):
             return output.to_natural_language()
 
-        return "알림을 등록했습니다."
+        return "?뚮┝???깅줉?덉뒿?덈떎."
 
     def try_calendar_follow_up_reply(self, user_message):
         """Answer follow-up questions about the last calendar result."""
@@ -1284,7 +1337,7 @@ class VoicePipeline:
         events = calendar.get("events", [])
 
         if index >= len(events):
-            return "해당 순서의 일정은 없습니다."
+            return "?대떦 ?쒖꽌???쇱젙? ?놁뒿?덈떎."
 
         event = events[index]
         time_text = event.get("time", "")
@@ -1321,7 +1374,7 @@ class VoicePipeline:
         result = dispatcher.execute(ToolRequest(tool_name="calendar", input_data=update_input))
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "일정 수정에 실패했습니다.")
+            return getattr(result, "error", "?쇱젙 ?섏젙???ㅽ뙣?덉뒿?덈떎.")
 
         output = getattr(result, "output", None)
         metadata = getattr(output, "metadata", {}) or {}
@@ -1335,7 +1388,7 @@ class VoicePipeline:
                 }
             )
             data = getattr(output, "data", None)
-            return data.to_natural_language() if hasattr(data, "to_natural_language") else "확인이 필요합니다."
+            return data.to_natural_language() if hasattr(data, "to_natural_language") else "?뺤씤???꾩슂?⑸땲??"
 
         data = getattr(output, "data", None)
         self.store_calendar_result(data)
@@ -1490,9 +1543,64 @@ def should_skip_voice_message(message):
     return any(lowered.startswith(prefix) for prefix in skipped_prefixes)
 
 
+def sanitize_debug_text(text):
+    """Remove invalid control characters that can break console encoders."""
+    return "".join(
+        char if (ord(char) >= 32 or char in "\n\r\t") and not (0x80 <= ord(char) <= 0x9F) else "?"
+        for char in str(text or "")
+    )
+
+
+def is_unprompted_short_follow_up_noise(message):
+    """Return whether a free follow-up transcript is too weak to be a new command."""
+    text = str(message or "").strip().strip(" .?!,")
+
+    if text == "":
+        return True
+
+    normalized = text.replace(" ", "")
+    weak_subjects = {"?좎씪", "?щ몢", "?쇱젙", "?뚮┝", "?뚮엺", "由щ쭏?몃뜑"}
+
+    if normalized in weak_subjects:
+        return True
+
+    if len(normalized) <= 2 and confirmation_decision(text) != "yes" and rejection_decision(text) != "no":
+        return True
+
+    return False
+
+
 def contains_any(text, tokens):
     """Return whether any token is present in text."""
     return any(token in str(text or "") for token in tokens)
+
+
+def safe_tool_like_failed_request_reply(message):
+    """Return a clarification instead of free-form LLM text for failed tool-like requests."""
+    text = str(message or "").strip()
+
+    if text == "":
+        return None
+
+    if is_alarm_like_request(text):
+        return "알림 시간을 다시 말씀해 주세요."
+
+    if is_todo_like_failed_request(text):
+        return "할 일 내용과 추가 여부를 다시 말씀해 주세요."
+
+    if is_mail_like_failed_request(text):
+        return "메일을 찾으려는 건가요? 예를 들어 최근 메일 알려줘처럼 말씀해 주세요."
+
+    if is_contact_like_failed_request(text):
+        return "연락처에서 어떤 정보를 찾을지 다시 말씀해 주세요."
+
+    if is_calendar_like_failed_request(text):
+        return "일정에서 어떤 내용을 확인할지 다시 말씀해 주세요."
+
+    if is_current_info_like_failed_request(text):
+        return "실시간 정보 요청을 정확히 해석하지 못했습니다. 무엇을 확인할지 다시 말씀해 주세요."
+
+    return None
 
 
 def build_calendar_update_input(message, calendar_event):
@@ -1650,7 +1758,7 @@ def parse_calendar_update_location(text):
 
     candidate = clean_calendar_update_fragment(directional.group(1))
 
-    if any(token in candidate for token in ["역", "몰", "공단", "센터", "병원", "카페", "회사", "집"]):
+    if any(token in candidate for token in ["역", "월드", "공단", "센터", "병원", "카페", "회사", "집"]):
         return candidate
 
     return ""
@@ -1852,11 +1960,44 @@ def extract_pending_action(intent_result):
         pending_action["plan"] = plan
         step_index = pending_step_index(plan, ability)
         pending_action["step_index"] = step_index
+        pending_action["input_data"] = merge_pending_step_input_data(
+            pending_action["input_data"],
+            plan,
+            step_index,
+        )
 
         if should_suppress_pending_calendar_auto_reminder(plan, step_index, ability):
             pending_action["input_data"]["_suppress_auto_reminder"] = True
 
     return pending_action
+
+
+def merge_pending_step_input_data(input_data, plan, step_index):
+    """Preserve planner-only fields when a confirm-required query is serialized."""
+    merged = dict(input_data or {})
+
+    if step_index <= 0:
+        return merged
+
+    for step in getattr(plan, "steps", []) or []:
+        try:
+            current_index = int(getattr(step, "index", 0))
+        except (TypeError, ValueError):
+            current_index = 0
+
+        if current_index != step_index:
+            continue
+
+        for key, value in dict(getattr(step, "input_data", {}) or {}).items():
+            if value in [None, ""]:
+                continue
+
+            if key not in merged or merged.get(key) in [None, ""]:
+                merged[key] = value
+
+        return merged
+
+    return merged
 
 
 def pending_step_index(plan, ability):
@@ -1888,6 +2029,50 @@ def should_suppress_pending_calendar_auto_reminder(plan, step_index, ability):
     return False
 
 
+def should_skip_embedded_google_calendar_reminder_continuation(pending_action, confirmed_tool_result):
+    """Return whether Google Calendar already stored the dependent reminder."""
+    if str(pending_action.get("ability", "") or "") != "calendar":
+        return False
+
+    input_data = dict(pending_action.get("input_data", {}) or {})
+
+    if not bool(input_data.get("_suppress_auto_reminder", False)):
+        return False
+
+    expected = input_data.get("remind_before_minutes")
+
+    if expected in [None, ""]:
+        return False
+
+    try:
+        expected = int(expected)
+    except (TypeError, ValueError):
+        return False
+
+    output = getattr(confirmed_tool_result, "output", None)
+    data = getattr(output, "data", None)
+
+    if not bool(getattr(data, "success", False)):
+        return False
+
+    if str(getattr(data, "provider", "") or "").lower() != "google":
+        return False
+
+    if str(getattr(data, "action", "") or "") != "create":
+        return False
+
+    for event in list(getattr(data, "events", []) or []):
+        try:
+            reminder_values = [int(value) for value in list(getattr(event, "reminder_minutes", []) or [])]
+        except (TypeError, ValueError):
+            reminder_values = []
+
+        if expected in reminder_values:
+            return True
+
+    return False
+
+
 def get_tool_result_response(tool_result):
     """Return a stable response string for a ToolResult."""
     output = getattr(tool_result, "output", None)
@@ -1903,6 +2088,9 @@ def get_tool_result_response(tool_result):
 
 def query_to_input_data(query):
     """Serialize a confirmable query to Tool input."""
+    if hasattr(query, "to") and hasattr(query, "subject") and hasattr(query, "body"):
+        return query.to_input_data()
+
     if hasattr(query, "workflow_key"):
         return integration_query_to_input_data(query)
 
@@ -1934,6 +2122,11 @@ def integration_query_to_input_data(query):
 
 def extract_pending_clarification(intent_result, user_message):
     """Return clarification state to keep for the next user turn."""
+    contact_pending = extract_contact_ambiguous_clarification(intent_result)
+
+    if contact_pending is not None:
+        return contact_pending
+
     plan = getattr(intent_result, "plan", None)
 
     if plan is None:
@@ -1956,6 +2149,74 @@ def extract_pending_clarification(intent_result, user_message):
         "raw_text": raw_text,
         "question": question,
     }
+
+
+def extract_contact_ambiguous_clarification(intent_result):
+    """Return pending clarification for ambiguous Contact search results."""
+    output = getattr(intent_result, "tool_output", None)
+    data = getattr(output, "data", None)
+
+    if getattr(data, "action", "") != "get":
+        return None
+
+    if getattr(data, "error_code", "") != "contact_ambiguous":
+        return None
+
+    contacts = tuple(contact_to_pending_dict(contact) for contact in list(getattr(data, "contacts", []) or ()))
+    contacts = tuple(contact for contact in contacts if contact.get("display_name", ""))
+
+    if not contacts:
+        return None
+
+    return {
+        "kind": "contact_ambiguous",
+        "attribute": contact_attribute_from_fields(getattr(data, "changed_fields", ()) or ()),
+        "contacts": contacts,
+        "question": getattr(data, "message", "") or getattr(intent_result, "response", ""),
+    }
+
+
+def contact_to_pending_dict(contact):
+    """Serialize a Contact candidate for pending clarification."""
+    return {
+        "id": str(getattr(contact, "id", "") or ""),
+        "display_name": str(getattr(contact, "display_name", "") or ""),
+        "aliases": list(getattr(contact, "aliases", ()) or ()),
+        "emails": list(getattr(contact, "emails", ()) or ()),
+        "phones": list(getattr(contact, "phones", ()) or ()),
+        "birthday": str(getattr(contact, "birthday", "") or ""),
+        "metadata": dict(getattr(contact, "metadata", {}) or {}),
+        "revision": int(getattr(contact, "revision", 0) or 0),
+    }
+
+
+def contact_attribute_from_fields(fields):
+    """Return a Contact get attribute from changed_fields."""
+    for field in fields or ():
+        if field in {"email", "phone", "birthday", "contact"}:
+            return field
+    return "contact"
+
+
+def format_confirmed_contact_candidate(contact_data, attribute):
+    """Format a confirmed ambiguous Contact candidate as a normal get result."""
+    from jarvis.abilities.native.contacts.result import ContactResult
+    from jarvis.core.contacts import contact_from_dict
+
+    data = dict(contact_data or {})
+    metadata = dict(data.get("metadata", {}) or {})
+    contact = contact_from_dict(data)
+    result = ContactResult(
+        success=True,
+        action="get",
+        contact=contact,
+        contacts=(contact,),
+        changed_fields=(str(attribute or "contact"),),
+        revision=getattr(contact, "revision", 0),
+        provider=str(metadata.get("provider") or "google_contacts"),
+        external_id=str(metadata.get("external_id") or metadata.get("google_resource_name") or ""),
+    )
+    return result.to_natural_language()
 
 
 def is_reminder_time_clarification(question, raw_text):
@@ -2022,7 +2283,7 @@ def is_alarm_like_request(message):
     if text == "":
         return False
 
-    alarm_tokens = ["알람", "알림", "리마인더"]
+    alarm_tokens = ["알람", "알림", "리마인더", "깨워"]
     reminder_action_tokens = ["등록", "설정", "예약", "알려줘", "알려 줘"]
     time_tokens = ["분 뒤", "분 후", "시간 뒤", "시간 후", "분 전", "시간 전", "내일", "오늘", "오후", "오전"]
 
@@ -2064,6 +2325,56 @@ def is_todo_like_failed_request(message):
     return any(token in text for token in todo_objects) and any(token in text for token in todo_actions)
 
 
+def is_mail_like_failed_request(message):
+    """Return whether an unresolved request is probably about mailbox lookup."""
+    text = str(message or "").strip()
+    lowered = text.lower()
+
+    if text == "":
+        return False
+
+    mail_tokens = ["메일", "이메일", "매일", "gmail", "깃허브", "구글", "오픈ai", "오픈 AI"]
+    mail_context_tokens = ["최근", "오늘", "안 읽", "읽지 않은", "퇴근", "택배", "github", "openai", "google"]
+    lookup_tokens = ["알려", "보여", "조회", "검색", "찾아", "읽어"]
+
+    has_mail_token = any(token in lowered for token in ["gmail", "github", "openai", "google"]) or any(token in text for token in mail_tokens)
+    has_contextual_mail_stt = any(token in text for token in ["최근 일", "퇴근 매일", "택배 매일"])
+
+    return (has_mail_token or has_contextual_mail_stt) and (
+        any(token in text for token in lookup_tokens)
+        or any(token in text for token in mail_context_tokens)
+        or any(token in lowered for token in ["github", "openai", "google"])
+    )
+
+
+def is_contact_like_failed_request(message):
+    """Return whether an unresolved request is probably about contacts."""
+    text = str(message or "").strip()
+    contact_tokens = ["연락처", "전화번호", "이메일", "메일 주소", "주소록", "생일"]
+    lookup_tokens = ["알려", "보여", "조회", "검색", "찾아", "뭐", "언제"]
+    mutation_tokens = ["저장", "등록", "바꿔", "변경", "수정", "삭제", "지워"]
+
+    return any(token in text for token in contact_tokens) and any(token in text for token in lookup_tokens + mutation_tokens)
+
+
+def is_calendar_like_failed_request(message):
+    """Return whether an unresolved request is probably about calendar lookup or changes."""
+    text = str(message or "").strip()
+    calendar_tokens = ["일정", "약속", "예약", "회의", "미팅", "캘린더"]
+    action_tokens = ["알려", "보여", "조회", "검색", "잡아", "등록", "추가", "바꿔", "변경", "삭제", "지워"]
+
+    return any(token in text for token in calendar_tokens) and any(token in text for token in action_tokens)
+
+
+def is_current_info_like_failed_request(message):
+    """Return whether a failed request should not be answered with unsupported facts."""
+    text = str(message or "").strip()
+    current_tokens = ["최근", "오늘", "지금", "현재", "최신", "뉴스", "날씨", "비", "주가", "환율"]
+    lookup_tokens = ["알려", "보여", "조회", "검색", "찾아", "어때", "뭐"]
+
+    return any(token in text for token in current_tokens) and any(token in text for token in lookup_tokens)
+
+
 def parse_reminder_before_follow_up(message):
     """Return remind-before minutes from a Calendar follow-up request."""
     text = str(message or "").strip()
@@ -2073,6 +2384,9 @@ def parse_reminder_before_follow_up(message):
 
     if "알려" not in text and "알림" not in text and "알람" not in text and "리마인더" not in text:
         return None
+
+    if "한 시간" in text or "한시간" in text:
+        return 60
 
     hour_match = re.search(r"(\d+)\s*시간\s*전", text)
 
@@ -2099,6 +2413,7 @@ def calendar_query_to_input_data(query):
         "participants": list(getattr(query, "participants", [])),
         "raw_text": getattr(query, "raw_text", ""),
         "event_id": getattr(query, "event_id", ""),
+        "remind_before_minutes": getattr(query, "remind_before_minutes", None),
     }
 
 
@@ -2135,13 +2450,13 @@ def todo_query_to_input_data(query):
 def is_confirmation_yes(message):
     """Return whether the text confirms a pending action."""
     text = normalize_confirmation_text(message)
-    return text in ["응", "어", "그래", "좋아", "등록해", "해줘", "맞아", "예", "네"]
+    return text in ["응", "예", "네", "그래", "좋아", "등록해", "해줘", "맞아", "ㅇㅇ", "yes"]
 
 
 def is_confirmation_no(message):
     """Return whether the text rejects a pending action."""
     text = normalize_confirmation_text(message)
-    return text in ["아니", "취소", "하지마", "안돼", "안 돼"]
+    return text in ["아니", "취소", "하지마", "됐어", "no"]
 
 
 def normalize_confirmation_text(message):
@@ -2166,6 +2481,17 @@ def pending_action_confirmation_question(pending_action):
 
     if pending_action is not None:
         action = str(pending_action.get("action", "") or "").strip()
+        input_data = dict(pending_action.get("input_data", {}) or {})
+
+        if action in {"send", "reply"}:
+            recipient = str(input_data.get("recipient_name", "") or "").strip()
+            if not recipient:
+                addresses = tuple(input_data.get("to", ()) or ())
+                recipient = redact_sensitive_text(addresses[0]) if addresses else "수신자"
+            subject = str(input_data.get("subject", "") or "")
+            body = str(input_data.get("body", "") or "")
+            action_label = "답장" if action == "reply" else "메일"
+            return f"{recipient}에게 '{subject}'라는 제목의 {action_label}을 보낼까요? 내용은 '{body}'입니다."
 
     if action == "update":
         return "수정할까요?"
@@ -2193,6 +2519,12 @@ def confirmation_decision(message):
         return "yes"
 
     return "unknown"
+
+
+def rejection_decision(message):
+    """Return no or unknown for compatibility with older rejection checks."""
+    decision = confirmation_decision(message)
+    return "no" if decision == "no" else "unknown"
 
 
 def is_confirmation_yes(message):
@@ -2433,8 +2765,8 @@ def contains_event_phrase(text):
     return any(
         phrase in text
         for phrase in [
-            "만난 뒤",
-            "만난 후",
+            "만난 날",
+            "만난 날짜",
             "만난 지",
             "만난",
             "지난 지",
@@ -2452,7 +2784,7 @@ def contains_elapsed_phrase(text):
             "며칠",
             "몇 일",
             "얼마나 됐어",
-            "얼마나 됐",
+            "얼마나 돼",
             "얼마나 지났",
             "지난 지",
             "지났어",

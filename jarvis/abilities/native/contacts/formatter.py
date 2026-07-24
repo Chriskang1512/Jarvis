@@ -1,3 +1,5 @@
+"""Korean formatter for Contact Ability results."""
+
 import re
 
 
@@ -7,7 +9,7 @@ def format_contact_result(result):
         return result.message
 
     if result.requires_confirmation:
-        return "이 연락처 작업을 진행할까요?"
+        return "연락처 작업을 진행할까요?"
 
     if not result.success:
         return error_message(result)
@@ -29,9 +31,9 @@ def format_contact_result(result):
         if not result.contacts:
             return "저장된 연락처가 없습니다."
         names = ", ".join(getattr(contact, "display_name", "") for contact in result.contacts)
-        return f"저장된 연락처는 {names}입니다."
+        return f"연락처는 {names}입니다."
 
-    return "연락처 작업을 완료했습니다."
+    return "연락처 작업이 완료되었습니다."
 
 
 def confirmation_message(query):
@@ -39,7 +41,7 @@ def confirmation_message(query):
     name = query.display_name or query.contact_id or "해당 연락처"
 
     if query.action == "create":
-        return f"{name}의 연락처를 저장할까요?"
+        return f"{name}를 연락처에 저장할까요?"
 
     if query.action == "delete":
         return f"{name}의 연락처를 삭제할까요?"
@@ -53,12 +55,12 @@ def confirmation_message(query):
             return f"{name}의 생일을 {format_birthday(query.birthday)}로 저장할까요?"
         return f"{name}의 연락처를 수정할까요?"
 
-    return "이 연락처 작업을 진행할까요?"
+    return "연락처 작업을 진행할까요?"
 
 
 def created_message(contact):
     """Return create success text."""
-    return f"{contact.display_name}의 연락처를 저장했습니다."
+    return f"{contact.display_name}를 연락처에 저장했습니다."
 
 
 def updated_message(contact, changed_fields):
@@ -105,16 +107,25 @@ def get_message(contact, attribute):
     if contact.birthday:
         parts.append(f"생일은 {format_birthday(contact.birthday)}입니다.")
 
+    if len(parts) == 1:
+        parts.append("저장된 세부 정보는 아직 없습니다.")
+
     return " ".join(parts)
 
 
 def error_message(result):
     """Return a user-facing error message."""
+    if result.message:
+        return result.message
+
     if result.error_code == "contact_not_found":
         return "연락처를 찾지 못했습니다."
 
     if result.error_code == "delete_failed":
         return "연락처를 삭제하지 못했습니다."
+
+    if str(result.error_code or "").startswith("AUTH"):
+        return result.message or "Google Contacts 인증이 필요합니다."
 
     return "연락처 작업을 완료하지 못했습니다."
 

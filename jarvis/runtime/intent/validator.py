@@ -83,7 +83,7 @@ class IntentValidator:
             if str(data.get(key, "")).strip() == "":
                 return MISSING_REQUIRED_PARAMETER, f"Missing required parameter: {key}"
 
-        date_error = validate_dates(data)
+        date_error = validate_weather_dates(data) if intent.ability == "weather" else validate_dates(data)
 
         if date_error:
             return INVALID_DATE_TIME, date_error
@@ -131,6 +131,45 @@ def validate_dates(data):
     return ""
 
 
+def validate_weather_dates(data):
+    """Return date/time validation message for Weather query parameters."""
+    date_value = str(data.get("date", "") or "").strip()
+    datetime_value = str(data.get("datetime", "") or "").strip()
+    time_value = str(data.get("time", "") or "").strip()
+
+    allowed_relative_dates = {
+        "today",
+        "tomorrow",
+        "day_after_tomorrow",
+        "current",
+        "now",
+        "오늘",
+        "내일",
+        "모레",
+        "지금",
+        "현재",
+        "당장",
+    }
+    current_time_values = {"current", "now", "지금", "현재", "당장", "현재 시각", "지금 현재"}
+
+    if date_value and date_value not in allowed_relative_dates:
+        try:
+            date.fromisoformat(date_value)
+        except ValueError:
+            return f"Invalid date: {date_value}"
+
+    if datetime_value and datetime_value not in current_time_values:
+        try:
+            datetime.fromisoformat(datetime_value)
+        except ValueError:
+            return f"Invalid datetime: {datetime_value}"
+
+    if time_value and time_value not in current_time_values and not re.match(r"^\d{2}:\d{2}(:\d{2})?$", time_value):
+        return f"Invalid time: {time_value}"
+
+    return ""
+
+
 def validate_semantic_safety(intent, data):
     """Return an error when an AI write intent is not grounded in the transcript."""
     if intent.ability == "todo" and intent.action == "create":
@@ -156,20 +195,26 @@ def validate_semantic_safety(intent, data):
 def has_todo_create_signal(text):
     """Return whether text explicitly asks to create a Todo."""
     normalized = str(text or "")
-    return any(
-        token in normalized
-        for token in [
-            "추가",
-            "등록",
-            "저장",
-            "넣어",
-            "해야 할 일",
-            "할 일로",
-            "할일로",
-            "todo",
-            "to-do",
-        ]
-    )
+    create_tokens = [
+        "추가",
+        "등록",
+        "저장",
+        "넣어",
+        "해야 할 일",
+        "할 일로",
+        "할일로",
+        "todo",
+        "to-do",
+    ]
+    if any(token in normalized for token in create_tokens):
+        return True
+
+    purchase_tokens = ["사기"]
+    read_context_tokens = ["목록", "보기", "보여", "알려", "조회", "list"]
+    if any(token in normalized for token in purchase_tokens):
+        return not any(token in normalized for token in read_context_tokens)
+
+    return False
 
 
 def has_reminder_time_signal(intent, data):

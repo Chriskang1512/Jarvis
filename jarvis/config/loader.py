@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from jarvis.config.settings import AIIntentConfig, CalendarConfig, ConversationConfig, JarvisConfig, MemoryStoreConfig, STTConfig
+from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, MailConfig, MemoryStoreConfig, STTConfig
 from jarvis.config.settings import TTSConfig
 from jarvis.config.settings import WeatherConfig
 
@@ -40,6 +40,8 @@ def create_config_from_dict(config_data):
     memory_store_data = config_data.get("memory_store", {})
     weather_data = config_data.get("weather", {})
     calendar_data = config_data.get("calendar", {})
+    contacts_data = config_data.get("contacts", {})
+    mail_data = config_data.get("mail", {})
     ai_intent_data = config_data.get("ai_intent", {})
 
     chat_provider = config_data.get("chat_provider", config_data.get("provider", "mock"))
@@ -58,6 +60,8 @@ def create_config_from_dict(config_data):
         memory_store=create_memory_store_config(memory_store_data),
         weather=create_weather_config(weather_data),
         calendar=create_calendar_config(calendar_data),
+        contacts=create_contacts_config(contacts_data),
+        mail=create_mail_config(mail_data),
         ai_intent=create_ai_intent_config(ai_intent_data),
     )
 
@@ -139,6 +143,36 @@ def create_calendar_config(calendar_data):
         google_client_secret_path=os.getenv(
             "JARVIS_GOOGLE_CLIENT_SECRET_PATH",
             calendar_data.get("google_client_secret_path", "client_secret.json"),
+        ),
+    )
+
+
+def create_contacts_config(contacts_data):
+    """Create ContactsConfig using known keys from config and env."""
+    return ContactsConfig(
+        provider=os.getenv("JARVIS_CONTACTS_PROVIDER", contacts_data.get("provider", "memory")),
+        google_credentials_path=os.getenv(
+            "JARVIS_GOOGLE_TOKEN_PATH",
+            contacts_data.get("google_credentials_path", "data/credentials/google_token.json"),
+        ),
+        google_client_secret_path=os.getenv(
+            "JARVIS_GOOGLE_CLIENT_SECRET_PATH",
+            contacts_data.get("google_client_secret_path", "client_secret.json"),
+        ),
+    )
+
+
+def create_mail_config(mail_data):
+    """Create MailConfig using known keys from config and env."""
+    return MailConfig(
+        provider=os.getenv("JARVIS_MAIL_PROVIDER", mail_data.get("provider", "mock")),
+        google_credentials_path=os.getenv(
+            "JARVIS_GOOGLE_TOKEN_PATH",
+            mail_data.get("google_credentials_path", "data/credentials/google_token.json"),
+        ),
+        google_client_secret_path=os.getenv(
+            "JARVIS_GOOGLE_CLIENT_SECRET_PATH",
+            mail_data.get("google_client_secret_path", "client_secret.json"),
         ),
     )
 

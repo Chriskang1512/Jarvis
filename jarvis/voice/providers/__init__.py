@@ -27,6 +27,7 @@ from jarvis.voice.playback import (
     play_wav_file,
 )
 from jarvis.debug_trace import read_env_file_value, trace_event
+from jarvis.privacy import contains_sensitive_text
 
 
 _TTS_PLAYBACK_LOCK = threading.RLock()
@@ -298,6 +299,10 @@ class MicrophoneSpeechToTextProvider:
                 silence_timeout=self.silence_timeout,
                 silence_threshold=self.silence_threshold,
             )
+            if not recording_metadata.get("speech_started", False):
+                trace_no_speech_recording(recording_metadata)
+                return "Speech recognition failed: no speech detected"
+
             audio_data = create_wav_bytes(recording, self.sample_rate, np)
         except Exception as error:
             return f"Microphone input failed: {error}"
@@ -611,9 +616,13 @@ class OpenAITextToSpeechProvider(DiagnosticsMixin):
             )
             print(error)
         finally:
-            if should_keep_tts_audio():
+            is_sensitive_audio = contains_sensitive_text(text)
+
+            if should_keep_tts_audio() and (not is_sensitive_audio or should_retain_sensitive_tts_audio()):
                 print(f"TTS audio saved: {audio_path}")
             else:
+                if should_keep_tts_audio() and is_sensitive_audio:
+                    trace_event("voice.tts.audio.discarded", reason="sensitive_text", audio_file_path=audio_path)
                 remove_file_if_exists(audio_path)
 
     def generate_audio(self, text):
@@ -1088,6 +1097,10 @@ def record_microphone_wav_bytes(
             silence_timeout=silence_timeout,
             silence_threshold=silence_threshold,
         )
+        if not _metadata.get("speech_started", False):
+            trace_no_speech_recording(_metadata)
+            return "Speech recognition failed: no speech detected"
+
         audio_data = create_wav_bytes(recording, sample_rate, np)
         keep_stt_audio(audio_data)
         return audio_data
@@ -1128,6 +1141,18 @@ def record_sounddevice_audio(
         speech_start_dbfs=recording_metadata["speech_start_dbfs"],
     )
     return recording, recording_metadata
+
+
+def trace_no_speech_recording(recording_metadata):
+    """Emit a trace when VAD never saw speech and STT should be skipped."""
+    trace_event(
+        "voice.stt.recording.skipped",
+        reason="no_speech_detected",
+        end_reason=recording_metadata.get("end_reason", ""),
+        recorded_seconds=recording_metadata.get("recorded_seconds", 0.0),
+        max_rms=recording_metadata.get("max_rms", 0.0),
+        max_dbfs=recording_metadata.get("max_dbfs", -120.0),
+    )
 
 
 def record_until_silence(
@@ -1282,6 +1307,16 @@ def should_keep_tts_audio():
 
     if value == "":
         value = read_env_file_value("JARVIS_KEEP_TTS_AUDIO")
+
+    return value.lower() in ["1", "true", "yes", "on"]
+
+
+def should_retain_sensitive_tts_audio():
+    """Return whether TTS files containing sensitive text may be retained."""
+    value = os.environ.get("JARVIS_RETAIN_SENSITIVE_TTS_AUDIO", "")
+
+    if value == "":
+        value = read_env_file_value("JARVIS_RETAIN_SENSITIVE_TTS_AUDIO")
 
     return value.lower() in ["1", "true", "yes", "on"]
 

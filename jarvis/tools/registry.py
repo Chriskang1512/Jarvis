@@ -60,6 +60,7 @@ def register_default_abilities(registry, config=None):
     from jarvis.abilities.native.calendar import CalendarAbility
     from jarvis.abilities.native.calendar.provider import create_calendar_provider
     from jarvis.abilities.native.contacts import ContactAbility
+    from jarvis.abilities.native.mail import MailAbility
     from jarvis.abilities.native.memory import MemoryAbility
     from jarvis.abilities.native.reminder import ReminderAbility
     from jarvis.abilities.native.todo import TodoAbility
@@ -80,9 +81,16 @@ def register_default_abilities(registry, config=None):
     todo_event_bus.subscribe("TodoCompleted", ReminderScheduleHandler(reminder_engine, event_bus=todo_event_bus))
     todo_event_bus.subscribe("TodoDeleted", ReminderScheduleHandler(reminder_engine, event_bus=todo_event_bus))
 
+    contact_ability = ContactAbility(config=getattr(runtime_config, "contacts", None))
     ability_registry = AbilityRegistry()
     ability_registry.register(CalendarAbility(provider=calendar_provider, reminder_engine=reminder_engine))
-    ability_registry.register(ContactAbility())
+    ability_registry.register(contact_ability)
+    ability_registry.register(
+        MailAbility(
+            config=getattr(runtime_config, "mail", None),
+            contacts_provider=getattr(contact_ability, "provider", None),
+        )
+    )
     ability_registry.register(TodoAbility(repository=TodoRepository(event_bus=todo_event_bus)))
     ability_registry.register(WeatherAbility(provider=weather_provider))
     ability_registry.register(MemoryAbility())

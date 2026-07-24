@@ -1,3 +1,5 @@
+"""Calendar ability result models and Korean formatter."""
+
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 
@@ -16,6 +18,7 @@ class CalendarEvent:
     description: str = ""
     location: str = ""
     participants: list[str] = field(default_factory=list)
+    reminder_minutes: list[int] = field(default_factory=list)
 
     def to_dict(self):
         """Return a serializable event dictionary."""
@@ -47,51 +50,89 @@ class CalendarResult(BaseAbilityResult):
         if self.message:
             return self.message
 
-        if self.action == "list":
-            return format_list_response_v2(self)
+        if self.action in {"list", "get"}:
+            return format_list_response(self)
 
         if self.action == "create":
-            if self.success and len(self.events) > 0:
-                return "일정을 등록했습니다."
+            if self.success and self.events:
+                return format_write_response("등록", self.events[0])
+            return "일정을 등록하려면 확인이 필요합니다. 등록할까요?"
 
-            return "일정 생성은 확인이 필요합니다."
+        if self.action == "update":
+            if self.success and self.events:
+                return format_write_response("수정", self.events[0])
+            return "일정을 수정하려면 확인이 필요합니다. 수정할까요?"
 
         if self.action == "delete":
             if self.success and self.count > 0:
                 return "일정을 삭제했습니다."
-
-            if self.success:
-                return "삭제할 일정을 찾지 못했습니다."
-
-            return "일정 삭제에 실패했습니다."
-
-        if self.action == "update":
-            if self.success:
-                return "일정을 수정했습니다."
-
-            return "일정 수정은 확인이 필요합니다."
+            return "삭제할 일정을 찾지 못했습니다."
 
         return str(self)
 
 
-def format_list_response_v2(result):
+def format_list_response(result):
     """Return a natural language list response using the query date."""
     date_label = calendar_date_label(result)
+    events = list(getattr(result, "events", []) or [])
 
-    if len(result.events) == 0:
-        return f"{date_label}\uc740 \uc77c\uc815\uc774 \uc5c6\uc2b5\ub2c8\ub2e4."
+    if len(events) == 0:
+        return f"{date_label} 일정은 없습니다."
 
-    lines = [f"{date_label} \uc77c\uc815\uc740 {len(result.events)}\uac74\uc785\ub2c8\ub2e4."]
+    if getattr(result, "date", "") == "next" or date_label == "다음":
+        return f"다음 일정은 {format_event_summary(events[0])}입니다."
 
-    for event in result.events:
-        prefix = format_korean_time(event.time)
+    lines = [f"{date_label} 일정은 {len(events)}건입니다."]
 
-        if prefix:
-            lines.append(f"{prefix} {event.title}")
-        else:
-            lines.append(event.title)
+    for index, event in enumerate(events, start=1):
+        lines.append(f"{index}. {format_event_summary(event)}")
 
     return "\n".join(lines)
+
+
+def format_list_response_v2(result):
+    """Compatibility alias for older callers."""
+    return format_list_response(result)
+
+
+def format_write_response(verb, event):
+    """Return verified create/update response with saved details."""
+    if verb == "등록":
+        return f"일정을 등록했습니다. {format_event_detail(event)}"
+
+    if verb == "수정":
+        return f"일정을 수정했습니다. {format_event_detail(event)}"
+
+    return f"{verb}이 완료되었습니다. {format_event_detail(event)}"
+
+
+def format_event_detail(event):
+    """Return a concrete saved-event description."""
+    detail = format_event_summary(event)
+    reminders = format_reminders(getattr(event, "reminder_minutes", []) or [])
+
+    if reminders:
+        return f"{detail}이며, {reminders}이 설정되어 있습니다."
+
+    return f"{detail}입니다."
+
+
+def format_event_summary(event):
+    """Return compact event summary for speech."""
+    title = str(getattr(event, "title", "") or "일정")
+    date_text = format_korean_date(str(getattr(event, "date", "") or ""))
+    time_text = format_korean_time(str(getattr(event, "time", "") or ""))
+    location = str(getattr(event, "location", "") or "").strip()
+
+    if time_text:
+        summary = f"{date_text} {time_text} {title}".strip()
+    else:
+        summary = f"{date_text} 종일 {title}".strip()
+
+    if location:
+        summary = f"{summary}, 장소는 {location}"
+
+    return summary
 
 
 def calendar_date_label(result):
@@ -99,29 +140,29 @@ def calendar_date_label(result):
     value = getattr(result, "date", "") or first_event_date(result)
 
     if value == "week":
-        return "\uc774\ubc88 \uc8fc"
+        return "이번 주"
 
     if value == "next_week":
-        return "\ub2e4\uc74c \uc8fc"
+        return "다음 주"
 
     if value == "next":
-        return "\ub2e4\uc74c"
+        return "다음"
 
     current_date = today()
     tomorrow_date = (date.fromisoformat(current_date) + timedelta(days=1)).isoformat()
 
     if value in ["", "today", current_date]:
-        return "\uc624\ub298"
+        return "오늘"
 
     if value in ["tomorrow", tomorrow_date]:
-        return "\ub0b4\uc77c"
+        return "내일"
 
     try:
         parsed = date.fromisoformat(value)
     except ValueError:
         return value
 
-    return f"{parsed.year}\ub144 {parsed.month}\uc6d4 {parsed.day}\uc77c"
+    return f"{parsed.year}년 {parsed.month}월 {parsed.day}일"
 
 
 def first_event_date(result):
@@ -132,22 +173,23 @@ def first_event_date(result):
     return getattr(result.events[0], "date", "")
 
 
-def format_list_response(result):
-    """Return a natural language list response."""
-    if len(result.events) == 0:
-        return "오늘은 일정이 없습니다."
+def format_korean_date(value):
+    """Return a spoken Korean date label."""
+    try:
+        parsed = date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return str(value or "").strip()
 
-    lines = [f"오늘 일정은 {len(result.events)}건입니다."]
+    current_date = today()
+    tomorrow_date = (date.fromisoformat(current_date) + timedelta(days=1)).isoformat()
 
-    for event in result.events:
-        prefix = format_korean_time(event.time)
+    if value == current_date:
+        return "오늘"
 
-        if prefix:
-            lines.append(f"{prefix} {event.title}")
-        else:
-            lines.append(event.title)
+    if value == tomorrow_date:
+        return "내일"
 
-    return "\n".join(lines)
+    return f"{parsed.month}월 {parsed.day}일"
 
 
 def format_korean_time(value):
@@ -159,8 +201,8 @@ def format_korean_time(value):
         hour_text, minute_text = value.split(":", 1)
         hour = int(hour_text)
         minute = int(minute_text)
-    except ValueError:
-        return value
+    except (TypeError, ValueError):
+        return str(value or "")
 
     period = "오전" if hour < 12 else "오후"
     display_hour = hour if 1 <= hour <= 12 else abs(hour - 12)
@@ -172,3 +214,31 @@ def format_korean_time(value):
         return f"{period} {display_hour}시"
 
     return f"{period} {display_hour}시 {minute}분"
+
+
+def format_reminders(minutes):
+    """Return a natural reminder summary."""
+    values = []
+
+    for value in minutes:
+        try:
+            values.append(int(value))
+        except (TypeError, ValueError):
+            continue
+
+    if not values:
+        return ""
+
+    labels = [format_reminder_minutes(value) for value in values]
+    return ", ".join(labels) + " 알림"
+
+
+def format_reminder_minutes(value):
+    """Return natural Korean reminder offset."""
+    if value == 1440:
+        return "하루 전"
+
+    if value % 60 == 0:
+        return f"{value // 60}시간 전"
+
+    return f"{value}분 전"

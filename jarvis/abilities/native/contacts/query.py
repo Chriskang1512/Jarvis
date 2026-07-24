@@ -13,6 +13,7 @@ class ContactQuery:
     phone: str = ""
     birthday: str = ""
     attribute: str = "contact"
+    external_id: str = ""
     source: str = "user"
     confirmed: bool = False
     raw_text: str = ""
@@ -28,6 +29,7 @@ class ContactQuery:
             "phone": self.phone,
             "birthday": self.birthday,
             "attribute": self.attribute,
+            "external_id": self.external_id,
             "source": self.source,
             "confirmed": self.confirmed,
             "raw_text": self.raw_text,

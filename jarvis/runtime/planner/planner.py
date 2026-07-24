@@ -1,5 +1,6 @@
 ﻿import os
 import re
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from jarvis.debug_trace import trace_event
@@ -48,10 +49,14 @@ class RuntimePlanner:
             trace_plan(plan)
             return plan
 
+        trace_intent_rule_candidates(raw_text, registry)
+
         if self.intent_parser is not None and should_force_intent_parser():
             intent_plan = self.create_intent_plan(raw_text, registry)
+            trace_intent_ai_plan(intent_plan)
 
             if intent_plan is not None and (intent_plan.step_count > 0 or intent_plan.requires_clarification or intent_plan.unsupported_reason or intent_plan.intent_error):
+                trace_intent_resolve(intent_plan, "ai_forced")
                 trace_plan(intent_plan)
                 return intent_plan
 
@@ -61,12 +66,18 @@ class RuntimePlanner:
             and not is_calendar_reminder_rule_candidate(raw_text)
         ):
             intent_plan = self.create_intent_plan(raw_text, registry)
+            trace_intent_ai_plan(intent_plan)
 
             if intent_plan is not None:
+                trace_intent_resolve(intent_plan, "ai_before_rule")
                 trace_plan(intent_plan)
                 return intent_plan
 
         clauses = split_plan_clauses(raw_text)
+
+        if len(clauses) == 1 and is_calendar_reminder_rule_candidate(raw_text):
+            clauses = split_calendar_reminder_clause(raw_text)
+
         steps = []
 
         for clause in clauses:
@@ -75,12 +86,15 @@ class RuntimePlanner:
             if step is not None:
                 steps.append(step)
 
+        steps = attach_calendar_reminder_overrides(steps)
         plan = ExecutionPlan(raw_text=raw_text, steps=tuple(steps))
 
         if plan.step_count == 0 and self.intent_parser is not None:
             intent_plan = self.create_intent_plan(raw_text, registry)
+            trace_intent_ai_plan(intent_plan)
 
             if intent_plan is not None:
+                trace_intent_resolve(intent_plan, "rule_failed_ai_fallback")
                 trace_plan(intent_plan)
                 return intent_plan
 
@@ -94,6 +108,7 @@ class RuntimePlanner:
             return plan
 
         trace_plan(plan)
+        trace_intent_resolve(plan, "rule_plan")
         return plan
 
     def create_intent_plan(self, text, registry):
@@ -126,6 +141,7 @@ class RuntimePlanner:
             if step is not None:
                 steps.append(step)
 
+        steps = attach_calendar_reminder_overrides(steps)
         return ExecutionPlan(raw_text=text, steps=tuple(steps))
 
     def create_step(self, clause, registry, previous_steps):
@@ -166,6 +182,30 @@ class RuntimePlanner:
                     index=len(previous_steps) + 1,
                     tool_name=selection["tool"].metadata.name,
                     action="create",
+                    input_data=dict(selection["input_data"]),
+                    raw_text=normalized,
+                )
+
+            calendar_tool = registry.get("calendar")
+
+            if calendar_tool is not None:
+                return ExecutionStep(
+                    index=len(previous_steps) + 1,
+                    tool_name="calendar",
+                    action="create",
+                    input_data={"text": normalized},
+                    raw_text=normalized,
+                )
+
+        mail_text = corrected_mail_stt_variant(normalized)
+        if is_mail_command(normalized):
+            selection = select_best_tool(registry, mail_text, self.min_confidence, preferred_tool="mail")
+
+            if selection is not None:
+                return ExecutionStep(
+                    index=len(previous_steps) + 1,
+                    tool_name=selection["tool"].metadata.name,
+                    action=infer_action("mail", mail_text),
                     input_data=dict(selection["input_data"]),
                     raw_text=normalized,
                 )
@@ -296,7 +336,7 @@ def select_best_tool(registry, text, min_confidence, preferred_tool=""):
 
 def create_rule_fallback_selection(registry, text):
     """Return a low-level rule fallback for short common intents."""
-    if "날씨" in text:
+    if is_weather_query_command(text):
         tool = registry.get("weather")
 
         if tool is not None:
@@ -314,19 +354,115 @@ def create_rule_fallback_selection(registry, text):
         if tool is not None:
             return {"tool": tool, "confidence": 0.9, "input_data": {"text": text}}
 
+    if is_mail_command(text):
+        tool = registry.get("mail")
+
+        if tool is not None:
+            return {"tool": tool, "confidence": 0.9, "input_data": {"text": text}}
+
     if is_todo_command(text):
         tool = registry.get("todo")
 
         if tool is not None:
             return {"tool": tool, "confidence": 0.9, "input_data": {"text": text}}
 
-    if contains_reminder_command(text):
+    if is_standalone_reminder_create_command(text):
         tool = registry.get("reminder")
 
         if tool is not None:
             return {"tool": tool, "confidence": 0.8, "input_data": {"text": text}}
 
     return None
+
+
+def trace_intent_rule_candidates(text, registry):
+    """Emit rule candidates before Planner picks a route."""
+    candidates = collect_rule_candidates(text, registry)
+    candidate_text = ",".join(f"{item['ability']}.{item['action']}:{item['score']:.2f}" for item in candidates) or "-"
+    trace_event("intent_rule.candidates", candidates=candidate_text)
+
+
+def collect_rule_candidates(text, registry):
+    """Return diagnostics-only rule candidates for intent resolution."""
+    normalized = normalize_clause(text)
+    candidates = []
+
+    if is_calendar_reminder_rule_candidate(normalized):
+        candidates.append({"ability": "calendar", "action": "create", "score": 0.92})
+        candidates.append({"ability": "reminder", "action": "modifier", "score": 0.9})
+
+    if registry is not None:
+        for tool in registry.list():
+            if tool.metadata.deprecated:
+                continue
+
+            candidate = select_candidate(tool, normalized)
+
+            if candidate is None:
+                continue
+
+            candidates.append(
+                {
+                    "ability": tool.metadata.name,
+                    "action": infer_action(tool.metadata.name, normalized),
+                    "score": float(candidate.get("confidence", 0.0)),
+                }
+            )
+
+    if is_calendar_create_command(normalized):
+        candidates.append({"ability": "calendar", "action": "create", "score": 0.86})
+
+    if is_weather_query_command(normalized):
+        candidates.append({"ability": "weather", "action": "query", "score": 0.86})
+
+    if is_standalone_reminder_create_command(normalized):
+        candidates.append({"ability": "reminder", "action": "create", "score": 0.8})
+
+    if is_mail_command(normalized):
+        candidates.append({"ability": "mail", "action": infer_action("mail", normalized), "score": 0.88})
+
+    ranked = {}
+
+    for candidate in candidates:
+        key = (candidate["ability"], candidate["action"])
+        previous = ranked.get(key)
+
+        if previous is None or candidate["score"] > previous["score"]:
+            ranked[key] = candidate
+
+    return sorted(ranked.values(), key=lambda candidate: candidate["score"], reverse=True)
+
+
+def trace_intent_ai_plan(plan):
+    """Emit a compact AI intent candidate summary from a produced plan."""
+    if plan is None:
+        trace_event("intent_ai.result", result="-", step_count=0)
+        return
+
+    result = ",".join(f"{step.tool_name}.{step.action or '-'}" for step in plan.steps) or "-"
+    trace_event(
+        "intent_ai.result",
+        result=result,
+        step_count=plan.step_count,
+        requires_clarification=plan.requires_clarification,
+        intent_error=plan.intent_error,
+    )
+
+
+def trace_intent_resolve(plan, reason):
+    """Emit the final intent route chosen by the planner."""
+    if plan is None:
+        trace_event("intent_resolve.selected", selected="-", reason=reason)
+        return
+
+    selected = ",".join(f"{step.tool_name}.{step.action or '-'}" for step in plan.steps) or "-"
+    trace_event(
+        "intent_resolve.selected",
+        selected=selected,
+        reason=reason,
+        step_count=plan.step_count,
+        requires_clarification=plan.requires_clarification,
+    )
 
 
 def trace_plan(plan):
@@ -378,6 +514,58 @@ def split_plan_clauses(text):
     return [clause for clause in clauses if clause]
 
 
+def split_calendar_reminder_clause(text):
+    """Split a calendar event command from an attached relative reminder modifier."""
+    normalized = normalize_clause(text)
+    reminder_clause = extract_relative_reminder_clause(normalized)
+
+    if reminder_clause == "":
+        return [normalized]
+
+    calendar_clause = remove_relative_reminder_clause(normalized)
+    calendar_clause = normalize_calendar_create_clause(calendar_clause)
+
+    return [calendar_clause, reminder_clause]
+
+
+def extract_relative_reminder_clause(text):
+    """Return a reminder modifier such as '1시간 전 알려줘' from text."""
+    normalized = str(text or "")
+    pattern = r"((?:\d+|한|하나|두|둘|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*(?:분|시간)\s*전(?:에)?\s*(?:알려\s*줘|알려줘|알려|알림|알람|깨워\s*줘|깨워줘).*)$"
+    match = re.search(pattern, normalized)
+
+    if not match:
+        return ""
+
+    return normalize_clause(match.group(1))
+
+
+def remove_relative_reminder_clause(text):
+    """Remove a trailing relative reminder modifier from a calendar command."""
+    normalized = str(text or "")
+    reminder_clause = extract_relative_reminder_clause(normalized)
+
+    if reminder_clause:
+        normalized = normalized[: -len(reminder_clause)].strip()
+
+    normalized = re.sub(r"\s*(그리고|하고|해\s*주고|해주고|주고|넣고|넣어\s*주고|넣어주고)\s*$", " ", normalized)
+    normalized = re.sub(r"\s*(알람|알림|리마인더)\s*도?\s*$", " ", normalized)
+    return normalize_clause(normalized)
+
+
+def normalize_calendar_create_clause(text):
+    """Make a calendar-like clause explicit enough for Calendar routing."""
+    normalized = normalize_clause(text)
+
+    if not has_calendar_event_signal(normalized):
+        return normalized
+
+    if not is_calendar_create_command(normalized):
+        normalized = f"{normalized} 일정 등록"
+
+    return normalize_clause(normalized)
+
+
 def split_attached_and(text):
     """Split Korean attached connector forms such as '등록하고'."""
     value = str(text or "").strip()
@@ -385,17 +573,30 @@ def split_attached_and(text):
     if value == "":
         return []
 
-    match = re.search(r"(.+?)(등록하고|추가하고|잡고|알려주고|알려 줘고)\s+(.+)", value)
+    match = re.search(
+        r"(.+?)(등록하고|등록해주고|등록해 주고|추가하고|추가해주고|추가해 주고|잡고|잡아주고|잡아 주고|넣고|넣어주고|넣어 주고|알려주고|알려 줘고)\s+(.+)",
+        value,
+    )
 
     if not match:
         return [value]
 
     first = (match.group(1) + match.group(2)).strip()
     connector = match.group(2)
-    if connector in {"등록하고", "추가하고"}:
+    if connector in {"등록하고", "등록해주고", "등록해 주고", "추가하고", "추가해주고", "추가해 주고"}:
         first = re.sub(r"하고$", "", first)
-    elif connector == "잡고":
+        first = re.sub(r"해\s*주고$", "해 줘", first)
+    elif connector in {"잡고", "잡아주고", "잡아 주고"}:
         first = re.sub(r"잡고$", "잡아 줘", first)
+        first = re.sub(r"잡아\s*주고$", "잡아 줘", first)
+    elif connector in {"넣고", "넣어주고", "넣어 주고"}:
+        if any(token in first for token in ["일정", "약속", "예약", "만나기", "회의"]):
+            first = re.sub(r"(알람|알림|리마인더)\s*도?\s*넣(?:어\s*주)?고$", "일정 등록해 줘", first)
+            first = re.sub(r"넣고$", "넣어 줘", first)
+            first = re.sub(r"넣어\s*주고$", "넣어 줘", first)
+        else:
+            first = re.sub(r"넣고$", "넣어 줘", first)
+            first = re.sub(r"넣어\s*주고$", "넣어 줘", first)
     elif connector in {"알려주고", "알려 줘고"}:
         first = re.sub(r"알려\s*주고$", "알려줘", first)
 
@@ -413,19 +614,69 @@ def normalize_clause(clause):
     return text.strip(" .?!")
 
 
+KOREAN_NUMBER_WORDS = {
+    "\ud55c": 1,
+    "\ud558\ub098": 1,
+    "\ub450": 2,
+    "\ub458": 2,
+    "\uc138": 3,
+    "\uc14b": 3,
+    "\ub124": 4,
+    "\ub137": 4,
+    "\ub2e4\uc12f": 5,
+    "\uc5ec\uc12f": 6,
+    "\uc77c\uacf1": 7,
+    "\uc5ec\ub35f": 8,
+    "\uc544\ud649": 9,
+    "\uc5f4": 10,
+}
+
+
+def parse_korean_number_word(value):
+    """Return integer for a small Korean native number word."""
+    return KOREAN_NUMBER_WORDS.get(str(value or "").strip())
+
+
+def parse_relative_reminder_minutes(text):
+    """Return minutes for relative reminder phrases such as '1 hour before'."""
+    normalized = str(text or "")
+
+    day_match = re.search(r"(\d+)\s*\uc77c\s*\uc804", normalized)
+    if day_match:
+        return int(day_match.group(1)) * 1440
+
+    if any(token in normalized for token in ["\ud558\ub8e8 \uc804", "\ud558\ub8e8\uc804\uc5d0", "\ud558\ub8e8 \uc804\uc5d0"]):
+        return 1440
+
+    hour_match = re.search(r"(\d+)\s*\uc2dc\uac04\s*\uc804", normalized)
+    if hour_match:
+        return int(hour_match.group(1)) * 60
+
+    minute_match = re.search(r"(\d+)\s*\ubd84\s*\uc804", normalized)
+    if minute_match:
+        return int(minute_match.group(1))
+
+    word_pattern = "|".join(re.escape(word) for word in sorted(KOREAN_NUMBER_WORDS, key=len, reverse=True))
+
+    word_hour_match = re.search(rf"({word_pattern})\s*\uc2dc\uac04\s*\uc804", normalized)
+    if word_hour_match:
+        return parse_korean_number_word(word_hour_match.group(1)) * 60
+
+    word_minute_match = re.search(rf"({word_pattern})\s*\ubd84\s*\uc804", normalized)
+    if word_minute_match:
+        return parse_korean_number_word(word_minute_match.group(1))
+
+    return None
+
+
 def parse_reminder_follow_up(text):
     """Return Reminder input data for a calendar-relative reminder clause."""
-    minute_match = re.search(r"(\d+)\s*분\s*전", text)
-    hour_match = re.search(r"(\d+)\s*시간\s*전", text)
-
     if not contains_reminder_command(text):
         return None
 
-    if hour_match:
-        remind_before = int(hour_match.group(1)) * 60
-    elif minute_match:
-        remind_before = int(minute_match.group(1))
-    else:
+    remind_before = parse_relative_reminder_minutes(text)
+
+    if remind_before is None:
         return None
 
     return {
@@ -433,13 +684,80 @@ def parse_reminder_follow_up(text):
         "title": "",
         "datetime": "",
         "remind_before": remind_before,
+        "remind_before_minutes": remind_before,
         "raw_text": text,
     }
+
+
+def attach_calendar_reminder_overrides(steps):
+    """Copy calendar-relative reminder offsets onto their source calendar step."""
+    if not steps:
+        return steps
+
+    calendar_updates = {}
+
+    for step in steps:
+        if step.tool_name != "reminder":
+            continue
+
+        remind_before = read_step_remind_before_minutes(step.input_data)
+
+        if remind_before is None:
+            continue
+
+        for dependency in step.depends_on:
+            dependent_index = int(dependency or 0)
+
+            if dependent_index > 0:
+                calendar_updates[dependent_index] = remind_before
+
+    if not calendar_updates:
+        return steps
+
+    patched = []
+
+    for step in steps:
+        if step.tool_name == "calendar" and step.index in calendar_updates:
+            input_data = dict(step.input_data)
+            input_data["remind_before_minutes"] = calendar_updates[step.index]
+            patched.append(replace(step, input_data=input_data))
+        else:
+            patched.append(step)
+
+    return patched
+
+
+def read_step_remind_before_minutes(input_data):
+    """Return an integer reminder offset from planner step data."""
+    for key in ["remind_before_minutes", "remind_before"]:
+        if key not in input_data:
+            continue
+
+        try:
+            return int(input_data.get(key))
+        except (TypeError, ValueError):
+            return None
+
+    return None
 
 
 def contains_reminder_command(text):
     """Return whether text asks to notify the user."""
     return any(token in text for token in ["알려줘", "알려 줘", "알림", "알람", "챙기라고", "하라고"])
+
+
+def is_standalone_reminder_create_command(text):
+    """Return whether text should create a standalone reminder without another ability."""
+    normalized = str(text or "")
+
+    explicit_reminder = any(token in normalized for token in ["알림", "알람", "리마인더", "깨워", "챙겨", "챙기"])
+    timed_reminder = contains_reminder_command(normalized) and (
+        has_relative_reminder_signal(normalized)
+        or bool(re.search(r"\d+\s*(?:분|시간|초|시)", normalized))
+        or any(token in normalized for token in ["내일", "오늘", "모레", "아침", "점심", "저녁", "오전", "오후"])
+    )
+
+    return explicit_reminder or timed_reminder
 
 
 def is_calendar_list_command(text):
@@ -491,10 +809,43 @@ def is_calendar_create_command(text):
     create_verb = any(token in normalized for token in ["등록", "추가", "잡아", "잡고", "넣어", "만들어"])
     explicit_reminder = any(token in normalized for token in ["알림", "알람", "리마인더"])
 
-    if explicit_reminder and not any(token in normalized for token in ["일정", "약속", "예약"]):
+    if explicit_reminder and not calendar_subject:
         return False
 
     return calendar_subject and create_verb
+
+
+def is_weather_query_command(text):
+    """Return whether text asks for weather or rain information."""
+    normalized = str(text or "")
+    weather_subject = any(token in normalized for token in ["날씨", "비", "우산", "기온", "온도"])
+    weather_verb = any(token in normalized for token in ["알려", "어때", "와", "오니", "오나", "오냐", "오고", "내려", "필요", "몇 도"])
+    temporal_or_location = has_date_or_time_signal(normalized) or any(token in normalized for token in ["지금", "현재", "강릉", "서울", "잠실"])
+
+    return weather_subject and (weather_verb or temporal_or_location)
+
+
+def has_calendar_event_signal(text):
+    """Return whether text describes a calendar event domain."""
+    normalized = str(text or "")
+    subject = any(token in normalized for token in ["일정", "약속", "예약", "만나기", "회의", "미팅"])
+    meeting_phrase = "만나" in normalized or "보는" in normalized
+    has_date_or_time = has_date_or_time_signal(normalized)
+    return has_date_or_time and (subject or meeting_phrase)
+
+
+def has_date_or_time_signal(text):
+    """Return whether text contains a date or clock expression."""
+    normalized = str(text or "")
+
+    return bool(re.search(r"\d+\s*(?:월|일|시|:)", normalized)) or any(
+        token in normalized for token in ["오늘", "내일", "모레", "이번 주", "다음 주", "오전", "오후"]
+    )
+
+
+def has_relative_reminder_signal(text):
+    """Return whether text contains a relative reminder offset."""
+    return parse_relative_reminder_minutes(text) is not None
 
 
 def has_previous_tool(steps, tool_name):
@@ -532,9 +883,24 @@ def infer_action(tool_name, text):
             return "delete"
         if any(token in text for token in ["저장", "등록"]):
             return "create"
-        if any(token in text for token in ["이메일", "전화번호", "생일"]) and not any(token in text for token in ["알려", "언제", "뭐", "조회", "보여"]):
+        if any(token in text for token in ["이메일", "전화번호", "생일"]) and not any(
+            token in text for token in ["알려", "찾아", "언제", "뭐", "조회", "보여"]
+        ):
             return "update"
         return "get"
+
+    if tool_name == "mail":
+        if "답장" in text:
+            return "reply"
+        if any(token in text for token in ["보내", "전송"]):
+            return "send"
+        if parse_mail_ordinal(text) > 0 or any(token in text for token in ["읽어", "읽어줘", "본문", "내용"]):
+            return "get"
+        if any(token in str(text or "").lower() for token in ["github", "openai", "google"]) or any(
+            token in text for token in ["깃허브", "오픈", "구글", "안 읽", "오늘"]
+        ) or is_mail_keyword_search_command(text):
+            return "search"
+        return "list"
 
     if tool_name == "todo":
         if any(token in text for token in ["완료", "끝냄", "끝냈"]):
@@ -572,7 +938,23 @@ def should_intent_parser_run_first(text):
     """Return whether NLU should handle ambiguity before metadata routing."""
     normalized = str(text or "")
 
-    if any(token in normalized for token in ["잡고", "등록하고", "추가하고"]) and any(token in normalized for token in ["알려", "알림"]):
+    if any(
+        token in normalized
+        for token in [
+            "잡고",
+            "잡아주고",
+            "잡아 주고",
+            "등록하고",
+            "등록해주고",
+            "등록해 주고",
+            "추가하고",
+            "추가해주고",
+            "추가해 주고",
+            "넣고",
+            "넣어주고",
+            "넣어 주고",
+        ]
+    ) and any(token in normalized for token in ["알려", "알림", "알람"]):
         return True
 
     if "일정" in normalized and any(token in normalized for token in ["등록", "추가", "잡아", "넣어"]):
@@ -584,10 +966,25 @@ def should_intent_parser_run_first(text):
 def is_calendar_reminder_rule_candidate(text):
     """Return whether rules can safely split Calendar.create + Reminder.create."""
     normalized = str(text or "")
-    has_calendar_create = any(token in normalized for token in ["잡고", "잡아주고", "잡아 주고", "등록하고", "추가하고"])
-    has_date_or_time = any(token in normalized for token in ["오늘", "내일", "모레", "오전", "오후", "시", ":"])
-    has_relative_reminder = bool(re.search(r"\d+\s*(?:분|시간)\s*전", normalized))
-    return has_calendar_create and has_date_or_time and has_relative_reminder and contains_reminder_command(normalized)
+    has_calendar_create_connector = any(
+        token in normalized
+        for token in [
+            "잡고",
+            "잡아주고",
+            "잡아 주고",
+            "등록하고",
+            "등록해주고",
+            "등록해 주고",
+            "추가하고",
+            "추가해주고",
+            "추가해 주고",
+            "넣고",
+            "넣어주고",
+            "넣어 주고",
+        ]
+    )
+    has_calendar_create = has_calendar_create_connector or has_calendar_event_signal(normalized)
+    return has_calendar_create and has_date_or_time_signal(normalized) and has_relative_reminder_signal(normalized) and contains_reminder_command(normalized)
 
 
 def is_probable_unresolved_reminder(text):
@@ -596,7 +993,7 @@ def is_probable_unresolved_reminder(text):
     has_reminder_verb = any(token in normalized for token in ["알려", "알림", "챙겨", "챙기", "말해", "리마인드"])
     has_reminder_object = any(token in normalized for token in ["물", "약", "스트레칭", "운동", "회의", "약속"])
     has_ambiguous_time = any(token in normalized for token in ["조금", "잠깐", "나중", "있다가", "뒤에", "전에", "이따가"])
-    has_explicit_minute = bool(re.search(r"\d+\s*(?:분|시간|초)", normalized))
+    has_explicit_minute = bool(re.search(r"\d+\s*(?:분|시간|초)", normalized)) or parse_relative_reminder_minutes(normalized) is not None
 
     if has_explicit_minute:
         return False
@@ -718,6 +1115,10 @@ def input_data_from_intent(intent, context):
             data["display_name"] = data.get("person", "")
         return data
 
+    if intent.ability == "mail":
+        data["action"] = intent.action
+        return data
+
     if intent.ability == "todo":
         data["action"] = intent.action
         if "datetime" in data and "due_at" not in data:
@@ -751,12 +1152,110 @@ def is_contact_command(text):
     """Return whether text should route to Contact Ability."""
     normalized = str(text or "")
 
+    if is_mail_context_command(normalized):
+        return False
+
     if "연락처" in normalized or "주소록" in normalized:
         return True
 
     contact_fields = ["이메일", "전화번호", "생일"]
-    contact_verbs = ["알려", "언제", "뭐", "조회", "보여", "저장", "등록", "삭제", "지워"]
+    contact_verbs = ["알려", "언제", "뭐", "조회", "보여", "저장", "등록", "삭제", "지워", "바꿔", "변경", "수정"]
     return any(field in normalized for field in contact_fields) and any(verb in normalized for verb in contact_verbs)
+
+
+def is_mail_command(text):
+    """Return whether text should route to Mail Ability."""
+    normalized = corrected_mail_stt_variant(str(text or ""))
+    lowered = normalized.lower()
+    mail_subject = any(token in normalized for token in ["메일", "이메일"]) or "gmail" in lowered
+    mail_verb = any(token in normalized for token in ["알려", "보여", "조회", "검색", "읽어", "읽어줘", "찾아", "보내", "전송", "답장"])
+    mail_filter = any(token in normalized for token in ["최근", "오늘", "안 읽", "읽지 않은", "본문", "내용"])
+    known_sender = any(token in lowered for token in ["github", "openai", "google"]) or any(
+        token in normalized for token in ["깃허브", "구글", "오픈AI", "오픈 AI"]
+    )
+
+    if mail_subject and (mail_verb or mail_filter or known_sender):
+        return True
+
+    return (
+        parse_mail_ordinal(normalized) > 0
+        and any(token in normalized for token in ["읽어", "읽어줘", "본문", "내용", "답장"])
+    ) or ("답장" in normalized)
+
+
+def is_mail_context_command(text):
+    """Return whether ambiguous email wording is clearly a mailbox request."""
+    normalized = str(text or "")
+    lowered = normalized.lower()
+
+    if not (any(token in normalized for token in ["메일", "이메일"]) or "gmail" in lowered):
+        return False
+
+    mail_context_tokens = ["최근", "오늘", "안 읽", "읽지 않은", "보낸", "받은", "온 메일", "github", "openai", "google", "깃허브", "구글"]
+
+    return any(token in lowered for token in ["github", "openai", "google"]) or any(token in normalized for token in mail_context_tokens)
+
+
+def corrected_mail_stt_variant(text):
+    """Return a conservative mail correction for common STT variants."""
+    normalized = " ".join(str(text or "").split()).strip()
+
+    if not any(token in normalized for token in ["알려", "보여", "조회", "검색", "찾아"]):
+        return normalized
+
+    if any(token in normalized for token in ["메일", "이메일"]):
+        return normalized
+
+    if re.search(r"^최근\s+일\s*(?:알려|보여|조회|검색|찾아)", normalized):
+        return normalized.replace("최근 일", "최근 메일", 1)
+
+    match = re.match(r"^(.+?)\s+매일\s*(알려|보여|조회|검색|찾아)(.*)$", normalized)
+    if match and match.group(1).strip():
+        return f"{match.group(1).strip()} 메일 {match.group(2)}{match.group(3)}".strip()
+
+    return normalized
+
+
+def is_mail_keyword_search_command(text):
+    """Return whether a mail command carries a generic keyword search."""
+    normalized = " ".join(corrected_mail_stt_variant(text).split()).strip()
+
+    if not any(token in normalized for token in ["메일", "이메일"]):
+        return False
+
+    list_only_tokens = ["최근", "목록", "전체", "받은", "온 메일"]
+    body_tokens = ["본문", "내용", "읽어"]
+    known_search_tokens = ["안 읽", "읽지 않은", "오늘", "github", "openai", "google", "깃허브", "구글", "오픈AI", "오픈 AI"]
+
+    if any(token in normalized.lower() for token in ["github", "openai", "google"]):
+        return False
+
+    if any(token in normalized for token in list_only_tokens + body_tokens + known_search_tokens):
+        return False
+
+    cleaned = normalized
+    for token in ["메일", "이메일", "알려", "보여", "조회", "검색", "찾아", "줘", "좀", "관련"]:
+        cleaned = cleaned.replace(token, " ")
+
+    return bool(cleaned.strip(" .?。"))
+
+
+def parse_mail_ordinal(text):
+    """Return ordinal index for mail follow-up commands."""
+    value = str(text or "")
+    match = re.search(r"(\d+)\s*번", value)
+
+    if match:
+        return int(match.group(1))
+
+    if "이번" in value or "이번에" in value or "첫 번째" in value or "첫번째" in value:
+        return 1
+    if "두 번째" in value or "두번째" in value:
+        return 2
+    if "세 번째" in value or "세번째" in value:
+        return 3
+
+    return 0
 
 
 def is_todo_command(text):

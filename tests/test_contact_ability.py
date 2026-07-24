@@ -76,6 +76,20 @@ class TestContactAbilityVerticalSlice(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_name, "contacts")
         self.assertEqual(plan.steps[0].action, "get")
 
+    def test_planner_routes_contact_phone_search_as_get(self):
+        plan = self.dispatcher.create_plan("아야 전화번호 찾아줘")
+
+        self.assertEqual(plan.step_count, 1)
+        self.assertEqual(plan.steps[0].tool_name, "contacts")
+        self.assertEqual(plan.steps[0].action, "get")
+
+    def test_planner_routes_contact_phone_change_as_update(self):
+        plan = self.dispatcher.create_plan("차희 전화번호를 010-1234-5678로 바꿔줘")
+
+        self.assertEqual(plan.step_count, 1)
+        self.assertEqual(plan.steps[0].tool_name, "contacts")
+        self.assertEqual(plan.steps[0].action, "update")
+
 
 if __name__ == "__main__":
     unittest.main()

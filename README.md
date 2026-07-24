@@ -6,12 +6,119 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.6.0 - Sprint 17.0 Google Calendar Read Vertical Slice
+v0.6.0 - Sprint 17.5 Google Gmail Send & Reply
 
-## v0.6.0 Sprint 17.0
+## v0.6.0 Sprint 17.5
 
-Sprint 17.0 connects Jarvis to a real Google Calendar account through the
-existing Calendar Ability provider boundary.
+Sprint 17.5 completes the Google communication vertical with confirmed Gmail
+send and reply support.
+
+Key points:
+
+- Gmail keeps `gmail.readonly` and adds the minimum `gmail.send` scope.
+- Compose resolves explicit addresses first, then exact Google Contacts names
+  and aliases. Missing, invalid, or ambiguous recipients are blocked.
+- A complete provider-independent draft is previewed and stored before
+  confirmation. Confirmation sends that exact draft without reparsing.
+- Send and reply are always `confirm_required`; cancellation performs no Gmail
+  API call.
+- Per-action fingerprints block repeated confirmed sends in the runtime.
+- Successful API responses are verified by re-reading sent recipient, subject,
+  message ID, and thread ID metadata.
+- Logs retain only masked recipients, subject hashes, and body lengths.
+
+Supported examples:
+
+```text
+아야에게 내일 오후 3시에 만나자고 메일 보내줘
+test@example.com으로 테스트 메일 보내줘
+그 메일에 확인했다고 답장해줘
+```
+
+Configuration and verification details are documented in
+[`docs/google-gmail.md`](docs/google-gmail.md).
+
+## v0.6.0 Sprint 17.4
+
+Sprint 17.4 adds a read-only Gmail vertical slice through the existing Google
+provider and Ability result contracts.
+
+Key points:
+
+- `JARVIS_MAIL_PROVIDER=google` enables Gmail read access.
+- The OAuth helper `scripts/google_gmail_auth.py` adds Gmail read-only scope
+  while preserving the existing Calendar and Contacts scopes.
+- Supported read commands include recent mail, unread mail, today's mail, and
+  sender searches such as GitHub or OpenAI mail.
+- Mail lists read sender and subject only by default; send/delete/archive/label
+  changes are out of scope.
+
+Configuration details are documented in
+[`docs/google-gmail.md`](docs/google-gmail.md).
+
+## v0.6.0 Sprint 17.3
+
+Sprint 17.3 extends Google Contacts from read-only lookup to safe create/update
+operations through the existing Contact Ability contract.
+
+Key points:
+
+- `JARVIS_CONTACTS_PROVIDER=google` can use Google People API for contact reads,
+  creates, and updates.
+- Create and update require confirmation.
+- Updates must resolve to Google People API `people/...` resource names before
+  writing.
+- Ambiguous contacts return clarification instead of updating the first match.
+- Delete remains out of scope for this sprint.
+
+Configuration details are documented in
+[`docs/google-contacts.md`](docs/google-contacts.md).
+
+## v0.6.0 Sprint 17.2
+
+Sprint 17.2 adds a read-only Google Contacts vertical slice through the existing
+Contact Ability contract.
+
+Runtime path:
+
+```text
+Voice Session
+  |
+OpenAI STT
+  |
+Semantic Transcript Layer
+  |
+Intent Parser
+  |
+Planner
+  |
+RuntimeTask / Dispatcher
+  |
+Contact Ability
+  |
+GoogleContactsProvider
+  |
+Structured ContactResult
+  |
+Formatter / TTS
+```
+
+Example utterances:
+
+```text
+우수 연락처 알려줘
+아야 전화번호 찾아줘
+김민수 이메일 주소 알려줘
+```
+
+Configuration details are documented in
+[`docs/google-contacts.md`](docs/google-contacts.md).
+
+## v0.6.0 Sprint 17.1
+
+Sprint 17.1 extends Jarvis from Google Calendar read access to verified Google
+Calendar create, update, and delete writes through the existing Calendar
+Ability provider boundary.
 
 Current voice/runtime path:
 
@@ -39,9 +146,9 @@ Structured CalendarResult
 Formatter / TTS
 ```
 
-Google Calendar support in this sprint is read-only. Jarvis can query today,
-tomorrow, this week, next week, and the next upcoming Google Calendar event
-through the same result contract used by the mock provider.
+Google Calendar support now includes read and write operations. Writes require
+confirmation, support Google Calendar reminder overrides, and verify the stored
+event by reading it back before reporting success.
 
 Verified manual integration:
 

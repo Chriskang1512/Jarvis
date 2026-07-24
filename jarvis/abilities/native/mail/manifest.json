@@ -1,0 +1,37 @@
+{
+  "id": "mail",
+  "name": "mail",
+  "type": "native",
+  "permission": "safe",
+  "version": "0.1.0",
+  "author": "Jarvis",
+  "description": "Safe Gmail read, compose, send, and reply",
+  "capabilities": ["mail", "gmail", "email", "메일", "이메일"],
+  "input_schema": {"type": "object"},
+  "output_schema": "MailResult",
+  "aliases": ["mail", "gmail", "email", "메일", "이메일"],
+  "supported_intents": [
+    "mail.list",
+    "mail.search",
+    "mail.get",
+    "mail.send",
+    "mail.reply",
+    "최근 메일 알려줘",
+    "안 읽은 메일 알려줘",
+    "오늘 온 메일 알려줘",
+    "GitHub 메일 알려줘",
+    "아야에게 메일 보내줘",
+    "그 메일에 답장해줘"
+  ],
+  "examples": [
+    "최근 메일 알려줘",
+    "안 읽은 메일 알려줘",
+    "오늘 온 메일 알려줘",
+    "OpenAI 메일 알려줘",
+    "2번 읽어줘",
+    "아야에게 내일 오후 3시에 만나자고 메일 보내줘",
+    "그 메일에 확인했다고 답장해줘"
+  ],
+  "input_prefixes": ["mail", "gmail", "메일", "이메일"],
+  "route_confidence": 0.78
+}

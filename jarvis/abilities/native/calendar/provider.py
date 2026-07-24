@@ -1,6 +1,7 @@
 from dataclasses import replace
 from typing import Protocol
 
+from jarvis.abilities.native.calendar.filters import ambiguous_calendar_result, apply_calendar_query_filters
 from jarvis.abilities.native.calendar.result import CalendarEvent, CalendarResult
 from jarvis.abilities.result import AbilityHealth
 from jarvis.date_calculator import today
@@ -41,6 +42,7 @@ class MockCalendarProvider:
         """Return events matching query date scope."""
         events = [event for event in self.events if matches_query_date(event, query.date)]
         events.sort(key=lambda event: (event.date, event.time, event.title))
+        events = apply_calendar_query_filters(events, query)
         return CalendarResult(
             success=True,
             action="list",
@@ -68,6 +70,11 @@ class MockCalendarProvider:
         """Delete events by title substring or date scope when no title is given."""
         title = query.title.strip()
         event_id = str(getattr(query, "event_id", "") or "").strip()
+        matches = matching_events(self.events, query)
+
+        if event_id == "" and title != "" and len(matches) > 1:
+            return ambiguous_calendar_result(query, self.provider_name, "delete", matches)
+
         deleted = []
         kept = []
 
@@ -93,6 +100,12 @@ class MockCalendarProvider:
 
     def update_event(self, query):
         """Patch matching events with changed fields only."""
+        event_id = str(getattr(query, "event_id", "") or "").strip()
+        matches = matching_events(self.events, query)
+
+        if event_id == "" and len(matches) > 1:
+            return ambiguous_calendar_result(query, self.provider_name, "update", matches)
+
         updated = []
         kept = []
 
@@ -139,12 +152,13 @@ def create_calendar_provider(config=None):
     provider_name = str(provider_name or "mock").lower()
 
     if provider_name == "google":
-        from jarvis.providers.google.config import GoogleProviderConfig
+        from jarvis.providers.google.config import GOOGLE_CALENDAR_SCOPE, GoogleProviderConfig
         from jarvis.providers.google.calendar import GoogleCalendarProvider as RealGoogleCalendarProvider
 
         google_config = GoogleProviderConfig(
             credentials_path=getattr(config, "google_credentials_path", "data/credentials/google_token.json"),
             client_secret_path=getattr(config, "google_client_secret_path", "client_secret.json"),
+            scopes=(GOOGLE_CALENDAR_SCOPE,),
             timezone=getattr(config, "timezone", "Asia/Seoul"),
         )
         return RealGoogleCalendarProvider(config=google_config)
@@ -186,6 +200,11 @@ def matches_update_target(event, query):
 
     query_date = str(getattr(query, "date", "") or "").strip()
     return query_date != "" and matches_query_date(event, query_date)
+
+
+def matching_events(events, query):
+    """Return mutation target candidates for a query."""
+    return [event for event in events if matches_update_target(event, query)]
 
 
 def patch_calendar_event(event, query):
