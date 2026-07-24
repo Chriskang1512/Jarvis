@@ -32,6 +32,10 @@
 - Stable `BACKOFF`, `WAIT`, `REAUTH`, `FALLBACK`, and `ABORT` strategies with
   fallback behavior after retry exhaustion.
 - Checkpoint-friendly serialized Recovery Decision contracts for Sprint 18.3.
+- `HIGH`, `NORMAL`, and `LOW` recovery priorities with a stable Scheduler queue
+  key.
+- `FROM_STEP`, `FROM_CHECKPOINT`, and `FULL_RESTART` resume modes so Task State
+  Machine does not interpret Health Reason.
 - Health reason propagation into Validator issues and `OPT-005` audit entries.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
@@ -77,7 +81,7 @@
 
 ### Verified
 
-- Full regression suite: `756 tests OK (skipped=2)`.
+- Full regression suite: `757 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

@@ -28,6 +28,18 @@ class RecoveryStrategy(str, Enum):
     ABORT = "ABORT"
 
 
+class RecoveryPriority(str, Enum):
+    HIGH = "HIGH"
+    NORMAL = "NORMAL"
+    LOW = "LOW"
+
+
+class ResumeMode(str, Enum):
+    FROM_CHECKPOINT = "FROM_CHECKPOINT"
+    FROM_STEP = "FROM_STEP"
+    FULL_RESTART = "FULL_RESTART"
+
+
 @dataclass(frozen=True)
 class RecoveryDecision:
     retry_allowed: bool
@@ -37,6 +49,8 @@ class RecoveryDecision:
     max_retry: int | None = 0
     recovery_strategy: RecoveryStrategy = RecoveryStrategy.ABORT
     exhausted_strategy: RecoveryStrategy = RecoveryStrategy.ABORT
+    priority: RecoveryPriority = RecoveryPriority.NORMAL
+    resume_mode: ResumeMode = ResumeMode.FROM_CHECKPOINT
 
     def __post_init__(self):
         if self.max_retry is not None and int(self.max_retry) < 0:
@@ -58,6 +72,19 @@ class RecoveryDecision:
             return self.recovery_strategy
         return self.exhausted_strategy
 
+    def scheduler_key(self):
+        """Return a stable ascending key for recovery queue ordering."""
+        priority_order = {
+            RecoveryPriority.HIGH: 0,
+            RecoveryPriority.NORMAL: 1,
+            RecoveryPriority.LOW: 2,
+        }
+        return (
+            priority_order[self.priority],
+            self.retry_after_seconds if self.retry_after_seconds is not None else 0,
+            self.recovery_strategy.value,
+        )
+
     def to_dict(self):
         """Return a checkpoint and journal friendly recovery contract."""
         return {
@@ -68,6 +95,8 @@ class RecoveryDecision:
             "max_retry": self.max_retry,
             "recovery_strategy": self.recovery_strategy.value,
             "exhausted_strategy": self.exhausted_strategy.value,
+            "priority": self.priority.value,
+            "resume_mode": self.resume_mode.value,
         }
 
 
@@ -84,6 +113,8 @@ class HealthRecoveryPolicy:
                 max_retry=0,
                 recovery_strategy=RecoveryStrategy.NONE,
                 exhausted_strategy=RecoveryStrategy.NONE,
+                priority=RecoveryPriority.LOW,
+                resume_mode=ResumeMode.FROM_STEP,
             ),
             HealthReason.TIMEOUT: RecoveryDecision(
                 True,
@@ -92,6 +123,8 @@ class HealthRecoveryPolicy:
                 max_retry=3,
                 recovery_strategy=RecoveryStrategy.BACKOFF,
                 exhausted_strategy=RecoveryStrategy.FALLBACK,
+                priority=RecoveryPriority.NORMAL,
+                resume_mode=ResumeMode.FROM_CHECKPOINT,
             ),
             HealthReason.RATE_LIMIT: RecoveryDecision(
                 True,
@@ -100,6 +133,8 @@ class HealthRecoveryPolicy:
                 max_retry=None,
                 recovery_strategy=RecoveryStrategy.WAIT,
                 exhausted_strategy=RecoveryStrategy.WAIT,
+                priority=RecoveryPriority.LOW,
+                resume_mode=ResumeMode.FROM_STEP,
             ),
             HealthReason.AUTH_FAILURE: RecoveryDecision(
                 False,
@@ -109,6 +144,8 @@ class HealthRecoveryPolicy:
                 max_retry=0,
                 recovery_strategy=RecoveryStrategy.REAUTH,
                 exhausted_strategy=RecoveryStrategy.ABORT,
+                priority=RecoveryPriority.HIGH,
+                resume_mode=ResumeMode.FROM_STEP,
             ),
             HealthReason.NETWORK: RecoveryDecision(
                 False,
@@ -116,6 +153,8 @@ class HealthRecoveryPolicy:
                 max_retry=None,
                 recovery_strategy=RecoveryStrategy.WAIT,
                 exhausted_strategy=RecoveryStrategy.WAIT,
+                priority=RecoveryPriority.HIGH,
+                resume_mode=ResumeMode.FROM_CHECKPOINT,
             ),
             HealthReason.SERVER_ERROR: RecoveryDecision(
                 True,
@@ -124,6 +163,8 @@ class HealthRecoveryPolicy:
                 max_retry=5,
                 recovery_strategy=RecoveryStrategy.BACKOFF,
                 exhausted_strategy=RecoveryStrategy.FALLBACK,
+                priority=RecoveryPriority.NORMAL,
+                resume_mode=ResumeMode.FROM_CHECKPOINT,
             ),
             HealthReason.UNKNOWN: RecoveryDecision(
                 False,
@@ -131,6 +172,8 @@ class HealthRecoveryPolicy:
                 max_retry=0,
                 recovery_strategy=RecoveryStrategy.ABORT,
                 exhausted_strategy=RecoveryStrategy.ABORT,
+                priority=RecoveryPriority.HIGH,
+                resume_mode=ResumeMode.FULL_RESTART,
             ),
         }
         return decisions[normalized]

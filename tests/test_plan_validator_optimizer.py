@@ -11,6 +11,8 @@ from jarvis.runtime.planner import (
     HealthReason,
     HealthRecoveryPolicy,
     RecoveryStrategy,
+    RecoveryPriority,
+    ResumeMode,
     PlanBinding,
     PlanCompiler,
     PlanStep,
@@ -542,21 +544,32 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(timeout.max_retry, 3)
         self.assertEqual(timeout.recovery_strategy, RecoveryStrategy.BACKOFF)
         self.assertEqual(timeout.exhausted_strategy, RecoveryStrategy.FALLBACK)
+        self.assertEqual(timeout.priority, RecoveryPriority.NORMAL)
+        self.assertEqual(timeout.resume_mode, ResumeMode.FROM_CHECKPOINT)
         self.assertEqual((rate_limit.action, rate_limit.retry_after_seconds), ("RETRY_AFTER", 300))
         self.assertIsNone(rate_limit.max_retry)
         self.assertEqual(rate_limit.recovery_strategy, RecoveryStrategy.WAIT)
+        self.assertEqual(rate_limit.priority, RecoveryPriority.LOW)
+        self.assertEqual(rate_limit.resume_mode, ResumeMode.FROM_STEP)
         self.assertFalse(auth.retry_allowed)
         self.assertTrue(auth.requires_reauthentication)
         self.assertEqual(auth.action, "REAUTHENTICATE")
         self.assertEqual(auth.recovery_strategy, RecoveryStrategy.REAUTH)
+        self.assertEqual(auth.priority, RecoveryPriority.HIGH)
+        self.assertEqual(auth.resume_mode, ResumeMode.FROM_STEP)
         self.assertEqual(network.action, "WAIT_FOR_NETWORK")
         self.assertFalse(network.retry_allowed)
         self.assertEqual(network.recovery_strategy, RecoveryStrategy.WAIT)
+        self.assertEqual(network.priority, RecoveryPriority.HIGH)
+        self.assertEqual(network.resume_mode, ResumeMode.FROM_CHECKPOINT)
         self.assertEqual((server.action, server.retry_after_seconds), ("RETRY_BACKOFF", 60))
         self.assertEqual(server.max_retry, 5)
+        self.assertEqual(server.resume_mode, ResumeMode.FROM_CHECKPOINT)
         self.assertEqual(unknown.action, "REQUIRE_VERIFICATION")
         self.assertFalse(unknown.retry_allowed)
         self.assertEqual(unknown.recovery_strategy, RecoveryStrategy.ABORT)
+        self.assertEqual(unknown.priority, RecoveryPriority.HIGH)
+        self.assertEqual(unknown.resume_mode, ResumeMode.FULL_RESTART)
 
     def test_retry_budget_switches_to_fallback_when_exhausted(self):
         policy = HealthRecoveryPolicy()
@@ -575,6 +588,23 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(timeout.to_dict()["max_retry"], 3)
         self.assertEqual(timeout.to_dict()["recovery_strategy"], "BACKOFF")
         self.assertEqual(timeout.to_dict()["exhausted_strategy"], "FALLBACK")
+        self.assertEqual(timeout.to_dict()["priority"], "NORMAL")
+        self.assertEqual(timeout.to_dict()["resume_mode"], "FROM_CHECKPOINT")
+
+    def test_recovery_decisions_expose_scheduler_priority_order(self):
+        policy = HealthRecoveryPolicy()
+        decisions = [
+            policy.evaluate(HealthReason.RATE_LIMIT),
+            policy.evaluate(HealthReason.TIMEOUT),
+            policy.evaluate(HealthReason.NETWORK),
+        ]
+
+        ordered = sorted(decisions, key=lambda decision: decision.scheduler_key())
+
+        self.assertEqual(
+            [decision.priority for decision in ordered],
+            [RecoveryPriority.HIGH, RecoveryPriority.NORMAL, RecoveryPriority.LOW],
+        )
 
     def test_successful_runtime_observation_clears_health_reason(self):
         primary = self.registry.get_operation("calendar", "list")

@@ -144,7 +144,26 @@ max_retry
 recovery_strategy
 exhausted_strategy
 requires_reauthentication
+priority
+resume_mode
 ```
+
+Recovery priority is `HIGH`, `NORMAL`, or `LOW`. `scheduler_key()` exposes the
+stable ascending queue order `HIGH -> NORMAL -> LOW`.
+
+Resume mode removes Reason-specific inference from Task State Machine:
+
+| Reason | Priority | Resume mode |
+| --- | --- | --- |
+| `TIMEOUT` | `NORMAL` | `FROM_CHECKPOINT` |
+| `RATE_LIMIT` | `LOW` | `FROM_STEP` |
+| `AUTH_FAILURE` | `HIGH` | `FROM_STEP` |
+| `NETWORK` | `HIGH` | `FROM_CHECKPOINT` |
+| `SERVER_ERROR` | `NORMAL` | `FROM_CHECKPOINT` |
+| `UNKNOWN` | `HIGH` | `FULL_RESTART` |
+
+The State Machine consumes `recovery_strategy` and `resume_mode`; it does not
+branch on Health Reason.
 
 Recovery decisions are policy data; Cost Model does not sleep, refresh OAuth,
 or retry by itself. Sprint 18.3 Task State Machine consumes these decisions.
