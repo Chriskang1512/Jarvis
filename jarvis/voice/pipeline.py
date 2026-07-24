@@ -269,6 +269,7 @@ class VoicePipeline:
             reply is None
             and not is_todo_ordinal_or_mutation_text(user_message)
             and not is_calendar_query_command_text(user_message)
+            and not is_mail_follow_up_command_text(user_message)
         ):
             reply = self.try_calendar_follow_up_reply(user_message)
 
@@ -367,7 +368,7 @@ class VoicePipeline:
             return reply
 
         if task is not None and getattr(task, "task_state", "") == CALENDAR_TASK_EXPIRED:
-            return "?쇱젙 ?깅줉 ?묒뾽??留뚮즺?섏뿀?듬땲?? ?ㅼ떆 留먯???二쇱꽭??"
+            return "일정 등록 요청이 만료되었습니다. 다시 말씀해 주세요."
 
         if should_start_calendar_conversation(user_message):
             task = start_calendar_conversation_task(user_message)
@@ -379,12 +380,12 @@ class VoicePipeline:
     def execute_calendar_conversation_task(self, task):
         """Execute a collected Calendar conversation task."""
         if self.intent_runtime is None:
-            return "?ㅽ뻾?????덈뒗 ?고??꾩씠 ?놁뒿?덈떎."
+            return "실행할 수 있는 런타임이 없습니다."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None or not hasattr(dispatcher, "execute"):
-            return "?ㅽ뻾?????덈뒗 ?붿뒪?⑥쿂媛 ?놁뒿?덈떎."
+            return "실행할 수 있는 디스패처가 없습니다."
 
         input_data = build_calendar_input(task, confirmed=True)
         started = perf_counter()
@@ -400,7 +401,7 @@ class VoicePipeline:
             if hasattr(data, "to_natural_language"):
                 return data.to_natural_language()
 
-            return getattr(result, "error", "") or "?ㅽ뻾???ㅽ뙣?덉뒿?덈떎."
+            return getattr(result, "error", "") or "실행에 실패했습니다."
 
         if not getattr(result, "success", False):
             trace_event(
@@ -414,7 +415,7 @@ class VoicePipeline:
             )
             trace_event("task.completed", task_id=task.id, status="FAILED", step_count=1, retry_count=0, duration_ms=duration_ms)
             trace_event("task.summary", task_id=task.id, status="FAILED", step_count=1, retry_count=0, duration_ms=duration_ms)
-            return getattr(result, "error", "?쇱젙 ?깅줉???ㅽ뙣?덉뒿?덈떎.")
+            return getattr(result, "error", "일정 등록에 실패했습니다.")
 
         output = getattr(result, "output", None)
         data = getattr(output, "data", None)
@@ -450,7 +451,7 @@ class VoicePipeline:
         if hasattr(data, "to_natural_language"):
             return data.to_natural_language()
 
-        return str(data or "?쇱젙???깅줉?덉뒿?덈떎.")
+        return str(data or "일정을 등록했습니다.")
 
     def store_calendar_conversation_task_history(self, dispatcher, task, duration_ms):
         """Store a lightweight RuntimeTask snapshot for a Conversation Calendar execution."""
@@ -845,7 +846,7 @@ class VoicePipeline:
 
         if minutes is None:
             self.conversation_session.advance_pending_clarification_turn()
-            return "紐?遺??ㅼ뿉 ?뚮젮?쒕┫源뚯슂?"
+            return "몇 분 뒤에 알려드릴까요?"
 
         self.conversation_session.clear_pending_clarification()
         return self.execute_pending_reminder_clarification(pending, minutes, user_message)
@@ -879,14 +880,14 @@ class VoicePipeline:
     def execute_pending_reminder_clarification(self, pending, minutes, user_message):
         """Create a reminder after the user supplies the missing delay."""
         if self.intent_runtime is None:
-            return "?뚮┝???깅줉?????놁뒿?덈떎."
+            return "알림을 등록할 수 없습니다."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None:
-            return "?뚮┝???깅줉?????놁뒿?덈떎."
+            return "알림을 등록할 수 없습니다."
 
-        title = pending.get("title", "") or "?뚮┝"
+        title = pending.get("title", "") or "알림"
         reminder_time = (datetime.now() + timedelta(minutes=int(minutes))).isoformat(timespec="seconds")
         trace_event(
             "voice.pending_clarification.resolved",
@@ -908,7 +909,7 @@ class VoicePipeline:
         )
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "?뚮┝ ?깅줉???ㅽ뙣?덉뒿?덈떎.")
+            return getattr(result, "error", "알림 등록에 실패했습니다.")
 
         output = getattr(result, "output", None)
 
@@ -1015,12 +1016,12 @@ class VoicePipeline:
     def execute_pending_action(self, pending_action):
         """Execute a confirmed pending action."""
         if self.intent_runtime is None:
-            return "?ㅽ뻾?????덈뒗 ?고??꾩씠 ?놁뒿?덈떎."
+            return "실행할 수 있는 런타임이 없습니다."
 
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is None:
-            return "?ㅽ뻾?????덈뒗 ?꾧뎄媛 ?놁뒿?덈떎."
+            return "실행할 수 있는 도구가 없습니다."
 
         started = perf_counter()
         result = dispatcher.execute(
@@ -1032,7 +1033,7 @@ class VoicePipeline:
         duration_ms = int((perf_counter() - started) * 1000)
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "?ㅽ뻾???ㅽ뙣?덉뒿?덈떎.")
+            return getattr(result, "error", "실행에 실패했습니다.")
 
         output = getattr(result, "output", None)
         self.remember_calendar_tool_output(pending_action, output)
@@ -1314,14 +1315,14 @@ class VoicePipeline:
         )
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "?뚮┝ ?깅줉???ㅽ뙣?덉뒿?덈떎.")
+            return getattr(result, "error", "알림 등록에 실패했습니다.")
 
         output = getattr(result, "output", None)
 
         if hasattr(output, "to_natural_language"):
             return output.to_natural_language()
 
-        return "?뚮┝???깅줉?덉뒿?덈떎."
+        return "알림을 등록했습니다."
 
     def try_calendar_follow_up_reply(self, user_message):
         """Answer follow-up questions about the last calendar result."""
@@ -1337,7 +1338,7 @@ class VoicePipeline:
         events = calendar.get("events", [])
 
         if index >= len(events):
-            return "?대떦 ?쒖꽌???쇱젙? ?놁뒿?덈떎."
+            return "해당 순서의 일정은 없습니다."
 
         event = events[index]
         time_text = event.get("time", "")
@@ -1374,7 +1375,7 @@ class VoicePipeline:
         result = dispatcher.execute(ToolRequest(tool_name="calendar", input_data=update_input))
 
         if not getattr(result, "success", False):
-            return getattr(result, "error", "?쇱젙 ?섏젙???ㅽ뙣?덉뒿?덈떎.")
+            return getattr(result, "error", "일정 수정에 실패했습니다.")
 
         output = getattr(result, "output", None)
         metadata = getattr(output, "metadata", {}) or {}
@@ -1388,7 +1389,7 @@ class VoicePipeline:
                 }
             )
             data = getattr(output, "data", None)
-            return data.to_natural_language() if hasattr(data, "to_natural_language") else "?뺤씤???꾩슂?⑸땲??"
+            return data.to_natural_language() if hasattr(data, "to_natural_language") else "확인이 필요합니다."
 
         data = getattr(output, "data", None)
         self.store_calendar_result(data)
@@ -1559,7 +1560,7 @@ def is_unprompted_short_follow_up_noise(message):
         return True
 
     normalized = text.replace(" ", "")
-    weak_subjects = {"?좎씪", "?щ몢", "?쇱젙", "?뚮┝", "?뚮엺", "由щ쭏?몃뜑"}
+    weak_subjects = {"내일", "할일", "일정", "알림", "사람", "리마인더"}
 
     if normalized in weak_subjects:
         return True
@@ -2675,6 +2676,18 @@ def is_calendar_query_command_text(message):
     return any(token in text for token in next_schedule_tokens) and any(
         token in text for token in command_tokens
     )
+
+
+def is_mail_follow_up_command_text(message):
+    """Keep ordinal mail reads and replies out of Calendar follow-up handling."""
+    text = str(message or "").strip()
+
+    if text == "":
+        return False
+
+    has_mail_subject = any(token in text for token in ["메일", "이메일"])
+    has_mail_action = any(token in text for token in ["읽어", "본문", "내용", "답장"])
+    return (has_mail_subject and has_mail_action) or "답장" in text
 
 
 def is_todo_ordinal_or_mutation_text(message):

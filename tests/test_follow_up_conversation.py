@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from jarvis.abilities import AbilityRegistry
 from jarvis.abilities.native.calendar import CalendarAbility, MockCalendarProvider
 from jarvis.abilities.native.calendar.result import CalendarEvent, CalendarResult
+from jarvis.abilities.native.mail import MailAbility
+from jarvis.abilities.native.mail.result import MailMessage, MailResult
 from jarvis.abilities.native.memory import InMemoryStorage, MemoryAbility
 from jarvis.abilities.native.reminder import ReminderAbility
 from jarvis.abilities.native.todo import TodoAbility
@@ -310,6 +312,34 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertIn("오늘 일정은 2건입니다", tts_provider.spoken[0])
         self.assertIn("1번째 일정은 10:00 회의입니다", tts_provider.spoken[1])
         self.assertIn("2번째 일정은 15:00 치과입니다", tts_provider.spoken[2])
+
+    def test_mail_ordinal_read_is_not_intercepted_by_calendar_follow_up(self):
+        """Check Mail owns ordinal reads and preserves the selected reply context."""
+        provider = FollowUpMailProvider()
+        tool_registry = ToolRegistry()
+        ability_registry = AbilityRegistry()
+        ability_registry.register(MailAbility(provider=provider))
+        ability_registry.register_tools(tool_registry)
+        runtime = IntentRuntime(tool_dispatcher=RuntimeToolDispatcher(tool_registry))
+        tts_provider = CapturingTTSProvider()
+        pipeline = VoicePipeline(
+            wake_listener=CountingWakeListener(),
+            stt_provider=FollowUpSTTProvider(
+                first="최근 메일 알려줘",
+                follow_ups=["첫 번째 메일 읽어줘", "확인했다고 답장해줘", "아니", ""],
+            ),
+            chat_service=CapturingChatService(),
+            tts_provider=tts_provider,
+            intent_runtime=runtime,
+            follow_up_timeout=8,
+        )
+
+        pipeline.run_once()
+
+        self.assertTrue(any("테스트 본문" in text for text in tts_provider.spoken))
+        self.assertTrue(any("답장을 보낼까요" in text for text in tts_provider.spoken))
+        self.assertIn("취소했습니다.", tts_provider.spoken)
+        self.assertEqual(provider.reply_calls, 0)
 
     def test_calendar_pending_create_survives_stt_failure_and_confirms_yes(self):
         """Check pending calendar create retries after STT failure and executes on yes."""
@@ -1511,6 +1541,43 @@ class CountingReminderEngine(ReminderEngine):
         """Count create calls."""
         self.create_count += 1
         return super().create(*args, **kwargs)
+
+
+class FollowUpMailProvider:
+    def __init__(self):
+        self.messages = (
+            MailMessage(
+                id="mail-1",
+                thread_id="thread-1",
+                sender_name="아야",
+                sender_email="aya@example.com",
+                subject="일정 확인",
+                body_summary="테스트 본문",
+                rfc_message_id="<mail-1@example.com>",
+            ),
+        )
+        self.reply_calls = 0
+
+    def list_messages(self, query):
+        return MailResult(success=True, action="list", messages=self.messages, message_count=1)
+
+    def search_messages(self, query):
+        return MailResult(success=True, action="search", messages=self.messages, message_count=1)
+
+    def get_message(self, message_id):
+        message = self.messages[0] if message_id == self.messages[0].id else None
+        return MailResult(
+            success=message is not None,
+            action="get",
+            message=message,
+            messages=(message,) if message else (),
+            message_count=1 if message else 0,
+            error_code="" if message else "MAIL_NOT_FOUND",
+        )
+
+    def reply_message(self, outgoing):
+        self.reply_calls += 1
+        raise AssertionError("Reply must not run after cancellation.")
 
 
 class FollowUpSTTProvider:
