@@ -10,6 +10,10 @@
   conversion paths such as `3.0 -> 2.0 -> 1.0`.
 - Fail-closed `CONTRACT_VERSION_NOT_NEGOTIABLE` handling when no common version
   or registered adapter path exists.
+- Operation-level `min_contract` and `recommended` requirements checked after
+  negotiation and before execution.
+- Fail-closed `CAPABILITY_CONTRACT_VERSION_UNSUPPORTED` errors and structured
+  below-recommended warnings.
 - Versioned `GoalEnvelope`, `AgentPlan`, `PlanStep`, and `PlanBinding`
   contracts alongside the current runtime Planner.
 - Fail-closed Plan validation for Registry capability resolution, dependency

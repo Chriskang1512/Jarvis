@@ -30,6 +30,7 @@ legacy runtime:
 - an auditable no-op optimizer that rejects semantic fingerprint changes;
 - a compatibility adapter from the current `ExecutionPlan`;
 - contract version negotiation with explicit multi-version Adapter paths.
+- operation-level minimum and recommended contract-version gates.
 
 ## Current Version
 

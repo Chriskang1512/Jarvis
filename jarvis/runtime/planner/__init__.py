@@ -13,12 +13,17 @@ from jarvis.runtime.planner.legacy_adapter import adapt_execution_plan
 from jarvis.runtime.planner.optimizer import NoOpPlanOptimizer, OptimizationRecord, OptimizationResult
 from jarvis.runtime.planner.validation import PlanValidationResult, PlanValidator, ValidationIssue
 from jarvis.runtime.planner.versioning import (
+    CapabilityCompatibilityIssue,
+    CapabilityCompatibilityResult,
+    CapabilityVersionRegistry,
+    CapabilityVersionRequirement,
     ContractNegotiationError,
     ContractNegotiationResult,
     ContractSupport,
     ContractVersionNegotiator,
     VersionAdapter,
     VersionAdapterRegistry,
+    compare_contract_versions,
     normalize_contract_version,
 )
 
@@ -41,6 +46,10 @@ __all__ = [
     "ContractNegotiationResult",
     "ContractSupport",
     "ContractVersionNegotiator",
+    "CapabilityCompatibilityIssue",
+    "CapabilityCompatibilityResult",
+    "CapabilityVersionRegistry",
+    "CapabilityVersionRequirement",
     "VersionAdapter",
     "VersionAdapterRegistry",
     "PlanResult",
@@ -48,5 +57,6 @@ __all__ = [
     "RuntimePlanner",
     "adapt_execution_plan",
     "create_execution_plan",
+    "compare_contract_versions",
     "normalize_contract_version",
 ]

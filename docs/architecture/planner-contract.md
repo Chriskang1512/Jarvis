@@ -52,6 +52,36 @@ failure code for an unresolvable producer/consumer pair is
 Negotiation changes representation only. It must not change the goal,
 permissions, side effects, bindings, or semantic fingerprint.
 
+### Capability Minimum Version
+
+After contract negotiation and before plan validation/execution, Core checks
+every `capability.operation` in the plan against operation-level requirements:
+
+```text
+Runtime support
+  -> contract negotiation
+  -> capability minimum-version gate
+  -> Plan Validator
+```
+
+Each registered requirement declares:
+
+```text
+capability
+min_contract
+recommended
+```
+
+If the selected version is below `min_contract`, execution fails with
+`CAPABILITY_CONTRACT_VERSION_UNSUPPORTED`. If it meets the minimum but is below
+`recommended`, execution may continue with the structured warning
+`CAPABILITY_CONTRACT_VERSION_BELOW_RECOMMENDED`.
+
+`negotiate_plan()` derives operation names such as `calendar.create` and
+`mail.send` directly from Plan steps so callers cannot accidentally omit a
+requested capability from the gate. Unregistered operations remain compatible
+during the legacy metadata migration.
+
 ## Goal Envelope
 
 Minimum fields:
