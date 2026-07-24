@@ -71,6 +71,7 @@ class MailResult(BaseAbilityResult):
     query: str = ""
     requires_confirmation: bool = False
     user_message: str = ""
+    warning: str = ""
     outgoing: OutgoingMail | None = None
     send_result: MailSendResult | None = None
 

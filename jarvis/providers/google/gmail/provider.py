@@ -8,7 +8,7 @@ from time import perf_counter
 from jarvis.abilities.native.mail.result import MailResult, MailSendResult
 from jarvis.debug_trace import trace_event
 from jarvis.privacy import redact_sensitive_text
-from jarvis.providers.google.config import GOOGLE_GMAIL_READONLY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE, GoogleProviderConfig
+from jarvis.providers.google.config import GOOGLE_GMAIL_MODIFY_SCOPE, GoogleProviderConfig
 from jarvis.providers.google.context import GoogleProviderContext
 from jarvis.providers.google.errors import (
     AUTH_EXPIRED,
@@ -32,7 +32,7 @@ class GoogleMailProvider:
 
     def __init__(self, client=None, mapper=None, config=None, context=None):
         """Create provider with optional fake client for tests."""
-        config = config or GoogleProviderConfig(scopes=(GOOGLE_GMAIL_READONLY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE))
+        config = config or GoogleProviderConfig(scopes=(GOOGLE_GMAIL_MODIFY_SCOPE,))
         self.context = context or GoogleProviderContext.create(config=config)
         self.config = self.context.config
         self.client = client
@@ -112,6 +112,46 @@ class GoogleMailProvider:
             return self.error_result("get", error, started)
         except Exception as error:
             return self.error_result("get", self.error_mapper.map_exception(error), started)
+
+    def mark_read(self, message_id):
+        """Remove Gmail's UNREAD label and verify the returned label state."""
+        started = perf_counter()
+        trace_event(
+            "google_gmail.read_state.request",
+            action="mark_read",
+            provider=self.provider_name,
+            message_id=short_hash(message_id),
+        )
+
+        try:
+            service = self.gmail_client()
+            response = self.execute_google_request(
+                lambda: service.users().messages().modify(
+                    userId="me",
+                    id=message_id,
+                    body={"removeLabelIds": ["UNREAD"]},
+                )
+            )
+            labels = tuple(dict(response or {}).get("labelIds", ()) or ())
+            verified = "UNREAD" not in labels
+            trace_event(
+                "google_gmail.read_state.response",
+                action="mark_read",
+                provider=self.provider_name,
+                message_id=short_hash(message_id),
+                verified=verified,
+            )
+            return MailResult(
+                success=verified,
+                action="mark_read",
+                provider=self.provider_name,
+                error_code="" if verified else "MARK_READ_FAILED",
+                execution_time_ms=elapsed_ms(started),
+            )
+        except GoogleProviderError as error:
+            return self.error_result("mark_read", error, started)
+        except Exception as error:
+            return self.error_result("mark_read", self.error_mapper.map_exception(error), started)
 
     def send_message(self, outgoing):
         """Send a completed provider-independent draft and verify metadata."""

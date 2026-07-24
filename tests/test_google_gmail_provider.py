@@ -103,6 +103,26 @@ class TestGoogleGmailProvider(unittest.TestCase):
         self.assertEqual(result.message.subject, "API 업데이트")
         self.assertEqual(result.message.body_summary, "업데이트 요약입니다.")
 
+    def test_google_gmail_mark_read_removes_unread_label(self):
+        service = FakeGmailService(modify_response={"id": "m2", "labelIds": ["INBOX"]})
+        provider = GoogleMailProvider(client=service)
+
+        result = provider.mark_read("m2")
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.action, "mark_read")
+        self.assertEqual(service.modify_kwargs["id"], "m2")
+        self.assertEqual(service.modify_kwargs["body"], {"removeLabelIds": ["UNREAD"]})
+
+    def test_google_gmail_mark_read_requires_verified_label_removal(self):
+        service = FakeGmailService(modify_response={"id": "m2", "labelIds": ["INBOX", "UNREAD"]})
+        provider = GoogleMailProvider(client=service)
+
+        result = provider.mark_read("m2")
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.error_code, "MARK_READ_FAILED")
+
     def test_google_gmail_access_not_configured_uses_gmail_message(self):
         provider = GoogleMailProvider(client=FakeGmailService(error=FakeHttpError(403, "accessNotConfigured")))
 
@@ -269,7 +289,7 @@ def gmail_message(message_id, sender, subject, text, labels=None, filename="", t
 
 
 class FakeGmailService:
-    def __init__(self, list_response=None, get_responses=None, error=None, send_response=None):
+    def __init__(self, list_response=None, get_responses=None, error=None, send_response=None, modify_response=None):
         self.list_response = list_response if list_response is not None else {"messages": []}
         self.get_responses = get_responses if get_responses is not None else {}
         self.error = error
@@ -277,6 +297,8 @@ class FakeGmailService:
         self.get_kwargs = []
         self.send_response = send_response or {}
         self.send_kwargs = None
+        self.modify_response = modify_response or {}
+        self.modify_kwargs = None
 
     def users(self):
         return FakeUsersResource(self)
@@ -315,6 +337,10 @@ class FakeMessagesResource:
     def send(self, **kwargs):
         self.service.send_kwargs = kwargs
         return FakeRequest(self.service.send_response, self.service.error)
+
+    def modify(self, **kwargs):
+        self.service.modify_kwargs = kwargs
+        return FakeRequest(self.service.modify_response, self.service.error)
 
 
 class FakeRequest:

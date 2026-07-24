@@ -102,8 +102,17 @@ class MailAbility:
             message = self.message_from_query(query)
             if message is None:
                 return MailResult(success=False, action="get", error_code="MAIL_NOT_FOUND")
+            message, warning = self.mark_message_read(message)
             self.last_selected_message = message
-            return MailResult(success=True, action="get", message=message, messages=(message,), message_count=1)
+            self.replace_cached_message(message)
+            return MailResult(
+                success=True,
+                action="get",
+                message=message,
+                messages=(message,),
+                message_count=1,
+                warning=warning,
+            )
 
         if self.provider is None:
             return MailResult(success=False, action=query.action, error_code="AUTH_REQUIRED")
@@ -239,6 +248,27 @@ class MailAbility:
 
         return None
 
+    def mark_message_read(self, message):
+        """Mark a successfully opened unread message as read when supported."""
+        if not getattr(message, "unread", False):
+            return message, ""
+        if self.provider is None or not hasattr(self.provider, "mark_read"):
+            return message, ""
+
+        result = self.provider.mark_read(getattr(message, "id", ""))
+        if not getattr(result, "success", False):
+            return message, "Gmail 읽음 상태를 변경하지 못했습니다."
+        labels = tuple(label for label in getattr(message, "labels", ()) or () if label != "UNREAD")
+        return replace(message, unread=False, labels=labels), ""
+
+    def replace_cached_message(self, message):
+        """Keep the session's recent-mail cache consistent after a state change."""
+        message_id = getattr(message, "id", "")
+        self.last_messages = tuple(
+            message if getattr(item, "id", "") == message_id else item
+            for item in self.last_messages
+        )
+
     def health(self):
         return AbilityHealth(status="ok", provider=self.provider_name, message="Mail ability is ready.")
 
@@ -275,7 +305,7 @@ def create_mail_provider(config=None):
     if provider_name != "google":
         return None
 
-    from jarvis.providers.google.config import GOOGLE_GMAIL_READONLY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE, GoogleProviderConfig
+    from jarvis.providers.google.config import GOOGLE_GMAIL_MODIFY_SCOPE, GoogleProviderConfig
     from jarvis.providers.google.gmail import GoogleMailProvider
 
     google_config = GoogleProviderConfig(
@@ -287,7 +317,7 @@ def create_mail_provider(config=None):
             "JARVIS_GOOGLE_CLIENT_SECRET_PATH",
             getattr(config, "google_client_secret_path", "client_secret.json"),
         ),
-        scopes=(GOOGLE_GMAIL_READONLY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE),
+        scopes=(GOOGLE_GMAIL_MODIFY_SCOPE,),
     )
     return GoogleMailProvider(config=google_config)
 

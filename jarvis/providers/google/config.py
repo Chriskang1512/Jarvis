@@ -9,6 +9,7 @@ GOOGLE_CONTACTS_READONLY_SCOPE = "https://www.googleapis.com/auth/contacts.reado
 GOOGLE_CONTACTS_SCOPE = "https://www.googleapis.com/auth/contacts"
 GOOGLE_GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GOOGLE_GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+GOOGLE_GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 ALLOWED_SPRINT_17_SCOPES = frozenset({
     GOOGLE_CALENDAR_READONLY_SCOPE,
     GOOGLE_CALENDAR_SCOPE,
@@ -16,6 +17,7 @@ ALLOWED_SPRINT_17_SCOPES = frozenset({
     GOOGLE_CONTACTS_SCOPE,
     GOOGLE_GMAIL_READONLY_SCOPE,
     GOOGLE_GMAIL_SEND_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
 })
 
 
@@ -48,6 +50,8 @@ def missing_required_scopes(required_scopes, granted_scopes):
         if scope == GOOGLE_CALENDAR_READONLY_SCOPE and GOOGLE_CALENDAR_SCOPE in granted:
             continue
         if scope == GOOGLE_CONTACTS_READONLY_SCOPE and GOOGLE_CONTACTS_SCOPE in granted:
+            continue
+        if scope in {GOOGLE_GMAIL_READONLY_SCOPE, GOOGLE_GMAIL_SEND_SCOPE} and GOOGLE_GMAIL_MODIFY_SCOPE in granted:
             continue
         missing.append(scope)
 

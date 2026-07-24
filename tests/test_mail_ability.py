@@ -110,6 +110,40 @@ class TestMailAbilityVerticalSlice(unittest.TestCase):
         self.assertIn("body-2", result.output.to_natural_language())
         self.assertIn("답장하시겠습니까?", result.output.to_natural_language())
 
+    def test_reading_unread_mail_marks_it_read_after_body_fetch(self):
+        self.provider.messages = (
+            MailMessage(
+                id="m1",
+                sender_name="Google",
+                subject="보안 알림",
+                body_summary="새 로그인 알림입니다.",
+                unread=True,
+                labels=("INBOX", "UNREAD"),
+            ),
+        )
+        self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
+
+        result = self.dispatcher.execute(ToolRequest("mail", {"text": "첫 번째 읽어줘"}))
+
+        self.assertTrue(result.success)
+        self.assertEqual(self.provider.mark_read_ids, ["m1"])
+        self.assertFalse(result.output.data.message.unread)
+        self.assertNotIn("UNREAD", result.output.data.message.labels)
+
+    def test_mark_read_failure_keeps_body_and_adds_warning(self):
+        self.provider.messages = (
+            MailMessage(id="m1", sender_name="Google", subject="알림", body_summary="본문", unread=True),
+        )
+        self.provider.mark_read_success = False
+        self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
+
+        result = self.dispatcher.execute(ToolRequest("mail", {"text": "첫 번째 읽어줘"}))
+        spoken = result.output.to_natural_language()
+
+        self.assertTrue(result.success)
+        self.assertIn("요약은 본문", spoken)
+        self.assertIn("Gmail 읽음 상태를 변경하지 못했습니다.", spoken)
+
     def test_mail_this_one_followup_routes_to_first_message(self):
         plan = self.dispatcher.create_plan("이번 읽어줘")
 
@@ -142,6 +176,8 @@ class FakeMailProvider:
             ),
         )
         self.get_ids = []
+        self.mark_read_ids = []
+        self.mark_read_success = True
 
     def list_messages(self, query):
         return MailResult(success=True, action="list", messages=self.messages, message_count=len(self.messages), query=query.query)
@@ -155,6 +191,14 @@ class FakeMailProvider:
             if message.id == message_id:
                 return MailResult(success=True, action="get", message=message, messages=(message,), message_count=1)
         return MailResult(success=False, action="get", error_code="MAIL_NOT_FOUND")
+
+    def mark_read(self, message_id):
+        self.mark_read_ids.append(message_id)
+        return MailResult(
+            success=self.mark_read_success,
+            action="mark_read",
+            error_code="" if self.mark_read_success else "MARK_READ_FAILED",
+        )
 
 
 if __name__ == "__main__":

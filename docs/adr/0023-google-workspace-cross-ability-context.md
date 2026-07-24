@@ -44,6 +44,8 @@ no raw provider response and no mail body from Gmail.
 - Confirmation executes the exact frozen draft without reparsing.
 - Missing or invalid recipient data fails closed.
 - Duplicate pending-action fingerprints remain blocked.
+- Mail list/search are read-only. An explicit message-open action may remove
+  only Gmail's `UNREAD` label through the provider contract.
 
 ## Consequences
 

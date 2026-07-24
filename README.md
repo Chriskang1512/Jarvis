@@ -23,6 +23,8 @@ Key points:
 - Gmail send still stops at `confirm_required`; the previewed recipient,
   subject, and body are not reparsed after confirmation.
 - Recent-mail speech stays compact: sender, shortened subject, and time only.
+- Opening a specific unread Gmail message marks it read by removing the
+  `UNREAD` label; listing mail never changes read state.
 - Gmail auth and permission errors explain when OAuth reauthentication is
   required.
 

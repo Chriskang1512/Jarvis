@@ -15,7 +15,8 @@ def format_mail_result(result):
         return list_message(result.messages, result.query)
 
     if result.action == "get":
-        return get_message(result.message, include_body=True)
+        response = get_message(result.message, include_body=True)
+        return f"{response} {result.warning}".strip()
 
     if result.action in {"send", "reply"} and result.requires_confirmation:
         return outgoing_preview(result.outgoing)
@@ -168,6 +169,8 @@ def error_message(result):
 
     if code == "MAIL_NOT_FOUND":
         return "메일을 찾지 못했습니다."
+    if code == "MARK_READ_FAILED":
+        return "Gmail 읽음 상태를 변경하지 못했습니다."
     if code == "AUTH_REQUIRED":
         return "Gmail 인증이 필요합니다. Gmail OAuth를 다시 인증해 주세요."
     if code == "SCOPE_INSUFFICIENT":

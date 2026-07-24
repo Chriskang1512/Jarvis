@@ -12,15 +12,14 @@ from jarvis.providers.google.auth import GoogleAuthManager
 from jarvis.providers.google.config import (
     GOOGLE_CALENDAR_SCOPE,
     GOOGLE_CONTACTS_SCOPE,
-    GOOGLE_GMAIL_READONLY_SCOPE,
-    GOOGLE_GMAIL_SEND_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
     GoogleProviderConfig,
 )
 from jarvis.providers.google.errors import GoogleProviderError
 
 
 def main():
-    """Authorize Calendar/Contacts plus Gmail read and send."""
+    """Authorize Calendar/Contacts plus Gmail read, send, and read-state updates."""
     config = ConfigurationLoader().load()
     google_config = GoogleProviderConfig(
         credentials_path=config.mail.google_credentials_path,
@@ -28,8 +27,7 @@ def main():
         scopes=(
             GOOGLE_CALENDAR_SCOPE,
             GOOGLE_CONTACTS_SCOPE,
-            GOOGLE_GMAIL_READONLY_SCOPE,
-            GOOGLE_GMAIL_SEND_SCOPE,
+            GOOGLE_GMAIL_MODIFY_SCOPE,
         ),
         timezone=config.calendar.timezone,
     )

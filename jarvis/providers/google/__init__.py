@@ -7,6 +7,7 @@ from jarvis.providers.google.config import (
     GOOGLE_CONTACTS_READONLY_SCOPE,
     GOOGLE_CONTACTS_SCOPE,
     GOOGLE_GMAIL_READONLY_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
     GoogleProviderConfig,
 )
 from jarvis.providers.google.context import GoogleProviderContext
@@ -22,6 +23,7 @@ __all__ = [
     "GOOGLE_CONTACTS_READONLY_SCOPE",
     "GOOGLE_CONTACTS_SCOPE",
     "GOOGLE_GMAIL_READONLY_SCOPE",
+    "GOOGLE_GMAIL_MODIFY_SCOPE",
     "GoogleAuthManager",
     "GoogleAuthStatus",
     "GoogleCredentialStore",

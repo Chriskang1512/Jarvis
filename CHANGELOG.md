@@ -18,6 +18,10 @@
 - Long subjects in recent-mail speech are compacted without modifying stored
   Gmail data.
 - Selected-message summaries are bounded for predictable voice duration.
+- Reading a selected unread Gmail message now removes its `UNREAD` label.
+  Recent-mail list and search operations remain read-only.
+- Gmail OAuth uses `gmail.modify`, which covers read, send, and message label
+  updates. Existing tokens require one reauthentication.
 - Gmail auth and permission failures now direct the user to OAuth
   reauthentication.
 

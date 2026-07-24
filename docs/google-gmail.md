@@ -1,16 +1,19 @@
-# Google Gmail Read / Send / Reply
+# Google Gmail Read / Send / Reply / Read State
 
-Sprint 17.4 added Gmail reads. Sprint 17.5 adds draft-first, confirmed send and
-reply without expanding into mailbox mutation features.
+Sprint 17.4 added Gmail reads. Sprint 17.5 added draft-first confirmed send and
+reply. Sprint 17.6 adds the single mailbox-state mutation used by the voice
+reader: marking an explicitly opened message as read.
 
 ## Scope
 
 Jarvis requests these Gmail scopes:
 
 ```text
-https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/gmail.send
+https://www.googleapis.com/auth/gmail.modify
 ```
+
+`gmail.modify` covers the existing read/send operations and the removal of the
+`UNREAD` label, so the helper does not request redundant Gmail scopes.
 
 The helper auth script also requests the existing Calendar and Contacts write
 scopes so one shared Google token can continue to support the already verified
@@ -135,3 +138,18 @@ Expected trace shape:
 [Trace] google_gmail.send.request to=a***@example.com subject_hash=... body_length=N
 [Trace] google_gmail.send.response verified=true
 ```
+The current auth helper requests `gmail.modify` for the combined read, send,
+and read-state workflow. Existing tokens created with only `gmail.readonly`
+and `gmail.send` must be authorized again:
+
+```powershell
+python scripts\google_gmail_auth.py
+```
+
+Read-state policy:
+
+- Listing or searching mail never changes Gmail labels.
+- Opening a selected unread message removes only the `UNREAD` label.
+- Already-read messages do not trigger a modify request.
+- A read-state update failure does not hide the fetched body; Jarvis reads the
+  message and reports that Gmail's read status could not be changed.
