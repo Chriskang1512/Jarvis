@@ -95,6 +95,7 @@ class RuntimeTaskCheckpoint:
     transition_sequence: int
     transition_wall_clock_ms: int
     transition_waiting_ms: int
+    transition_active_execution_ms: int
     transition_source: TransitionSource
     checkpoint_created_at: str
     checkpoint_fingerprint: str
@@ -149,6 +150,9 @@ class TaskStateMachine:
             transition_source=source,
             wall_clock_ms=wall_clock_ms,
             waiting_ms=wall_clock_ms if is_waiting_state(task.status) else 0,
+            active_execution_ms=(
+                wall_clock_ms if is_active_execution_state(task.status) else 0
+            ),
             step_id=str(step_id or changes.get("current_step", "") or ""),
             occurred_at=occurred_at,
         )
@@ -201,6 +205,7 @@ class TaskStateMachine:
                     "transition_source": record.transition_source.value,
                     "wall_clock_ms": record.wall_clock_ms,
                     "waiting_ms": record.waiting_ms,
+                    "active_execution_ms": record.active_execution_ms,
                     "step_id": record.step_id,
                     "checkpoint_revision": checkpoint.revision,
                 },
@@ -263,6 +268,14 @@ def is_waiting_state(state):
     }
 
 
+def is_active_execution_state(state):
+    return state in {
+        TaskState.RUNNING,
+        TaskState.RETRYING,
+        TaskState.VERIFYING,
+    }
+
+
 def create_runtime_checkpoint(task, occurred_at=None):
     created_at = occurred_at or now_iso()
     payload = {
@@ -275,6 +288,9 @@ def create_runtime_checkpoint(task, occurred_at=None):
         "transition_sequence": len(task.transition_history),
         "transition_wall_clock_ms": task.transition_history[-1].wall_clock_ms,
         "transition_waiting_ms": task.transition_history[-1].waiting_ms,
+        "transition_active_execution_ms": (
+            task.transition_history[-1].active_execution_ms
+        ),
         "transition_source": task.transition_history[-1].transition_source.value,
         "step_records": [
             {
@@ -300,6 +316,9 @@ def create_runtime_checkpoint(task, occurred_at=None):
         transition_sequence=len(task.transition_history),
         transition_wall_clock_ms=task.transition_history[-1].wall_clock_ms,
         transition_waiting_ms=task.transition_history[-1].waiting_ms,
+        transition_active_execution_ms=(
+            task.transition_history[-1].active_execution_ms
+        ),
         transition_source=task.transition_history[-1].transition_source,
         checkpoint_created_at=created_at,
         checkpoint_fingerprint=fingerprint,

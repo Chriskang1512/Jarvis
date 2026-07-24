@@ -88,6 +88,7 @@ transition_reason
 transition_source
 wall_clock_ms
 waiting_ms
+active_execution_ms
 step_id
 occurred_at
 ```
@@ -107,6 +108,26 @@ of the Agent Runtime contract.
 `WAIT_EXTERNAL`, or `PAUSED`. It equals `wall_clock_ms` for those states and is
 zero otherwise. It is a classification, not additional elapsed time, so Metrics
 must not add it to total wall-clock duration.
+
+`active_execution_ms` is the portion attributed to `RUNNING`, `RETRYING`, or
+`VERIFYING`. Planning, validation, and optimization retain their own state
+durations and are not folded into active execution. Like `waiting_ms`, this is
+a classification of `wall_clock_ms`, not CPU time or an additional duration.
+
+Per-state aggregation can therefore separate:
+
+```text
+total wall clock
+user/external waiting
+active execution
+planning
+validation
+optimization
+```
+
+Provider time remains part of `RUNNING` unless the task explicitly transitions
+to `WAIT_EXTERNAL`; provider-level latency telemetry is still required to split
+synchronous provider latency from Core execution.
 
 Clock rollback or an unparsable legacy timestamp records `0` rather than a
 negative duration. The read-only Python property `duration_ms` remains as a

@@ -15,6 +15,8 @@
 - Per-transition `wall_clock_ms`, classified `waiting_ms`, and controlled
   `SYSTEM`, `USER`, `RECOVERY`, and `EVENT` sources for Journal and Metrics
   analysis; CPU time is intentionally excluded.
+- Classified `active_execution_ms` for `RUNNING`, `RETRYING`, and `VERIFYING`
+  residence, kept separate from planning phases and wait time.
 - EventBus publication for task start, confirmation wait, pause, resume, retry,
   completion, cancellation, failure, and generic state changes.
 - Per-transition Runtime checkpoints with deterministic fingerprints and

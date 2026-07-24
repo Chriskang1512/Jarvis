@@ -46,6 +46,7 @@ class StateTransitionRecord:
     transition_source: TransitionSource = TransitionSource.SYSTEM
     wall_clock_ms: int = 0
     waiting_ms: int = 0
+    active_execution_ms: int = 0
     step_id: str = ""
     occurred_at: str = ""
 
@@ -159,6 +160,7 @@ class RuntimeTask:
                     "transition_source": record.transition_source.value,
                     "wall_clock_ms": record.wall_clock_ms,
                     "waiting_ms": record.waiting_ms,
+                    "active_execution_ms": record.active_execution_ms,
                     "step_id": record.step_id,
                     "occurred_at": record.occurred_at,
                 }

@@ -79,6 +79,10 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
             [item.waiting_ms for item in task.transition_history],
             [0, 0, 1000, 0, 0],
         )
+        self.assertEqual(
+            [item.active_execution_ms for item in task.transition_history],
+            [0, 1000, 0, 1000, 1000],
+        )
         self.assertEqual(task.transition_history[2].duration_ms, 1000)
         self.assertEqual(task.transition_history[2].transition_source, TransitionSource.USER)
         self.assertEqual(self.events[1].payload["transition_id"], 2)
@@ -89,6 +93,7 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertEqual(self.events[2].payload["transition_source"], "USER")
         self.assertEqual(self.events[2].payload["wall_clock_ms"], 1000)
         self.assertEqual(self.events[2].payload["waiting_ms"], 1000)
+        self.assertEqual(self.events[2].payload["active_execution_ms"], 0)
 
     def test_running_cannot_complete_without_verification(self):
         task = self.machine.transition(self.task, TaskState.RUNNING)
@@ -148,6 +153,7 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertEqual(len(checkpoint.checkpoint_fingerprint), 64)
         self.assertEqual(checkpoint.transition_wall_clock_ms, 1000)
         self.assertEqual(checkpoint.transition_waiting_ms, 0)
+        self.assertEqual(checkpoint.transition_active_execution_ms, 0)
         self.assertEqual(checkpoint.transition_duration_ms, 1000)
         self.assertEqual(checkpoint.transition_source, TransitionSource.SYSTEM)
 
@@ -166,6 +172,7 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertIn("transition_source", serialized)
         self.assertIn("wall_clock_ms", serialized)
         self.assertIn("waiting_ms", serialized)
+        self.assertIn("active_execution_ms", serialized)
 
 
 class SequenceClock:
