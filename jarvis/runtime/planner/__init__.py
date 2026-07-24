@@ -12,6 +12,7 @@ from jarvis.runtime.planner.contracts import (
     agent_plan_to_dict,
 )
 from jarvis.runtime.planner.compiler import PlanCompilationResult, PlanCompiler
+from jarvis.runtime.planner.cost import ExecutionCost, estimate_plan_cost, operation_cost
 from jarvis.runtime.planner.journal import (
     PlanValidationJournalEntry,
     PlanValidationReplayResult,
@@ -49,6 +50,7 @@ from jarvis.runtime.planner.versioning import (
 
 __all__ = [
     "ExecutionPlan",
+    "ExecutionCost",
     "ExecutionStep",
     "AgentPlan",
     "GoalEnvelope",
@@ -85,7 +87,9 @@ __all__ = [
     "agent_plan_from_dict",
     "agent_plan_to_dict",
     "create_execution_plan",
+    "estimate_plan_cost",
     "compare_contract_versions",
     "normalize_contract_version",
     "normalize_sunset_date",
+    "operation_cost",
 ]

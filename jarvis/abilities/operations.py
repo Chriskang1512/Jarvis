@@ -43,9 +43,22 @@ class CapabilityOperationMetadata:
     parallel_safe: bool = False
     deduplicatable: bool = False
     required_predecessors: tuple[str, ...] = ()
+    implementation_id: str = ""
+    result_equivalence_key: str = ""
+    estimated_cost: float = 0.0
+    estimated_latency_ms: int = 0
+    network_required: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, "required_predecessors", tuple(self.required_predecessors))
+        if not self.implementation_id:
+            object.__setattr__(self, "implementation_id", f"ability:{self.capability}")
+        if not self.result_equivalence_key:
+            object.__setattr__(self, "result_equivalence_key", self.id)
+        if float(self.estimated_cost) < 0:
+            raise ValueError("estimated_cost must not be negative.")
+        if int(self.estimated_latency_ms) < 0:
+            raise ValueError("estimated_latency_ms must not be negative.")
 
     @property
     def id(self):
@@ -56,6 +69,7 @@ def derive_operation_metadata(ability):
     """Create compatibility operation contracts for existing Abilities."""
     metadata = ability.metadata
     operations = DEFAULT_ABILITY_OPERATIONS.get(metadata.id, ())
+    network_required = bool(getattr(metadata, "provider", ""))
     return tuple(
         CapabilityOperationMetadata(
             capability=metadata.id,
@@ -66,6 +80,10 @@ def derive_operation_metadata(ability):
             side_effect="external_write" if operation in WRITE_OPERATIONS else "none",
             parallel_safe=operation in READ_OPERATIONS,
             deduplicatable=operation in READ_OPERATIONS,
+            implementation_id=f"ability:{metadata.id}",
+            estimated_cost=1.0 if network_required else 0.0,
+            estimated_latency_ms=500 if network_required else 5,
+            network_required=network_required,
         )
         for operation in operations
     )

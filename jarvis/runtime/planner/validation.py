@@ -88,6 +88,38 @@ class PlanValidator:
                         plan.contract_version,
                     )
                 )
+                if step.execution_target:
+                    candidates = self.ability_registry.list_operation_candidates(
+                        step.capability,
+                        step.operation,
+                    )
+                    target = next(
+                        (
+                            candidate
+                            for candidate in candidates
+                            if candidate.implementation_id == step.execution_target
+                        ),
+                        None,
+                    )
+                    if target is None:
+                        issues.append(
+                            ValidationIssue(
+                                "EXECUTION_TARGET_NOT_FOUND",
+                                step_id=step.step_id,
+                                field="execution_target",
+                                actual=step.execution_target,
+                            )
+                        )
+                    elif not execution_target_compatible(operation, target):
+                        issues.append(
+                            ValidationIssue(
+                                "EXECUTION_TARGET_POLICY_MISMATCH",
+                                step_id=step.step_id,
+                                field="execution_target",
+                                expected=operation.implementation_id,
+                                actual=target.implementation_id,
+                            )
+                        )
                 dependency_operations = {
                     f"{steps_by_id[dependency].capability}.{steps_by_id[dependency].operation}"
                     for dependency in step.depends_on
@@ -253,6 +285,17 @@ def value_matches_schema_type(value, expected_type):
         "string": (str,),
     }
     return isinstance(value, types.get(expected_type, (object,)))
+
+
+def execution_target_compatible(primary, target):
+    return (
+        target.result_equivalence_key == primary.result_equivalence_key
+        and target.permission == primary.permission
+        and target.side_effect == primary.side_effect
+        and target.input_schema == primary.input_schema
+        and target.output_schema == primary.output_schema
+        and target.lifecycle == primary.lifecycle
+    )
 
 
 def _has_cycle(steps):

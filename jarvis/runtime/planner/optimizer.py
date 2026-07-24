@@ -1,6 +1,9 @@
 import json
 from dataclasses import dataclass, field, replace
 
+from jarvis.runtime.planner.cost import estimate_plan_cost
+from jarvis.runtime.planner.versioning import compare_contract_versions
+
 
 @dataclass(frozen=True)
 class OptimizationRecord:
@@ -101,6 +104,9 @@ class SmartPlanOptimizer:
         if entry:
             entries.append(entry)
         working, entry = self._mark_parallel_reads(working)
+        if entry:
+            entries.append(entry)
+        working, entry = self._select_lower_cost_targets(working)
         if entry:
             entries.append(entry)
         optimized = replace(
@@ -217,6 +223,69 @@ class SmartPlanOptimizer:
             tuple(step.step_id for step in plan.steps),
             tuple(step.step_id for step in rewritten.steps),
             {"parallel_groups": mapping},
+        )
+
+    def _select_lower_cost_targets(self, plan):
+        selections = {}
+        steps = []
+        before_cost = estimate_plan_cost(plan, self.ability_registry)
+        for step in plan.steps:
+            primary = self.ability_registry.get_operation(step.capability, step.operation)
+            candidates = self.ability_registry.list_operation_candidates(step.capability, step.operation)
+            compatible = [
+                candidate
+                for candidate in candidates
+                if primary is not None
+                and candidate.result_equivalence_key == primary.result_equivalence_key
+                and candidate.permission == primary.permission
+                and candidate.side_effect == primary.side_effect
+                and candidate.input_schema == primary.input_schema
+                and candidate.output_schema == primary.output_schema
+                and candidate.lifecycle == primary.lifecycle
+                and compare_contract_versions(plan.contract_version, candidate.contract_version) >= 0
+            ]
+            if not compatible:
+                steps.append(step)
+                continue
+            selected = min(
+                compatible,
+                key=lambda item: (
+                    float(item.estimated_cost),
+                    int(item.estimated_latency_ms),
+                    bool(item.network_required),
+                    item.implementation_id,
+                ),
+            )
+            current_target = step.execution_target or primary.implementation_id
+            if selected.implementation_id != current_target:
+                selections[step.step_id] = {
+                    "before": current_target,
+                    "after": selected.implementation_id,
+                    "estimated_cost": selected.estimated_cost,
+                    "estimated_latency_ms": selected.estimated_latency_ms,
+                    "network_required": selected.network_required,
+                }
+                steps.append(replace(step, execution_target=selected.implementation_id))
+            else:
+                steps.append(step)
+        if not selections:
+            return plan, None
+        rewritten = replace(plan, steps=tuple(steps))
+        after_cost = estimate_plan_cost(rewritten, self.ability_registry)
+        return rewritten, OptimizationJournalEntry(
+            "OPT-005",
+            "Equivalent lower-cost execution target selected",
+            tuple(step.step_id for step in plan.steps),
+            tuple(step.step_id for step in rewritten.steps),
+            {
+                "selections": selections,
+                "estimated_cost_before": before_cost.estimated_cost,
+                "estimated_cost_after": after_cost.estimated_cost,
+                "estimated_latency_ms_before": before_cost.estimated_latency_ms,
+                "estimated_latency_ms_after": after_cost.estimated_latency_ms,
+                "network_operations_before": before_cost.network_operations,
+                "network_operations_after": after_cost.network_operations,
+            },
         )
 
 

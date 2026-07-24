@@ -98,6 +98,7 @@ The Smart Optimizer is conservative and auditable:
 | `OPT-002` | Dependency Reorder | Restores stable topological order |
 | `OPT-003` | Parallel Merge | Assigns a parallel group to independent Registry-approved safe operations |
 | `OPT-004` | Dead Step Removal | Removes only unreferenced optional safe steps explicitly marked `_dead_step` |
+| `OPT-005` | Cost Selection | Selects the cheapest and fastest safety-equivalent Registry implementation |
 
 Every applied rule records:
 
@@ -111,6 +112,9 @@ details
 
 The Optimizer verifies that `goal_id`, required permissions, and every
 side-effecting operation and input remain unchanged.
+
+Execution cost metadata and candidate selection are defined in
+[`execution-cost-model.md`](execution-cost-model.md).
 
 ## Compilation Boundary
 

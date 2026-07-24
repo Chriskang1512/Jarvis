@@ -62,6 +62,7 @@ class PlanStep:
     verification_policy: str = "none"
     idempotency_policy: str = "none"
     parallel_group: str = ""
+    execution_target: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "depends_on", tuple(self.depends_on))
@@ -164,6 +165,7 @@ def agent_plan_to_dict(plan, redact_inputs=False):
                 "verification_policy": step.verification_policy,
                 "idempotency_policy": step.idempotency_policy,
                 "parallel_group": step.parallel_group,
+                "execution_target": step.execution_target,
             }
             for step in plan.steps
         ],

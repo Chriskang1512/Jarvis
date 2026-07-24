@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from jarvis.abilities import AbilityRegistry, CapabilityOperationMetadata
 from jarvis.abilities.native.calendar import CalendarAbility, MockCalendarProvider
@@ -11,6 +12,7 @@ from jarvis.runtime.planner import (
     PlanValidator,
     SmartPlanOptimizer,
     ValidationStatus,
+    estimate_plan_cost,
 )
 
 
@@ -267,6 +269,103 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(len(result.execution_ready_plan.steps), 1)
         self.assertEqual(len(result.validation_journal), 2)
         self.assertTrue(all(entry.replay(validator).matches for entry in result.validation_journal))
+
+    def test_cost_optimizer_selects_cheaper_equivalent_cache_candidate(self):
+        primary = self.registry.get_operation("calendar", "list")
+        self.registry.register_operation_candidate(
+            replace(
+                primary,
+                implementation_id="cache:calendar",
+                estimated_cost=0.0,
+                estimated_latency_ms=2,
+                network_required=False,
+            )
+        )
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        result = SmartPlanOptimizer(self.registry).optimize(plan)
+
+        self.assertEqual(result.plan.steps[0].execution_target, "cache:calendar")
+        self.assertIn("OPT-005", result.record.rules_applied)
+        entry = next(item for item in result.record.journal_entries if item.rule_id == "OPT-005")
+        self.assertLess(
+            entry.details["estimated_cost_after"],
+            entry.details["estimated_cost_before"],
+        )
+        self.assertEqual(estimate_plan_cost(result.plan, self.registry).network_operations, 0)
+
+    def test_cost_optimizer_uses_latency_then_local_tie_breakers(self):
+        primary = self.registry.get_operation("calendar", "list")
+        self.registry.register_operation_candidate(
+            replace(
+                primary,
+                implementation_id="network-fast",
+                estimated_cost=0.0,
+                estimated_latency_ms=1,
+                network_required=True,
+            )
+        )
+        self.registry.register_operation_candidate(
+            replace(
+                primary,
+                implementation_id="local-fast",
+                estimated_cost=0.0,
+                estimated_latency_ms=1,
+                network_required=False,
+            )
+        )
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        optimized = SmartPlanOptimizer(self.registry).optimize(plan).plan
+
+        self.assertEqual(optimized.steps[0].execution_target, "local-fast")
+
+    def test_cost_optimizer_excludes_cheaper_policy_mismatch(self):
+        primary = self.registry.get_operation("calendar", "list")
+        self.registry.register_operation_candidate(
+            replace(
+                primary,
+                implementation_id="unsafe-cache",
+                estimated_cost=0.0,
+                estimated_latency_ms=0,
+                permission="confirm_required",
+                side_effect="external_write",
+            )
+        )
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        result = SmartPlanOptimizer(self.registry).optimize(plan)
+
+        self.assertEqual(result.plan.steps[0].execution_target, "")
+        self.assertNotIn("OPT-005", result.record.rules_applied)
+
+    def test_validator_blocks_unknown_execution_target(self):
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(
+                PlanStep(
+                    "read",
+                    1,
+                    "calendar",
+                    "list",
+                    execution_target="missing:calendar",
+                ),
+            ),
+        )
+
+        result = PlanValidator(self.registry).validate(plan)
+
+        self.assertEqual(result.status, ValidationStatus.BLOCKED)
+        self.assertIn("EXECUTION_TARGET_NOT_FOUND", {issue.code for issue in result.issues})
 
 
 if __name__ == "__main__":

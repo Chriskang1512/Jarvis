@@ -12,6 +12,7 @@ class AbilityRegistry:
         self.abilities = {}
         self.capability_index = {}
         self.operation_index = {}
+        self.operation_candidates = {}
 
     def register(self, ability):
         """Register one ability by metadata ID."""
@@ -65,6 +66,27 @@ class AbilityRegistry:
         if metadata.id in self.operation_index and not replace_existing:
             raise ValueError(f"Operation '{metadata.id}' is already registered.")
         self.operation_index[metadata.id] = metadata
+        candidates = self.operation_candidates.setdefault(metadata.id, {})
+        if replace_existing:
+            candidates.pop(metadata.implementation_id, None)
+        candidates[metadata.implementation_id] = metadata
+
+    def register_operation_candidate(self, metadata):
+        """Register an equivalent implementation candidate for one operation."""
+        candidates = self.operation_candidates.setdefault(metadata.id, {})
+        if metadata.implementation_id in candidates:
+            raise ValueError(
+                f"Operation candidate '{metadata.id}:{metadata.implementation_id}' is already registered."
+            )
+        candidates[metadata.implementation_id] = metadata
+
+    def list_operation_candidates(self, capability, operation=""):
+        """Return deterministic implementation candidates for an operation."""
+        operation_id = capability if not operation else f"{capability}.{operation}"
+        return [
+            self.operation_candidates[operation_id][key]
+            for key in sorted(self.operation_candidates.get(operation_id, {}))
+        ]
 
     def get_operation(self, capability, operation=""):
         """Return operation metadata by separate or combined identifier."""

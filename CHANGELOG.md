@@ -12,6 +12,11 @@
 - Smart Optimizer rules `OPT-001` through `OPT-004` for duplicate removal,
   dependency reorder, parallel safe-read grouping, and explicit dead-step
   removal.
+- Execution Cost metadata for estimated cost, latency, network use,
+  implementation identity, and result equivalence.
+- `OPT-005` deterministic lower-cost implementation selection with
+  permission, side-effect, schema, lifecycle, and contract safety filters.
+- Execution-ready `execution_target` validation and serial Plan cost estimates.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
 - `PlanCompiler` original validation, optimization, revalidation, and
@@ -56,7 +61,7 @@
 
 ### Verified
 
-- Full regression suite: `743 tests OK (skipped=2)`.
+- Full regression suite: `747 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 
