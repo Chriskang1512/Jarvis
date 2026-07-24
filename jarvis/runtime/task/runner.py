@@ -7,6 +7,7 @@ from jarvis.debug_trace import trace_event
 from jarvis.runtime.planner import PlanResult, PlanStepResult
 from jarvis.runtime.task.history import TaskHistory
 from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, now_iso
+from jarvis.runtime.task.state_machine import TaskStateMachine
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class TaskRunner:
         update_context,
         merge_responses,
         history=None,
+        state_machine=None,
     ):
         """Create a task runner from dispatcher callbacks."""
         self.execute_step = execute_step
@@ -37,6 +39,7 @@ class TaskRunner:
         self.update_context = update_context
         self.merge_responses = merge_responses
         self.history = history or TaskHistory()
+        self.state_machine = state_machine or TaskStateMachine()
         self._cancelled_task_ids = set()
         self._active_task_id = ""
 
@@ -53,7 +56,7 @@ class TaskRunner:
         """Execute a plan and return a TaskRunnerResult."""
         started = perf_counter()
         task = RuntimeTask(id="", goal=getattr(plan, "raw_text", "") or getattr(plan, "id", ""))
-        task = task.transition(TaskState.RUNNING)
+        task = self.state_machine.transition(task, TaskState.RUNNING, reason="execution_started")
         self._active_task_id = task.id
         trace_event("task.started", task_id=task.id, goal=task.goal, step_count=getattr(plan, "step_count", 0))
 
@@ -67,8 +70,10 @@ class TaskRunner:
 
             for step in tuple(getattr(plan, "steps", []))[int(start_index or 0) :]:
                 if task.id in self._cancelled_task_ids:
-                    task = task.transition(
+                    task = self.state_machine.transition(
+                        task,
                         TaskState.CANCELLED,
+                        reason="cancel_requested",
                         current_step=step.index,
                         completed_steps=tuple(completed_steps),
                         failed_steps=tuple(failed_steps),
@@ -86,7 +91,12 @@ class TaskRunner:
                 if confirmed:
                     input_data["_confirmed"] = True
 
-                task = task.transition(TaskState.RUNNING, current_step=step.index)
+                task = self.state_machine.transition(
+                    task,
+                    TaskState.RUNNING,
+                    reason="step_started",
+                    current_step=step.index,
+                )
                 trace_event(
                     "task.step.started",
                     task_id=task.id,
@@ -95,11 +105,28 @@ class TaskRunner:
                     tool=step.tool_name,
                     action=step.action,
                 )
+                def record_retry(retry_number):
+                    nonlocal task
+                    task = self.state_machine.transition(
+                        task,
+                        TaskState.RETRYING,
+                        reason="step_retry",
+                        current_step=step.index,
+                        retry_count=total_retry_count + retry_number,
+                    )
+                    task = self.state_machine.transition(
+                        task,
+                        TaskState.RUNNING,
+                        reason="retry_started",
+                        current_step=step.index,
+                    )
+
                 step_result, record, retry_count = self.run_step(
                     step,
                     input_data,
                     getattr(plan, "step_count", 0),
                     task.id,
+                    on_retry=record_retry,
                 )
                 total_retry_count += retry_count
                 step_results.append(step_result)
@@ -107,8 +134,10 @@ class TaskRunner:
                 if is_confirm_required_step_result(step_result):
                     wait_record = replace(record, status=TaskState.WAIT_CONFIRM)
                     step_records.append(wait_record)
-                    task = task.transition(
+                    task = self.state_machine.transition(
+                        task,
                         TaskState.WAIT_CONFIRM,
+                        reason="permission_confirmation_required",
                         current_step=step.index,
                         completed_steps=tuple(completed_steps),
                         failed_steps=tuple(failed_steps),
@@ -127,8 +156,10 @@ class TaskRunner:
 
                 failed_steps.append(step.index)
                 final_state = TaskState.PARTIAL_SUCCESS if len(completed_steps) > 0 else TaskState.FAILED
-                task = task.transition(
+                task = self.state_machine.transition(
+                    task,
                     final_state,
+                    reason="step_failed",
                     completed_steps=tuple(completed_steps),
                     failed_steps=tuple(failed_steps),
                     retry_count=total_retry_count,
@@ -137,19 +168,38 @@ class TaskRunner:
                 )
                 return self.finish(task, plan, step_results, context, step_result.error)
 
-            task = task.transition(
-                TaskState.SUCCESS if len(step_results) > 0 else TaskState.FAILED,
-                completed_steps=tuple(completed_steps),
-                failed_steps=tuple(failed_steps),
-                retry_count=total_retry_count,
-                step_records=tuple(step_records),
-                duration_ms=elapsed_ms(started),
-            )
+            if len(step_results) > 0:
+                task = self.state_machine.transition(
+                    task,
+                    TaskState.VERIFYING,
+                    reason="steps_completed",
+                    completed_steps=tuple(completed_steps),
+                    failed_steps=tuple(failed_steps),
+                    retry_count=total_retry_count,
+                    step_records=tuple(step_records),
+                    duration_ms=elapsed_ms(started),
+                )
+                task = self.state_machine.transition(
+                    task,
+                    TaskState.SUCCESS,
+                    reason="verification_passed",
+                )
+            else:
+                task = self.state_machine.transition(
+                    task,
+                    TaskState.FAILED,
+                    reason="empty_plan",
+                    completed_steps=tuple(completed_steps),
+                    failed_steps=tuple(failed_steps),
+                    retry_count=total_retry_count,
+                    step_records=tuple(step_records),
+                    duration_ms=elapsed_ms(started),
+                )
             return self.finish(task, plan, step_results, context, "")
         finally:
             self._active_task_id = ""
 
-    def run_step(self, step, input_data, step_count, task_id):
+    def run_step(self, step, input_data, step_count, task_id, on_retry=None):
         """Execute one step with retry and validation."""
         started_at = now_iso()
         step_started = perf_counter()
@@ -232,6 +282,8 @@ class TaskRunner:
                 return last_result, record, retry_count
 
             retry_count += 1
+            if on_retry is not None:
+                on_retry(retry_count)
             trace_event(
                 "task.step.retry",
                 task_id=task_id,
@@ -246,7 +298,7 @@ class TaskRunner:
 
     def finish(self, task, plan, step_results, context, error):
         """Build PlanResult, save history, and return TaskRunnerResult."""
-        success = task.status in (TaskState.SUCCESS, TaskState.WAIT_CONFIRM)
+        success = task.status in (TaskState.SUCCESS, TaskState.COMPLETED, TaskState.WAIT_CONFIRM)
         response = self.merge_responses(step_results, plan)
 
         if task.status == TaskState.PARTIAL_SUCCESS:

@@ -78,6 +78,10 @@ class TestRuntimeTaskEngineSprint9(unittest.TestCase):
         self.assertEqual(tool.calls, 2)
         self.assertEqual(result.task.retry_count, 1)
         self.assertEqual(result.task.step_records[0].attempts, 2)
+        self.assertEqual(
+            [item.to_state for item in result.task.transition_history if item.to_state == TaskState.RETRYING],
+            [TaskState.RETRYING],
+        )
 
     def test_step_context_feeds_calendar_event_into_reminder(self):
         """Check official step context fills Reminder input from Calendar output."""

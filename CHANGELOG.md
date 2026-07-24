@@ -4,6 +4,19 @@
 
 ### Added
 
+- Sprint 18.3 Runtime Task State Machine states from planning through
+  verification, completion, failure, cancellation, pause, resume, and retry.
+- A single validated transition engine that blocks `RUNNING -> COMPLETED`
+  unless verification occurs first.
+- Privacy-safe State Transition History records designed for later Execution
+  Journal projection.
+- EventBus publication for task start, confirmation wait, pause, resume, retry,
+  completion, cancellation, failure, and generic state changes.
+- Per-transition Runtime checkpoints with deterministic fingerprints and
+  `RecoveryDecision`-driven `FROM_STEP`, `FROM_CHECKPOINT`, and `FULL_RESTART`
+  resume routing.
+- Legacy `SUCCESS` compatibility after mandatory `VERIFYING`, while new Agent
+  Core flows use canonical `COMPLETED`.
 - Sprint 18.2 operation-level Registry metadata for schema, permission,
   lifecycle, side-effect, dependency, deduplication, and parallel policy.
 - Three-level Plan validation results: `VALID`, `WARNING`, and `BLOCKED`.
@@ -86,7 +99,7 @@
 
 ### Verified
 
-- Full regression suite: `762 tests OK (skipped=2)`.
+- Full regression suite: `769 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

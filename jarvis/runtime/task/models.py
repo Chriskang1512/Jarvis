@@ -8,13 +8,34 @@ class TaskState(Enum):
     """Runtime task lifecycle states."""
 
     PENDING = "PENDING"
+    PLANNING = "PLANNING"
+    VALIDATING = "VALIDATING"
+    OPTIMIZING = "OPTIMIZING"
+    READY = "READY"
     RUNNING = "RUNNING"
     WAIT_CONFIRM = "WAIT_CONFIRM"
+    PAUSED = "PAUSED"
+    RESUMING = "RESUMING"
+    RETRYING = "RETRYING"
+    VERIFYING = "VERIFYING"
+    COMPLETED = "COMPLETED"
     WAIT_EXTERNAL = "WAIT_EXTERNAL"
     PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
     FAILED = "FAILED"
-    SUCCESS = "SUCCESS"
     CANCELLED = "CANCELLED"
+    SUCCESS = "SUCCESS"
+
+
+@dataclass(frozen=True)
+class StateTransitionRecord:
+    """Privacy-safe record of one RuntimeTask state change."""
+
+    sequence: int
+    from_state: TaskState
+    to_state: TaskState
+    reason: str = ""
+    step_id: str = ""
+    occurred_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -50,6 +71,7 @@ class RuntimeTask:
     failed_steps: tuple[int, ...] = ()
     retry_count: int = 0
     step_records: tuple[TaskStepRecord, ...] = ()
+    transition_history: tuple[StateTransitionRecord, ...] = ()
     duration_ms: int = 0
 
     def __post_init__(self):
@@ -68,10 +90,13 @@ class RuntimeTask:
         object.__setattr__(self, "completed_steps", tuple(self.completed_steps))
         object.__setattr__(self, "failed_steps", tuple(self.failed_steps))
         object.__setattr__(self, "step_records", tuple(self.step_records))
+        object.__setattr__(self, "transition_history", tuple(self.transition_history))
 
-    def transition(self, status, **changes):
-        """Return a copy with an updated status."""
-        return replace(self, status=status, updated_at=now_iso(), **changes)
+    def transition(self, status, reason="legacy_runtime", **changes):
+        """Route state changes through the single transition validator."""
+        from jarvis.runtime.task.state_machine import transition_task
+
+        return transition_task(self, status, reason=reason, changes=changes)
 
     def to_dict(self):
         """Return a diagnostics-friendly dictionary."""
@@ -86,6 +111,17 @@ class RuntimeTask:
             "failed_steps": list(self.failed_steps),
             "retry_count": self.retry_count,
             "duration_ms": self.duration_ms,
+            "transition_history": [
+                {
+                    "sequence": record.sequence,
+                    "from_state": record.from_state.value,
+                    "to_state": record.to_state.value,
+                    "reason": record.reason,
+                    "step_id": record.step_id,
+                    "occurred_at": record.occurred_at,
+                }
+                for record in self.transition_history
+            ],
             "step_records": [
                 {
                     "step_index": record.step_index,
