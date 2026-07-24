@@ -1,5 +1,37 @@
 # Changelog
 
+## [v0.6.0-sprint.17.6] - Google Workspace Integration Polish
+
+### Added
+
+- Deterministic `Contacts.get -> Mail.send` and
+  `Calendar.list -> Mail.send` plans with explicit step dependencies.
+- Provider-independent runtime context propagation for resolved contact emails
+  and selected Calendar event details.
+- Cross-Ability mail previews that freeze the resolved recipient, generated
+  subject, and event body before confirmation.
+- Integration tests for both Workspace plans and their no-send-before-confirm
+  boundary.
+
+### Changed
+
+- Long subjects in recent-mail speech are compacted without modifying stored
+  Gmail data.
+- Selected-message summaries are bounded for predictable voice duration.
+- Gmail auth and permission failures now direct the user to OAuth
+  reauthentication.
+
+### Safety
+
+- Contacts and Calendar reads may run before a send preview, but Gmail send is
+  never called before explicit confirmation.
+- Existing draft freezing, cancellation, duplicate-send blocking, sent-message
+  verification, and PII-safe logging remain in force.
+
+### Verified
+
+- Full regression suite: `708 tests OK (skipped=2)`.
+
 ## [v0.6.0-sprint.17.5] - Google Gmail Send & Reply
 
 ### Added

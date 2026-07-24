@@ -167,6 +167,30 @@ class RuntimeToolDispatcher:
         """Fill a planned step input from prior step context when needed."""
         input_data = dict(step.input_data)
 
+        if step.tool_name == "mail" and step.action == "send":
+            contact = context.get("last_contact", {})
+            calendar_event = context.get("last_calendar_event", {})
+            calendar_mail = bool(input_data.pop("_workspace_calendar_mail", False))
+
+            if contact and not input_data.get("to"):
+                emails = tuple(contact.get("emails", ()) or ())
+                if emails:
+                    input_data["to"] = [emails[0]]
+                    input_data["recipient"] = emails[0]
+                    input_data["recipient_name"] = contact.get("display_name", "")
+
+            if calendar_mail and calendar_event:
+                title = calendar_event.get("title", "") or "일정"
+                date_text = calendar_event.get("date", "")
+                time_text = calendar_event.get("time", "")
+                when = " ".join(part for part in [date_text, time_text] if part)
+                input_data["subject"] = f"{title} 일정 안내"
+                input_data["body"] = f"{when} {title} 일정입니다.".strip()
+            elif calendar_mail:
+                input_data["subject"] = "일정 안내"
+
+            return input_data
+
         if step.tool_name != "reminder":
             return input_data
 
@@ -381,17 +405,32 @@ def format_tool_response(tool_result):
 
 def update_plan_context(context, step, tool_result):
     """Update execution context from one completed step."""
-    if step.tool_name != "calendar" or not getattr(tool_result, "success", False):
+    if not getattr(tool_result, "success", False):
         return
 
     output = getattr(tool_result, "output", None)
     data = getattr(output, "data", None)
+
+    if step.tool_name == "contacts":
+        contact = getattr(data, "contact", None)
+        if contact is not None:
+            context["last_contact"] = {
+                "display_name": getattr(contact, "display_name", ""),
+                "emails": tuple(getattr(contact, "emails", ()) or ()),
+                "id": getattr(contact, "id", ""),
+            }
+        return
+
+    if step.tool_name != "calendar":
+        return
+
     events = list(getattr(data, "events", []) or [])
 
     if len(events) == 0:
         return
 
-    event = events[0]
+    requested_time = str(getattr(step, "input_data", {}).get("time", "") or "")
+    event = next((item for item in events if requested_time and getattr(item, "time", "") == requested_time), events[0])
     context["last_calendar_event"] = {
         "title": getattr(event, "title", ""),
         "date": getattr(event, "date", ""),

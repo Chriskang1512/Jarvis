@@ -87,6 +87,17 @@ class TestMailAbilityVerticalSlice(unittest.TestCase):
         self.assertIn("읽고 싶은 메일 번호를 말씀해 주세요.", result.output.to_natural_language())
         self.assertNotIn("body-1", result.output.to_natural_language())
 
+    def test_mail_list_compacts_a_long_subject_for_speech(self):
+        self.provider.messages = (
+            MailMessage(id="long", sender_name="Google", subject="가" * 100),
+        )
+
+        result = self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
+        spoken = result.output.to_natural_language()
+
+        self.assertIn("가" * 47 + "…", spoken)
+        self.assertNotIn("가" * 48, spoken)
+
     def test_mail_ordinal_get_reads_selected_summary(self):
         self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
 

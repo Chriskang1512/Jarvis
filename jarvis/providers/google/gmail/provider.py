@@ -242,15 +242,15 @@ def create_google_mail_provider(config=None):
 def gmail_safe_message(code):
     """Return Gmail-specific user-safe error text."""
     if code == AUTH_REQUIRED:
-        return "Gmail 인증이 필요합니다."
+        return "Gmail 인증이 필요합니다. Gmail OAuth를 다시 인증해 주세요."
     if code == AUTH_EXPIRED:
         return "Gmail 인증이 만료되었습니다."
     if code == AUTH_REFRESH_FAILED:
-        return "Gmail 인증을 갱신하지 못했습니다."
+        return "Gmail 인증을 갱신하지 못했습니다. Gmail OAuth를 다시 인증해 주세요."
     if code == SCOPE_INSUFFICIENT:
-        return "Gmail 읽기 권한이 없습니다."
+        return "Google Gmail 권한이 부족합니다. Gmail OAuth를 다시 인증해 주세요."
     if code == PERMISSION_DENIED:
-        return "Gmail 접근 권한이 없습니다."
+        return "Google Gmail 권한이 없습니다. Gmail OAuth를 다시 인증해 주세요."
     if code == PROVIDER_TIMEOUT:
         return "Gmail 응답이 지연되고 있습니다."
     if code == RATE_LIMITED:

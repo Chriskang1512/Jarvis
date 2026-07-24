@@ -94,7 +94,7 @@ def list_message(messages, query=""):
 
     for index, message in enumerate(items, start=1):
         sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
-        subject = message.subject or "제목 없음"
+        subject = compact_text(message.subject or "제목 없음", 48)
         received = format_received_at(message.received_at)
         suffix = f" {received}." if received else ""
         lines.append(f"{index}. {sender}. {subject}.{suffix}")
@@ -110,7 +110,7 @@ def get_message(message, include_body=False):
 
     sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
     subject = message.subject or "제목 없음"
-    snippet = message.body_summary or message.snippet
+    snippet = compact_text(message.body_summary or message.snippet, 240)
     received = format_received_at(message.received_at)
     received_sentence = f" 받은 시각은 {received}입니다." if received else ""
 
@@ -145,6 +145,15 @@ def clean_sender(value):
     return str(value or "").strip().rstrip(",，").strip()
 
 
+def compact_text(value, max_length):
+    """Keep spoken mail fields concise without changing stored message data."""
+    text = " ".join(str(value or "").split()).strip()
+    limit = max(1, int(max_length))
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
 def reply_recipient(value):
     """Return a natural Korean dative phrase for a reply recipient."""
     recipient = str(value or "").strip()
@@ -160,13 +169,13 @@ def error_message(result):
     if code == "MAIL_NOT_FOUND":
         return "메일을 찾지 못했습니다."
     if code == "AUTH_REQUIRED":
-        return "Gmail 인증이 필요합니다."
+        return "Gmail 인증이 필요합니다. Gmail OAuth를 다시 인증해 주세요."
     if code == "SCOPE_INSUFFICIENT":
-        return "Gmail 읽기 권한이 없습니다."
+        return "Google Gmail 권한이 부족합니다. Gmail OAuth를 다시 인증해 주세요."
     if code == "FEATURE_NOT_ENABLED":
         return "Google Cloud에서 Gmail API를 활성화해야 합니다."
     if code in {"PERMISSION_DENIED", "AUTH_EXPIRED", "AUTH_REFRESH_FAILED"}:
-        return "Gmail 권한을 확인해야 합니다."
+        return "Google Gmail 권한이 없습니다. Gmail OAuth를 다시 인증해 주세요."
     if code in {"PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "RATE_LIMITED"}:
         return "Gmail 서비스를 지금 사용할 수 없습니다."
 

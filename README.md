@@ -6,7 +6,35 @@ Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 
 
 ## Current Version
 
-v0.6.0 - Sprint 17.5 Google Gmail Send & Reply
+v0.6.0 - Sprint 17.6 Google Workspace Integration Polish
+
+## v0.6.0 Sprint 17.6
+
+Sprint 17.6 joins Calendar, Contacts, and Gmail into one confirmation-safe
+Workspace flow.
+
+Key points:
+
+- `Contacts -> Gmail` resolves a contact email before composing the message.
+- `Calendar -> Gmail` reads the requested event and freezes its title and time
+  into the mail preview.
+- Cross-Ability steps declare dependencies and exchange provider-independent
+  data through the runtime task context.
+- Gmail send still stops at `confirm_required`; the previewed recipient,
+  subject, and body are not reparsed after confirmation.
+- Recent-mail speech stays compact: sender, shortened subject, and time only.
+- Gmail auth and permission errors explain when OAuth reauthentication is
+  required.
+
+Supported examples:
+
+```text
+우수 연락처 찾아서 테스트 메일 보내줘
+아야에게 내일 오후 3시 일정 메일로 보내줘
+최근 메일 알려줘
+첫 번째 읽어줘
+답장해줘
+```
 
 ## v0.6.0 Sprint 17.5
 

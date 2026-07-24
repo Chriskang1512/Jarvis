@@ -425,6 +425,10 @@ def partial_success_response(step_results):
     success_text = "일부 작업은 완료했습니다."
     failure_text = "일부 작업은 완료하지 못했습니다."
 
+    mail_failure = next((result for result in failures if result.tool_name == "mail" and result.response), None)
+    if mail_failure is not None:
+        return mail_failure.response
+
     if any(result.tool_name == "calendar" for result in successes):
         success_text = "일정은 등록했습니다."
 

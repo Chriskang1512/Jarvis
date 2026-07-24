@@ -49,6 +49,13 @@ class RuntimePlanner:
             trace_plan(plan)
             return plan
 
+        workspace_plan = create_workspace_integration_plan(raw_text, registry)
+
+        if workspace_plan is not None:
+            trace_intent_resolve(workspace_plan, "workspace_rule")
+            trace_plan(workspace_plan)
+            return workspace_plan
+
         trace_intent_rule_candidates(raw_text, registry)
 
         if self.intent_parser is not None and should_force_intent_parser():
@@ -512,6 +519,79 @@ def split_plan_clauses(text):
         clauses.extend(split_attached_and(part))
 
     return [clause for clause in clauses if clause]
+
+
+def create_workspace_integration_plan(text, registry):
+    """Build deterministic Contacts/Calendar -> Gmail plans."""
+    normalized = normalize_clause(text)
+
+    if registry is None or registry.get("mail") is None:
+        return None
+
+    contact_match = re.fullmatch(
+        r"(?P<name>.+?)\s*연락처\s*(?:찾아서|찾아\s*서|찾고)\s*(?P<tail>.*(?:메일|이메일)\s*(?:보내줘|보내\s*줘|보내|전송해줘|전송해))",
+        normalized,
+    )
+    if contact_match and registry.get("contacts") is not None:
+        name = contact_match.group("name").strip()
+        tail = contact_match.group("tail").strip()
+        mail_text = tail if re.match(r"^.+?(?:에게|한테|으로|로)\s+", tail) else f"{name}에게 {tail}"
+        return ExecutionPlan(
+            raw_text=normalized,
+            steps=(
+                ExecutionStep(
+                    index=1,
+                    tool_name="contacts",
+                    action="get",
+                    input_data={"text": f"{name} 이메일 알려줘"},
+                    raw_text=f"{name} 연락처 찾아줘",
+                ),
+                ExecutionStep(
+                    index=2,
+                    tool_name="mail",
+                    action="send",
+                    input_data={"action": "send", "raw_text": mail_text},
+                    raw_text=mail_text,
+                    depends_on=(1,),
+                ),
+            ),
+        )
+
+    calendar_match = re.fullmatch(
+        r"(?P<name>.+?)(?:에게|한테)\s+(?P<schedule>.+?\s+일정)\s*(?:을|를)?\s*(?:메일|이메일)?로?\s*(?:보내줘|보내\s*줘|보내|전송해줘|전송해)",
+        normalized,
+    )
+    if calendar_match and registry.get("calendar") is not None:
+        name = calendar_match.group("name").strip()
+        schedule = calendar_match.group("schedule").strip()
+        return ExecutionPlan(
+            raw_text=normalized,
+            steps=(
+                ExecutionStep(
+                    index=1,
+                    tool_name="calendar",
+                    action="list",
+                    input_data={"text": f"{schedule} 알려줘"},
+                    raw_text=f"{schedule} 알려줘",
+                ),
+                ExecutionStep(
+                    index=2,
+                    tool_name="mail",
+                    action="send",
+                    input_data={
+                        "action": "send",
+                        "recipient": name,
+                        "recipient_name": name,
+                        "raw_text": "",
+                        "_workspace_calendar_mail": True,
+                    },
+                    raw_text=normalized,
+                    depends_on=(1,),
+                ),
+            ),
+        )
+
+    return None
 
 
 def split_calendar_reminder_clause(text):
