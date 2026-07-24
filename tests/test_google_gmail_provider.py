@@ -43,7 +43,8 @@ class TestGoogleGmailProvider(unittest.TestCase):
         self.assertTrue(result.messages[0].has_attachment)
         self.assertEqual(result.messages[0].attachment_count, 1)
         self.assertEqual(result.messages[0].body_summary, "본문 내용입니다.")
-        self.assertEqual(service.list_kwargs["q"], "from:github")
+        self.assertEqual(service.list_kwargs["q"], "-in:sent from:github")
+        self.assertEqual(service.list_kwargs["labelIds"], ["INBOX"])
         self.assertEqual(service.list_kwargs["maxResults"], 5)
 
     def test_google_gmail_reuses_client_for_list_hydration(self):
@@ -68,6 +69,8 @@ class TestGoogleGmailProvider(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(result.message_count, 2)
+        self.assertEqual(service.list_kwargs["q"], "-in:sent")
+        self.assertEqual(service.list_kwargs["labelIds"], ["INBOX"])
         self.assertEqual(client_factory.calls, 1)
 
     def test_google_gmail_empty_search_returns_zero_messages(self):

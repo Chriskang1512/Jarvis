@@ -49,14 +49,27 @@ class GoogleMailProvider:
         """Search Gmail messages and hydrate compact metadata."""
         started = perf_counter()
         gmail_query = str(getattr(query, "query", "") or "").strip()
+        inbox_query = " ".join(part for part in ("-in:sent", gmail_query) if part)
         limit = int(getattr(query, "limit", 5) or 5)
         limit = max(1, min(limit, 10))
-        trace_event("google_gmail.request", action="search", provider=self.provider_name, query=redact_sensitive_text(gmail_query), limit=limit)
+        trace_event(
+            "google_gmail.request",
+            action="search",
+            provider=self.provider_name,
+            mailbox="inbox",
+            query=redact_sensitive_text(gmail_query),
+            limit=limit,
+        )
 
         try:
             service = self.gmail_client()
             response = self.execute_google_request(
-                lambda: service.users().messages().list(userId="me", q=gmail_query, maxResults=limit)
+                lambda: service.users().messages().list(
+                    userId="me",
+                    q=inbox_query,
+                    labelIds=["INBOX"],
+                    maxResults=limit,
+                )
             )
             refs = self.mapper.list_to_messages(response)
             messages = tuple(self.hydrate_message(ref.id, service=service) for ref in refs if ref.id)
