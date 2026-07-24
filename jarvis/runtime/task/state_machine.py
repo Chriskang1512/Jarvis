@@ -93,10 +93,16 @@ class RuntimeTaskCheckpoint:
     failed_steps: tuple
     retry_count: int
     transition_sequence: int
-    transition_duration_ms: int
+    transition_wall_clock_ms: int
+    transition_waiting_ms: int
     transition_source: TransitionSource
     checkpoint_created_at: str
     checkpoint_fingerprint: str
+
+    @property
+    def transition_duration_ms(self):
+        """Backward-compatible checkpoint duration alias."""
+        return self.transition_wall_clock_ms
 
 
 class InMemoryTaskCheckpointStore:
@@ -134,13 +140,15 @@ class TaskStateMachine:
         source = normalize_transition_source(source)
         validate_transition(task.status, to_state)
         occurred_at = self.clock()
+        wall_clock_ms = transition_wall_clock_ms(task.updated_at, occurred_at)
         record = StateTransitionRecord(
             transition_id=len(task.transition_history) + 1,
             from_state=task.status,
             to_state=to_state,
             transition_reason=str(reason or ""),
             transition_source=source,
-            duration_ms=transition_duration_ms(task.updated_at, occurred_at),
+            wall_clock_ms=wall_clock_ms,
+            waiting_ms=wall_clock_ms if is_waiting_state(task.status) else 0,
             step_id=str(step_id or changes.get("current_step", "") or ""),
             occurred_at=occurred_at,
         )
@@ -191,7 +199,8 @@ class TaskStateMachine:
                     "to_state": record.to_state.value,
                     "transition_reason": record.transition_reason,
                     "transition_source": record.transition_source.value,
-                    "duration_ms": record.duration_ms,
+                    "wall_clock_ms": record.wall_clock_ms,
+                    "waiting_ms": record.waiting_ms,
                     "step_id": record.step_id,
                     "checkpoint_revision": checkpoint.revision,
                 },
@@ -237,13 +246,21 @@ def normalize_transition_source(source):
     return TransitionSource(str(source or "").upper())
 
 
-def transition_duration_ms(previous_at, occurred_at):
+def transition_wall_clock_ms(previous_at, occurred_at):
     try:
         previous = datetime.fromisoformat(str(previous_at or ""))
         current = datetime.fromisoformat(str(occurred_at or ""))
         return max(0, int((current - previous).total_seconds() * 1000))
     except (TypeError, ValueError):
         return 0
+
+
+def is_waiting_state(state):
+    return state in {
+        TaskState.WAIT_CONFIRM,
+        TaskState.WAIT_EXTERNAL,
+        TaskState.PAUSED,
+    }
 
 
 def create_runtime_checkpoint(task, occurred_at=None):
@@ -256,7 +273,8 @@ def create_runtime_checkpoint(task, occurred_at=None):
         "failed_steps": list(task.failed_steps),
         "retry_count": task.retry_count,
         "transition_sequence": len(task.transition_history),
-        "transition_duration_ms": task.transition_history[-1].duration_ms,
+        "transition_wall_clock_ms": task.transition_history[-1].wall_clock_ms,
+        "transition_waiting_ms": task.transition_history[-1].waiting_ms,
         "transition_source": task.transition_history[-1].transition_source.value,
         "step_records": [
             {
@@ -280,7 +298,8 @@ def create_runtime_checkpoint(task, occurred_at=None):
         failed_steps=tuple(task.failed_steps),
         retry_count=task.retry_count,
         transition_sequence=len(task.transition_history),
-        transition_duration_ms=task.transition_history[-1].duration_ms,
+        transition_wall_clock_ms=task.transition_history[-1].wall_clock_ms,
+        transition_waiting_ms=task.transition_history[-1].waiting_ms,
         transition_source=task.transition_history[-1].transition_source,
         checkpoint_created_at=created_at,
         checkpoint_fingerprint=fingerprint,

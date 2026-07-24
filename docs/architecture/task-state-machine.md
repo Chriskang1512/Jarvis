@@ -86,7 +86,8 @@ from_state
 to_state
 transition_reason
 transition_source
-duration_ms
+wall_clock_ms
+waiting_ms
 step_id
 occurred_at
 ```
@@ -98,11 +99,18 @@ stable reason code such as `permission_confirmation_required`,
 raw user input or provider payloads.
 
 `transition_source` is one of `SYSTEM`, `USER`, `RECOVERY`, or `EVENT`.
-`duration_ms` is the non-negative time spent in `from_state`, measured from the
-previous task update to this transition. It enables phase latency, confirmation
-wait, verification, and recovery metrics without reconstructing timestamps.
+`wall_clock_ms` is the non-negative time spent in `from_state`, measured from
+the previous task update to this transition. CPU time is intentionally not part
+of the Agent Runtime contract.
+
+`waiting_ms` is the portion of `wall_clock_ms` attributed to `WAIT_CONFIRM`,
+`WAIT_EXTERNAL`, or `PAUSED`. It equals `wall_clock_ms` for those states and is
+zero otherwise. It is a classification, not additional elapsed time, so Metrics
+must not add it to total wall-clock duration.
+
 Clock rollback or an unparsable legacy timestamp records `0` rather than a
-negative duration.
+negative duration. The read-only Python property `duration_ms` remains as a
+temporary compatibility alias for `wall_clock_ms`.
 
 The legacy Python properties `sequence` and `reason` remain read-only aliases
 during migration. Serialized history and EventBus payloads use only the

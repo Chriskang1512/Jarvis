@@ -44,7 +44,8 @@ class StateTransitionRecord:
     to_state: TaskState
     transition_reason: str = ""
     transition_source: TransitionSource = TransitionSource.SYSTEM
-    duration_ms: int = 0
+    wall_clock_ms: int = 0
+    waiting_ms: int = 0
     step_id: str = ""
     occurred_at: str = ""
 
@@ -57,6 +58,11 @@ class StateTransitionRecord:
     def reason(self):
         """Backward-compatible reason alias."""
         return self.transition_reason
+
+    @property
+    def duration_ms(self):
+        """Backward-compatible wall-clock duration alias."""
+        return self.wall_clock_ms
 
 
 @dataclass(frozen=True)
@@ -151,7 +157,8 @@ class RuntimeTask:
                     "to_state": record.to_state.value,
                     "transition_reason": record.transition_reason,
                     "transition_source": record.transition_source.value,
-                    "duration_ms": record.duration_ms,
+                    "wall_clock_ms": record.wall_clock_ms,
+                    "waiting_ms": record.waiting_ms,
                     "step_id": record.step_id,
                     "occurred_at": record.occurred_at,
                 }
