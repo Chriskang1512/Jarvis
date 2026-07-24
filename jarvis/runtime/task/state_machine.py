@@ -4,7 +4,7 @@ import hashlib
 import json
 
 from jarvis.core.events import BaseEvent
-from jarvis.runtime.planner.cost import ResumeMode
+from jarvis.runtime.planner.cost import RecoveryStrategy, ResumeMode
 from jarvis.runtime.task.models import (
     RuntimeTask,
     StateTransitionRecord,
@@ -35,13 +35,20 @@ ALLOWED_TRANSITIONS = {
         TaskState.WAIT_CONFIRM,
         TaskState.WAIT_EXTERNAL,
         TaskState.PAUSED,
+        TaskState.RESUMING,
         TaskState.RETRYING,
         TaskState.VERIFYING,
         TaskState.PARTIAL_SUCCESS,
         TaskState.FAILED,
         TaskState.CANCELLED,
     },
-    TaskState.WAIT_CONFIRM: {TaskState.RUNNING, TaskState.PAUSED, TaskState.CANCELLED, TaskState.FAILED},
+    TaskState.WAIT_CONFIRM: {
+        TaskState.RUNNING,
+        TaskState.RESUMING,
+        TaskState.PAUSED,
+        TaskState.CANCELLED,
+        TaskState.FAILED,
+    },
     TaskState.WAIT_EXTERNAL: {TaskState.RUNNING, TaskState.PAUSED, TaskState.RETRYING, TaskState.FAILED, TaskState.CANCELLED},
     TaskState.PAUSED: {TaskState.RESUMING, TaskState.CANCELLED, TaskState.FAILED},
     TaskState.RESUMING: {
@@ -52,13 +59,21 @@ ALLOWED_TRANSITIONS = {
         TaskState.FAILED,
         TaskState.CANCELLED,
     },
-    TaskState.RETRYING: {TaskState.RUNNING, TaskState.PAUSED, TaskState.FAILED, TaskState.CANCELLED},
+    TaskState.RETRYING: {
+        TaskState.RESUMING,
+        TaskState.RUNNING,
+        TaskState.PAUSED,
+        TaskState.FAILED,
+        TaskState.CANCELLED,
+    },
     TaskState.VERIFYING: {
         TaskState.COMPLETED,
         TaskState.SUCCESS,
+        TaskState.RUNNING,
         TaskState.RETRYING,
         TaskState.PAUSED,
         TaskState.FAILED,
+        TaskState.CANCELLED,
     },
     TaskState.PARTIAL_SUCCESS: set(),
     TaskState.COMPLETED: set(),
@@ -97,6 +112,12 @@ class RuntimeTaskCheckpoint:
     transition_waiting_ms: int
     transition_active_execution_ms: int
     transition_source: TransitionSource
+    checkpoint_version: int
+    step_input_fingerprint: str
+    external_operation_id: str
+    confirmation_state: str
+    draft_version: int
+    permission_snapshot: str
     checkpoint_created_at: str
     checkpoint_fingerprint: str
 
@@ -167,6 +188,14 @@ class TaskStateMachine:
         self.publish_transition(updated, record, checkpoint)
         return updated
 
+    def update_snapshot(self, task, **changes):
+        """Persist non-state RuntimeTask fields without bypassing checkpoints."""
+        if "status" in changes:
+            raise InvalidTaskTransition("DIRECT_TASK_STATE_UPDATE_FORBIDDEN")
+        updated = replace(task, updated_at=self.clock(), **changes)
+        self.checkpoint_store.save(create_runtime_checkpoint(updated, updated.updated_at))
+        return updated
+
     def resume(self, task, decision, checkpoint):
         if task.status != TaskState.PAUSED:
             raise InvalidTaskTransition("Resume requires a PAUSED task.")
@@ -186,6 +215,81 @@ class TaskStateMachine:
         )
         return resumed, validation
 
+    def resume_confirmed(self, task):
+        """Validate the persisted confirmation boundary before execution."""
+        checkpoint = self.checkpoint_store.load(task.id)
+        if checkpoint is None:
+            raise InvalidTaskTransition("RUNTIME_CHECKPOINT_REQUIRED")
+        if checkpoint.checkpoint_version != task.checkpoint_version:
+            raise InvalidTaskTransition("RUNTIME_CHECKPOINT_VERSION_MISMATCH")
+        expected = create_runtime_checkpoint(task, checkpoint.checkpoint_created_at)
+        if expected.checkpoint_fingerprint != checkpoint.checkpoint_fingerprint:
+            raise InvalidTaskTransition("RUNTIME_CHECKPOINT_FINGERPRINT_MISMATCH")
+        if not task.step_input_fingerprint or task.permission_snapshot != "confirm_required":
+            raise InvalidTaskTransition("RUNTIME_CONFIRMATION_SNAPSHOT_INVALID")
+        resumed = self.transition(
+            task,
+            TaskState.RESUMING,
+            reason="user_confirmed",
+            source=TransitionSource.USER,
+            confirmation_state="CONFIRMED",
+        )
+        return self.transition(
+            resumed,
+            TaskState.RUNNING,
+            reason="confirmed_action_started",
+            source=TransitionSource.USER,
+        )
+
+    def begin_recovery(self, task, decision, retries_completed=0):
+        """Apply a policy-produced RecoveryDecision without interpreting cause."""
+        strategy = decision.strategy_for(retries_completed)
+        if strategy == RecoveryStrategy.BACKOFF:
+            return self.transition(
+                task,
+                TaskState.RETRYING,
+                reason="recovery_backoff",
+                source=TransitionSource.RECOVERY,
+            )
+        if strategy in {RecoveryStrategy.WAIT, RecoveryStrategy.REAUTH}:
+            return self.transition(
+                task,
+                TaskState.PAUSED,
+                reason=f"recovery_{strategy.value.lower()}",
+                source=TransitionSource.RECOVERY,
+            )
+        if strategy == RecoveryStrategy.FALLBACK:
+            return self.transition(
+                task,
+                TaskState.RESUMING,
+                reason="recovery_fallback",
+                source=TransitionSource.RECOVERY,
+            )
+        return self.transition(
+            task,
+            TaskState.FAILED,
+            reason="recovery_abort",
+            source=TransitionSource.RECOVERY,
+        )
+
+    def resume_retry(self, task, decision):
+        """Resume one retry after its Decision-defined wait has completed."""
+        if task.status == TaskState.RETRYING:
+            task = self.transition(
+                task,
+                TaskState.RESUMING,
+                reason="retry_backoff_completed",
+                source=TransitionSource.RECOVERY,
+            )
+        if task.status == TaskState.RESUMING:
+            return self.transition(
+                task,
+                TaskState.RUNNING,
+                reason=f"retry_resume:{decision.resume_mode.value}",
+                source=TransitionSource.RECOVERY,
+            )
+        return task
+
     def publish_transition(self, task, record, checkpoint):
         if self.event_bus is None:
             return None
@@ -197,10 +301,13 @@ class TaskStateMachine:
                 aggregate_id=task.id,
                 revision=record.transition_id,
                 idempotency_key=f"task-state:{task.id}:{record.transition_id}",
+                trace_id=task.trace_id,
+                correlation_id=task.correlation_id,
                 payload={
+                    "task_id": task.id,
                     "transition_id": record.transition_id,
-                    "from_state": record.from_state.value,
-                    "to_state": record.to_state.value,
+                    "previous_state": record.from_state.value,
+                    "new_state": record.to_state.value,
                     "transition_reason": record.transition_reason,
                     "transition_source": record.transition_source.value,
                     "wall_clock_ms": record.wall_clock_ms,
@@ -208,6 +315,9 @@ class TaskStateMachine:
                     "active_execution_ms": record.active_execution_ms,
                     "step_id": record.step_id,
                     "checkpoint_revision": checkpoint.revision,
+                    "checkpoint_fingerprint": checkpoint.checkpoint_fingerprint,
+                    "trace_id": task.trace_id,
+                    "correlation_id": task.correlation_id,
                 },
             )
         )
@@ -292,6 +402,12 @@ def create_runtime_checkpoint(task, occurred_at=None):
             task.transition_history[-1].active_execution_ms
         ),
         "transition_source": task.transition_history[-1].transition_source.value,
+        "checkpoint_version": task.checkpoint_version,
+        "step_input_fingerprint": task.step_input_fingerprint,
+        "external_operation_id": task.external_operation_id,
+        "confirmation_state": task.confirmation_state,
+        "draft_version": task.draft_version,
+        "permission_snapshot": task.permission_snapshot,
         "step_records": [
             {
                 "step_index": record.step_index,
@@ -320,6 +436,12 @@ def create_runtime_checkpoint(task, occurred_at=None):
             task.transition_history[-1].active_execution_ms
         ),
         transition_source=task.transition_history[-1].transition_source,
+        checkpoint_version=task.checkpoint_version,
+        step_input_fingerprint=task.step_input_fingerprint,
+        external_operation_id=task.external_operation_id,
+        confirmation_state=task.confirmation_state,
+        draft_version=task.draft_version,
+        permission_snapshot=task.permission_snapshot,
         checkpoint_created_at=created_at,
         checkpoint_fingerprint=fingerprint,
     )

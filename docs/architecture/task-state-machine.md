@@ -181,11 +181,60 @@ Checkpoint fingerprints cover state, step position, completed/failed step IDs,
 retry count, transition sequence, and privacy-safe step result metadata.
 Responses, errors, goal text, and provider payloads are excluded.
 
+## Runtime Integration
+
+`RuntimeToolDispatcher` owns one EventBus and one `TaskStateMachine`.
+`TaskRunner` uses that machine for every write to RuntimeTask state.
+
+The current `ExecutionPlan` compatibility path has already completed planning
+before RuntimeTask construction. The runner therefore projects:
+
+```text
+PENDING
+-> PLANNING
+-> VALIDATING
+-> OPTIMIZING
+-> VALIDATING
+-> READY
+-> RUNNING
+```
+
+These transitions record completed facts; StateMachine does not invoke Planner,
+Validator, or Optimizer. Native AgentPlan execution will consume the real
+PlanCompiler result at the same READY boundary.
+
+Each successful step transitions `RUNNING -> VERIFYING`. A later step returns
+the same task to `RUNNING`; the final verified step reaches `COMPLETED` or the
+legacy `SUCCESS` adapter state.
+
+Confirmation snapshots bind checkpoint version, input fingerprint, external
+operation ID, confirmation state, draft version, and permission snapshot.
+Approval calls `resume_confirmed()`, which validates the stored checkpoint
+version and fingerprint before `WAIT_CONFIRM -> RESUMING -> RUNNING`.
+Voice stores only the task ID in its pending action and resumes the same task
+for any remaining plan steps. Rejection transitions the task to `CANCELLED`
+before any confirmed Ability call.
+
+Retry behavior is driven by `RecoveryDecision`. StateMachine consumes strategy
+and resume mode but never derives failure reason, retry budget, delay, or
+fallback policy. The legacy `max_retry` input is converted to a Decision at the
+Runner boundary.
+
 ### Retry
 
 Retries are allowed only for classified retryable failures. A write step with an
 unknown outcome must be verified before another provider call. Attempt count,
 delay policy, and prior external operation ID are journaled.
+
+The live retry sequence is:
+
+```text
+RUNNING -> RETRYING -> RESUMING -> RUNNING
+```
+
+`WAIT` and `REAUTH` Decisions leave the task `PAUSED` without an automatic
+retry. `ABORT` reaches `FAILED`. A full restart remains a validation and
+replanning path and never authorizes repeating an uncertain side effect.
 
 ### Cancellation
 

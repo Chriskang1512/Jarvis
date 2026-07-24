@@ -1,9 +1,10 @@
 from time import perf_counter
 
 from jarvis.debug_trace import trace_event
+from jarvis.core.events import InMemoryEventBus
 from jarvis.permissions import PermissionLayer, PermissionStatus
 from jarvis.runtime.planner import PlanResult, PlanStepResult, RuntimePlanner
-from jarvis.runtime.task import TaskHistory, TaskRunner
+from jarvis.runtime.task import TaskHistory, TaskRunner, TaskStateMachine
 from jarvis.runtime.tool_dispatcher.context import DispatchContext
 from jarvis.runtime.tool_dispatcher.registry import RuntimeToolRegistry
 from jarvis.runtime.tool_dispatcher.result import DispatchResult, DispatchSelection
@@ -14,7 +15,15 @@ from jarvis.tools.router import select_candidate
 class RuntimeToolDispatcher:
     """Select and execute native or external tools through one runtime facade."""
 
-    def __init__(self, registry, permission_layer=None, diagnostics_collector=None, min_confidence=0.75, intent_parser=None):
+    def __init__(
+        self,
+        registry,
+        permission_layer=None,
+        diagnostics_collector=None,
+        min_confidence=0.75,
+        intent_parser=None,
+        event_bus=None,
+    ):
         """Create dispatcher from an existing registry."""
         self.registry = registry
         self.runtime_registry = RuntimeToolRegistry(registry)
@@ -23,6 +32,7 @@ class RuntimeToolDispatcher:
         self.min_confidence = float(min_confidence)
         self.intent_parser = intent_parser
         self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
+        self.event_bus = event_bus or InMemoryEventBus()
         self.task_history = TaskHistory()
         self.task_runner = TaskRunner(
             execute_step=self.execute_task_step,
@@ -31,6 +41,7 @@ class RuntimeToolDispatcher:
             update_context=update_plan_context,
             merge_responses=merge_plan_responses,
             history=self.task_history,
+            state_machine=TaskStateMachine(event_bus=self.event_bus),
         )
 
     def set_intent_parser(self, intent_parser):
@@ -101,7 +112,15 @@ class RuntimeToolDispatcher:
         """Plan and execute text through ordered dispatcher steps."""
         return self.execute_plan(self.create_plan(text), confirmed=confirmed)
 
-    def execute_plan(self, plan, confirmed=False, start_index=0, initial_context=None, pre_step_results=None):
+    def execute_plan(
+        self,
+        plan,
+        confirmed=False,
+        start_index=0,
+        initial_context=None,
+        pre_step_results=None,
+        runtime_task=None,
+    ):
         """Execute an ExecutionPlan sequentially."""
         if getattr(plan, "requires_clarification", False):
             return PlanResult(
@@ -143,6 +162,7 @@ class RuntimeToolDispatcher:
             start_index=start_index,
             initial_context=initial_context,
             pre_step_results=pre_step_results,
+            runtime_task=runtime_task,
         ).plan_result
 
     def execute_task_step(self, step, input_data, step_count, task_id=""):

@@ -1,12 +1,20 @@
 import re
+import hashlib
+import json
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from time import perf_counter, sleep
 
 from jarvis.debug_trace import trace_event
-from jarvis.runtime.planner import PlanResult, PlanStepResult
+from jarvis.runtime.planner import (
+    HealthReason,
+    HealthRecoveryPolicy,
+    PlanResult,
+    PlanStepResult,
+    RecoveryStrategy,
+)
 from jarvis.runtime.task.history import TaskHistory
-from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, TransitionSource, now_iso
+from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, now_iso
 from jarvis.runtime.task.state_machine import TaskStateMachine
 
 
@@ -40,6 +48,7 @@ class TaskRunner:
         self.merge_responses = merge_responses
         self.history = history or TaskHistory()
         self.state_machine = state_machine or TaskStateMachine()
+        self.recovery_policy = HealthRecoveryPolicy()
         self._cancelled_task_ids = set()
         self._active_task_id = ""
 
@@ -52,21 +61,34 @@ class TaskRunner:
         if self._active_task_id:
             self.cancel(self._active_task_id)
 
-    def run(self, plan, confirmed=False, start_index=0, initial_context=None, pre_step_results=None):
+    def run(
+        self,
+        plan,
+        confirmed=False,
+        start_index=0,
+        initial_context=None,
+        pre_step_results=None,
+        runtime_task=None,
+    ):
         """Execute a plan and return a TaskRunnerResult."""
         started = perf_counter()
-        task = RuntimeTask(id="", goal=getattr(plan, "raw_text", "") or getattr(plan, "id", ""))
-        task = self.state_machine.transition(task, TaskState.RUNNING, reason="execution_started")
+        task = runtime_task
+        if task is None:
+            task = RuntimeTask(id="", goal=getattr(plan, "raw_text", "") or getattr(plan, "id", ""))
+            task = self.reflect_compiled_plan(task)
+            task = self.state_machine.transition(task, TaskState.RUNNING, reason="execution_started")
+        elif task.status != TaskState.RUNNING:
+            raise ValueError("RUNTIME_TASK_NOT_READY_FOR_CONTINUATION")
         self._active_task_id = task.id
         trace_event("task.started", task_id=task.id, goal=task.goal, step_count=getattr(plan, "step_count", 0))
 
         try:
             context = dict(initial_context or {})
             step_results = list(pre_step_results or [])
-            completed_steps = []
-            failed_steps = []
-            step_records = []
-            total_retry_count = 0
+            completed_steps = list(task.completed_steps)
+            failed_steps = list(task.failed_steps)
+            step_records = list(task.step_records)
+            total_retry_count = int(task.retry_count)
 
             for step in tuple(getattr(plan, "steps", []))[int(start_index or 0) :]:
                 if task.id in self._cancelled_task_ids:
@@ -105,33 +127,39 @@ class TaskRunner:
                     tool=step.tool_name,
                     action=step.action,
                 )
-                def record_retry(retry_number):
+                def begin_retry(retry_number, decision):
                     nonlocal task
-                    task = self.state_machine.transition(
+                    task = self.state_machine.begin_recovery(
                         task,
-                        TaskState.RETRYING,
-                        reason="step_retry",
-                        source=TransitionSource.RECOVERY,
-                        current_step=step.index,
-                        retry_count=total_retry_count + retry_number,
-                    )
-                    task = self.state_machine.transition(
-                        task,
-                        TaskState.RUNNING,
-                        reason="retry_started",
-                        source=TransitionSource.RECOVERY,
-                        current_step=step.index,
+                        decision,
+                        retries_completed=retry_number - 1,
                     )
 
-                step_result, record, retry_count = self.run_step(
+                def resume_retry(decision):
+                    nonlocal task
+                    task = self.state_machine.resume_retry(task, decision)
+
+                step_result, record, retry_count, recovery_disposition = self.run_step(
                     step,
                     input_data,
                     getattr(plan, "step_count", 0),
                     task.id,
-                    on_retry=record_retry,
+                    on_retry=begin_retry,
+                    on_retry_resume=resume_retry,
                 )
                 total_retry_count += retry_count
                 step_results.append(step_result)
+
+                if recovery_disposition == "PAUSED":
+                    step_records.append(replace(record, status=TaskState.PAUSED))
+                    task = self.state_machine.update_snapshot(
+                        task,
+                        current_step=step.index,
+                        retry_count=total_retry_count,
+                        step_records=tuple(step_records),
+                        duration_ms=elapsed_ms(started),
+                    )
+                    return self.finish(task, plan, step_results, context, "recovery_paused")
 
                 if is_confirm_required_step_result(step_result):
                     wait_record = replace(record, status=TaskState.WAIT_CONFIRM)
@@ -145,6 +173,11 @@ class TaskRunner:
                         failed_steps=tuple(failed_steps),
                         retry_count=total_retry_count,
                         step_records=tuple(step_records),
+                        step_input_fingerprint=fingerprint_step_input(input_data),
+                        external_operation_id=pending_external_operation_id(step_result),
+                        confirmation_state="PENDING",
+                        draft_version=int(input_data.get("draft_version", 1) or 1),
+                        permission_snapshot="confirm_required",
                         duration_ms=elapsed_ms(started),
                     )
                     return self.finish(task, plan, step_results, context, "confirm_required")
@@ -154,6 +187,15 @@ class TaskRunner:
                 if step_result.success:
                     completed_steps.append(step.index)
                     self.update_context(context, step, getattr(step_result, "tool_result", None))
+                    task = self.state_machine.transition(
+                        task,
+                        TaskState.VERIFYING,
+                        reason="step_result_verified",
+                        current_step=step.index,
+                        completed_steps=tuple(completed_steps),
+                        retry_count=total_retry_count,
+                        step_records=tuple(step_records),
+                    )
                     continue
 
                 failed_steps.append(step.index)
@@ -173,18 +215,9 @@ class TaskRunner:
             if len(step_results) > 0:
                 task = self.state_machine.transition(
                     task,
-                    TaskState.VERIFYING,
-                    reason="steps_completed",
-                    completed_steps=tuple(completed_steps),
-                    failed_steps=tuple(failed_steps),
-                    retry_count=total_retry_count,
-                    step_records=tuple(step_records),
-                    duration_ms=elapsed_ms(started),
-                )
-                task = self.state_machine.transition(
-                    task,
                     TaskState.SUCCESS,
                     reason="verification_passed",
+                    duration_ms=elapsed_ms(started),
                 )
             else:
                 task = self.state_machine.transition(
@@ -201,7 +234,28 @@ class TaskRunner:
         finally:
             self._active_task_id = ""
 
-    def run_step(self, step, input_data, step_count, task_id, on_retry=None):
+    def reflect_compiled_plan(self, task):
+        """Project already-completed planning phases without re-running them."""
+        phases = (
+            (TaskState.PLANNING, "planner_completed"),
+            (TaskState.VALIDATING, "plan_validation_completed"),
+            (TaskState.OPTIMIZING, "plan_optimization_completed"),
+            (TaskState.VALIDATING, "optimized_plan_revalidated"),
+            (TaskState.READY, "execution_plan_ready"),
+        )
+        for state, reason in phases:
+            task = self.state_machine.transition(task, state, reason=reason)
+        return task
+
+    def run_step(
+        self,
+        step,
+        input_data,
+        step_count,
+        task_id,
+        on_retry=None,
+        on_retry_resume=None,
+    ):
         """Execute one step with retry and validation."""
         started_at = now_iso()
         step_started = perf_counter()
@@ -210,6 +264,25 @@ class TaskRunner:
         attempts = 0
         retry_count = 0
         last_result = None
+        recovery_decision = recovery_decision_from_input(
+            input_data,
+            max_retry,
+            retry_delay,
+            self.recovery_policy,
+        )
+        if recovery_decision is not None and "_recovery_decision" in input_data:
+            max_retry = (
+                int(recovery_decision.max_retry)
+                if recovery_decision.max_retry is not None
+                else max_retry
+            )
+            retry_delay = float(
+                input_data.get(
+                    "retry_delay_seconds",
+                    recovery_decision.retry_after_seconds or 0,
+                )
+                or 0
+            )
 
         while True:
             attempts += 1
@@ -251,7 +324,7 @@ class TaskRunner:
                     attempts=attempts,
                     duration_ms=record.duration_ms,
                 )
-                return step_result, record, retry_count
+                return step_result, record, retry_count, ""
 
             if retry_count >= max_retry:
                 record = TaskStepRecord(
@@ -281,11 +354,19 @@ class TaskRunner:
                     field=step_result.field,
                     duration_ms=record.duration_ms,
                 )
-                return last_result, record, retry_count
+                if (
+                    recovery_decision is not None
+                    and recovery_decision.recovery_strategy
+                    in {RecoveryStrategy.WAIT, RecoveryStrategy.REAUTH}
+                ):
+                    if on_retry is not None:
+                        on_retry(retry_count + 1, recovery_decision)
+                    return last_result, record, retry_count, "PAUSED"
+                return last_result, record, retry_count, ""
 
             retry_count += 1
             if on_retry is not None:
-                on_retry(retry_count)
+                on_retry(retry_count, recovery_decision)
             trace_event(
                 "task.step.retry",
                 task_id=task_id,
@@ -297,6 +378,8 @@ class TaskRunner:
 
             if retry_delay > 0:
                 sleep(retry_delay)
+            if on_retry_resume is not None:
+                on_retry_resume(recovery_decision)
 
     def finish(self, task, plan, step_results, context, error):
         """Build PlanResult, save history, and return TaskRunnerResult."""
@@ -437,6 +520,31 @@ def is_confirm_required_step_result(step_result):
     return metadata.get("permission") == "confirm_required"
 
 
+def fingerprint_step_input(input_data):
+    """Hash confirmed input without persisting raw values in task state."""
+    safe = {
+        str(key): value
+        for key, value in dict(input_data or {}).items()
+        if not str(key).startswith("_")
+    }
+    encoded = json.dumps(
+        safe,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def pending_external_operation_id(step_result):
+    tool_result = getattr(step_result, "tool_result", None)
+    output = getattr(tool_result, "output", None)
+    metadata = getattr(output, "metadata", {}) or {}
+    query = metadata.get("query")
+    return str(getattr(query, "pending_action_id", "") or "")
+
+
 def should_suppress_calendar_auto_reminder(plan, step):
     """Return whether an explicit later Reminder step owns reminder creation."""
     if getattr(step, "tool_name", "") != "calendar":
@@ -469,6 +577,20 @@ def read_retry_delay(step, input_data):
         return max(0.0, float(input_data.get("retry_delay_seconds", 0.0) or 0.0))
     except (TypeError, ValueError):
         return 0.0
+
+
+def recovery_decision_from_input(input_data, max_retry, retry_delay, policy):
+    """Adapt explicit or legacy retry input into a RecoveryDecision."""
+    explicit = input_data.get("_recovery_decision")
+    if explicit is not None:
+        return explicit
+    if max_retry <= 0:
+        return None
+    return replace(
+        policy.evaluate(HealthReason.TIMEOUT),
+        max_retry=max_retry,
+        retry_after_seconds=int(max(0, retry_delay)),
+    )
 
 
 def partial_success_response(step_results):

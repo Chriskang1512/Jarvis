@@ -35,6 +35,17 @@ legacy runtime:
 - operation-level minimum and recommended contract-version gates.
 - capability deprecation and calendar-date sunset lifecycle policies.
 
+Sprint 18.3.1 connects the Task State Machine to the live Runtime path:
+
+- every RuntimeTask projects `PLANNING -> VALIDATING -> OPTIMIZING -> READY`
+  before execution without re-running completed Planner work;
+- every successful step enters `VERIFYING`;
+- Voice confirmation resumes the same task and checkpoint instead of creating
+  a replacement task;
+- cancellation reaches `CANCELLED` without invoking the confirmed Ability;
+- retry and authentication pause behavior consume `RecoveryDecision`;
+- every transition publishes a privacy-safe Core EventBus envelope.
+
 ## Current Version
 
 v0.6.0 - Sprint 17.6 Google Workspace Integration Polish

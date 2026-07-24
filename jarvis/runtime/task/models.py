@@ -100,6 +100,14 @@ class RuntimeTask:
     retry_count: int = 0
     step_records: tuple[TaskStepRecord, ...] = ()
     transition_history: tuple[StateTransitionRecord, ...] = ()
+    trace_id: str = ""
+    correlation_id: str = ""
+    checkpoint_version: int = 1
+    step_input_fingerprint: str = ""
+    external_operation_id: str = ""
+    confirmation_state: str = ""
+    draft_version: int = 0
+    permission_snapshot: str = ""
     duration_ms: int = 0
 
     def __post_init__(self):
@@ -150,6 +158,14 @@ class RuntimeTask:
             "completed_steps": list(self.completed_steps),
             "failed_steps": list(self.failed_steps),
             "retry_count": self.retry_count,
+            "trace_id": self.trace_id,
+            "correlation_id": self.correlation_id,
+            "checkpoint_version": self.checkpoint_version,
+            "step_input_fingerprint": self.step_input_fingerprint,
+            "external_operation_id": self.external_operation_id,
+            "confirmation_state": self.confirmation_state,
+            "draft_version": self.draft_version,
+            "permission_snapshot": self.permission_snapshot,
             "duration_ms": self.duration_ms,
             "transition_history": [
                 {

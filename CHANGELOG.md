@@ -4,6 +4,17 @@
 
 ### Added
 
+- Sprint 18.3.1 live Runtime integration for the Task State Machine, EventBus,
+  confirmation continuation, checkpoint validation, and recovery decisions.
+- Projection of completed planning, validation, optimization, and readiness
+  facts before every legacy ExecutionPlan starts.
+- Same-task Voice approval and cancellation, including checkpoint version,
+  input fingerprint, external operation ID, confirmation, draft, and permission
+  snapshots.
+- RecoveryDecision-driven `RETRYING -> RESUMING -> RUNNING` and fail-closed
+  authentication pause behavior.
+- Complete privacy-safe transition event envelopes with task, transition,
+  timing, checkpoint fingerprint, trace, and correlation fields.
 - Sprint 18.3 Runtime Task State Machine states from planning through
   verification, completion, failure, cancellation, pause, resume, and retry.
 - A single validated transition engine that blocks `RUNNING -> COMPLETED`
@@ -106,7 +117,7 @@
 
 ### Verified
 
-- Full regression suite: `769 tests OK (skipped=2)`.
+- Full regression suite: `770 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

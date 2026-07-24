@@ -76,6 +76,21 @@ validated input plan.
 - Unknown side effects are verified first and never automatically re-executed.
 - If verification remains inconclusive, Jarvis requests user clarification.
 
+## Runtime State Authority
+
+Accepted for Sprint 18.3.1:
+
+- `TaskStateMachine` is the only RuntimeTask state writer.
+- The live dispatcher owns and injects the StateMachine and EventBus.
+- Legacy completed planning phases are projected as state facts and are not
+  executed again by StateMachine.
+- Voice confirmation references a RuntimeTask ID and resumes its frozen
+  checkpoint; it does not reparse or regenerate the approved draft.
+- Recovery policy produces `RecoveryDecision`; StateMachine only executes that
+  contract.
+- A completed or uncertain external side effect is never automatically
+  repeated during confirmation, retry, or resume.
+
 ## Execution Journal
 
 - The Journal is append-only and authoritative for task reconstruction.

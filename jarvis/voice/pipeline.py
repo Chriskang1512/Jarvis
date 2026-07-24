@@ -1,6 +1,7 @@
 ﻿import logging
 import re
 import unicodedata
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from time import perf_counter
 
@@ -8,7 +9,7 @@ from jarvis.date_calculator import elapsed_days_since, format_korean_date, is_is
 from jarvis.brain.intent_runtime import RuntimeResult
 from jarvis.debug_trace import trace_event
 from jarvis.runtime.planner import PlanStepResult
-from jarvis.runtime.task import RuntimeTask, TaskState, TaskStepRecord
+from jarvis.runtime.task import RuntimeTask, TaskState, TaskStateMachine, TaskStepRecord, TransitionSource
 from jarvis.runtime.conversation_task import (
     CALENDAR_TASK_ACTIVE,
     CALENDAR_TASK_CANCELLED,
@@ -1074,6 +1075,7 @@ class VoicePipeline:
             return self.execute_pending_action(pending_action)
 
         if decision == "no":
+            self.cancel_pending_runtime_task(pending_action)
             self.conversation_session.clear_pending_action()
             return "취소했습니다."
 
@@ -1089,6 +1091,7 @@ class VoicePipeline:
         if dispatcher is None:
             return "실행할 수 있는 도구가 없습니다."
 
+        task = self.resume_pending_runtime_task(dispatcher, pending_action)
         started = perf_counter()
         result = dispatcher.execute(
             ToolRequest(
@@ -1099,13 +1102,37 @@ class VoicePipeline:
         duration_ms = int((perf_counter() - started) * 1000)
 
         if not getattr(result, "success", False):
+            self.finalize_pending_runtime_task(
+                dispatcher,
+                task,
+                pending_action,
+                result,
+                int((perf_counter() - started) * 1000),
+            )
             return getattr(result, "error", "실행에 실패했습니다.")
 
         output = getattr(result, "output", None)
         self.remember_calendar_tool_output(pending_action, output)
-        self.store_pending_action_task_history(dispatcher, pending_action, result, duration_ms)
+        continuation_task = self.prepare_pending_continuation_task(
+            dispatcher,
+            task,
+            pending_action,
+            result,
+        )
+        if continuation_task is None:
+            self.finalize_pending_runtime_task(
+                dispatcher,
+                task,
+                pending_action,
+                result,
+                duration_ms,
+            )
 
-        continuation_reply = self.execute_pending_plan_continuation(pending_action, result)
+        continuation_reply = self.execute_pending_plan_continuation(
+            pending_action,
+            result,
+            runtime_task=continuation_task,
+        )
 
         if continuation_reply:
             return continuation_reply
@@ -1114,6 +1141,116 @@ class VoicePipeline:
             return output.to_natural_language()
 
         return str(output)
+
+    def prepare_pending_continuation_task(
+        self,
+        dispatcher,
+        task,
+        pending_action,
+        result,
+    ):
+        plan = pending_action.get("plan")
+        step_index = int(pending_action.get("step_index", 0) or 0)
+        if (
+            task is None
+            or plan is None
+            or step_index <= 0
+            or step_index >= len(getattr(plan, "steps", []) or [])
+            or should_skip_embedded_google_calendar_reminder_continuation(
+                pending_action,
+                result,
+            )
+        ):
+            return None
+        machine = dispatcher.task_runner.state_machine
+        completed = tuple(dict.fromkeys(task.completed_steps + (step_index,)))
+        records = tuple(
+            replace(record, status=TaskState.SUCCESS)
+            if record.step_index == step_index
+            else record
+            for record in task.step_records
+        )
+        task = machine.transition(
+            task,
+            TaskState.VERIFYING,
+            reason="confirmed_step_verified",
+            completed_steps=completed,
+            step_records=records,
+        )
+        return machine.transition(
+            task,
+            TaskState.RUNNING,
+            reason="next_step_ready",
+        )
+
+    def pending_runtime_task(self, dispatcher, pending_action):
+        task_id = str(pending_action.get("task_id", "") or "")
+        history = getattr(dispatcher, "task_history", None)
+        return history.get(task_id) if task_id and hasattr(history, "get") else None
+
+    def resume_pending_runtime_task(self, dispatcher, pending_action):
+        task = self.pending_runtime_task(dispatcher, pending_action)
+        if task is None or task.status != TaskState.WAIT_CONFIRM:
+            return None
+        return dispatcher.task_runner.state_machine.resume_confirmed(task)
+
+    def cancel_pending_runtime_task(self, pending_action):
+        dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
+        if dispatcher is None:
+            return None
+        task = self.pending_runtime_task(dispatcher, pending_action)
+        if task is None or task.status != TaskState.WAIT_CONFIRM:
+            return None
+        cancelled = dispatcher.task_runner.state_machine.transition(
+            task,
+            TaskState.CANCELLED,
+            reason="user_rejected",
+            source=TransitionSource.USER,
+        )
+        dispatcher.task_history.add(cancelled)
+        if self.conversation_session is not None:
+            self.conversation_session.set_last_task(cancelled.to_dict())
+        return cancelled
+
+    def finalize_pending_runtime_task(
+        self,
+        dispatcher,
+        task,
+        pending_action,
+        result,
+        duration_ms,
+    ):
+        if task is None:
+            return self.store_pending_action_task_history(
+                dispatcher,
+                pending_action,
+                result,
+                duration_ms,
+            )
+        machine = dispatcher.task_runner.state_machine
+        if getattr(result, "success", False):
+            task = machine.transition(
+                task,
+                TaskState.VERIFYING,
+                reason="confirmed_action_result_received",
+            )
+            task = machine.transition(
+                task,
+                TaskState.SUCCESS,
+                reason="confirmed_action_verified",
+                duration_ms=int(duration_ms),
+            )
+        else:
+            task = machine.transition(
+                task,
+                TaskState.FAILED,
+                reason="confirmed_action_failed",
+                duration_ms=int(duration_ms),
+            )
+        dispatcher.task_history.add(task)
+        if self.conversation_session is not None:
+            self.conversation_session.set_last_task(task.to_dict())
+        return True
 
     def store_pending_action_task_history(self, dispatcher, pending_action, result, duration_ms):
         """Store a lightweight RuntimeTask for confirmed one-step mutations."""
@@ -1133,15 +1270,44 @@ class VoicePipeline:
             duration_ms=int(duration_ms),
             error=getattr(result, "error", ""),
         )
-        task = RuntimeTask(
-            id="",
-            goal=f"{ability}.{action}",
-            status=status,
-            completed_steps=(1,) if status == TaskState.SUCCESS else (),
-            failed_steps=() if status == TaskState.SUCCESS else (1,),
-            step_records=(record,),
-            duration_ms=int(duration_ms),
-        )
+        task_runner = getattr(dispatcher, "task_runner", None)
+        machine = getattr(task_runner, "state_machine", None) or TaskStateMachine()
+        task = RuntimeTask(id="", goal=f"{ability}.{action}")
+        if task_runner is not None:
+            task = task_runner.reflect_compiled_plan(task)
+        else:
+            for state, reason in (
+                (TaskState.PLANNING, "legacy_plan_completed"),
+                (TaskState.VALIDATING, "legacy_validation_completed"),
+                (TaskState.OPTIMIZING, "legacy_optimization_completed"),
+                (TaskState.VALIDATING, "legacy_revalidation_completed"),
+                (TaskState.READY, "legacy_plan_ready"),
+            ):
+                task = machine.transition(task, state, reason=reason)
+        task = machine.transition(task, TaskState.RUNNING, reason="legacy_confirmed_action_started")
+        if status == TaskState.SUCCESS:
+            task = machine.transition(
+                task,
+                TaskState.VERIFYING,
+                reason="legacy_confirmed_action_result_received",
+                completed_steps=(1,),
+                step_records=(record,),
+            )
+            task = machine.transition(
+                task,
+                TaskState.SUCCESS,
+                reason="legacy_confirmed_action_verified",
+                duration_ms=int(duration_ms),
+            )
+        else:
+            task = machine.transition(
+                task,
+                TaskState.FAILED,
+                reason="legacy_confirmed_action_failed",
+                failed_steps=(1,),
+                step_records=(record,),
+                duration_ms=int(duration_ms),
+            )
         history = getattr(dispatcher, "task_history", None)
 
         if history is not None and hasattr(history, "add"):
@@ -1152,7 +1318,12 @@ class VoicePipeline:
 
         return True
 
-    def execute_pending_plan_continuation(self, pending_action, confirmed_tool_result):
+    def execute_pending_plan_continuation(
+        self,
+        pending_action,
+        confirmed_tool_result,
+        runtime_task=None,
+    ):
         """Resume remaining plan steps after a confirm-required step succeeds."""
         plan = pending_action.get("plan")
         step_index = int(pending_action.get("step_index", 0) or 0)
@@ -1190,6 +1361,7 @@ class VoicePipeline:
             start_index=step_index,
             initial_context=context,
             pre_step_results=[confirmed_step_result],
+            runtime_task=runtime_task,
         )
         return getattr(plan_result, "response", "")
 
@@ -2038,6 +2210,10 @@ def extract_pending_action(intent_result):
 
         if should_suppress_pending_calendar_auto_reminder(plan, step_index, ability):
             pending_action["input_data"]["_suppress_auto_reminder"] = True
+
+    task = getattr(intent_result, "task", None)
+    if task is not None and getattr(task, "status", None) == TaskState.WAIT_CONFIRM:
+        pending_action["task_id"] = getattr(task, "id", "")
 
     return pending_action
 

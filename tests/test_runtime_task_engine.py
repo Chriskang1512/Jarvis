@@ -4,7 +4,12 @@ from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from jarvis.runtime.planner import ExecutionPlan, ExecutionStep
+from jarvis.runtime.planner import (
+    ExecutionPlan,
+    ExecutionStep,
+    HealthReason,
+    HealthRecoveryPolicy,
+)
 from jarvis.runtime.task import TaskState
 from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
 from jarvis.tools import ToolMetadata, ToolRegistry, ToolResult
@@ -33,6 +38,17 @@ class TestRuntimeTaskEngineSprint9(unittest.TestCase):
         self.assertEqual(dispatcher.task_history.latest().id, result.task.id)
         self.assertGreaterEqual(result.task.duration_ms, 0)
         self.assertEqual(result.task.step_records[0].duration_ms >= 0, True)
+        self.assertEqual(
+            [item.to_state for item in result.task.transition_history[:6]],
+            [
+                TaskState.PLANNING,
+                TaskState.VALIDATING,
+                TaskState.OPTIMIZING,
+                TaskState.VALIDATING,
+                TaskState.READY,
+                TaskState.RUNNING,
+            ],
+        )
 
     def test_task_id_flows_through_planner_dispatcher_logs(self):
         """Check Task ID appears on Planner, Dispatcher, and Task summary logs."""
@@ -82,6 +98,38 @@ class TestRuntimeTaskEngineSprint9(unittest.TestCase):
             [item.to_state for item in result.task.transition_history if item.to_state == TaskState.RETRYING],
             [TaskState.RETRYING],
         )
+        retry_states = [
+            item.to_state
+            for item in result.task.transition_history
+            if item.to_state in {TaskState.RETRYING, TaskState.RESUMING}
+        ]
+        self.assertEqual(retry_states, [TaskState.RETRYING, TaskState.RESUMING])
+
+    def test_auth_failure_recovery_decision_pauses_without_retry(self):
+        registry = ToolRegistry()
+        tool = FailingTool("auth_tool", "authentication failed")
+        registry.register(tool)
+        dispatcher = RuntimeToolDispatcher(registry)
+        decision = HealthRecoveryPolicy().evaluate(HealthReason.AUTH_FAILURE)
+        plan = ExecutionPlan(
+            raw_text="auth recovery",
+            steps=(
+                ExecutionStep(
+                    index=1,
+                    tool_name="auth_tool",
+                    action="run",
+                    input_data={"_recovery_decision": decision},
+                ),
+            ),
+        )
+
+        result = dispatcher.execute_plan(plan)
+
+        self.assertFalse(result.success)
+        self.assertEqual(tool.calls, 1)
+        self.assertEqual(result.task.status, TaskState.PAUSED)
+        self.assertNotIn(TaskState.RETRYING, [item.to_state for item in result.task.transition_history])
+        self.assertEqual(result.task.transition_history[-1].transition_reason, "recovery_reauth")
 
     def test_step_context_feeds_calendar_event_into_reminder(self):
         """Check official step context fills Reminder input from Calendar output."""
@@ -259,8 +307,10 @@ class FailingTool(StaticTool):
     def __init__(self, name, error):
         super().__init__(name)
         self.error = error
+        self.calls = 0
 
     def execute(self, input_data):
+        self.calls += 1
         return ToolResult(tool_name=self.metadata.name, success=False, error=self.error)
 
 

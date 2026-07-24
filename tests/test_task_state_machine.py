@@ -94,6 +94,21 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertEqual(self.events[2].payload["wall_clock_ms"], 1000)
         self.assertEqual(self.events[2].payload["waiting_ms"], 1000)
         self.assertEqual(self.events[2].payload["active_execution_ms"], 0)
+        required_event_fields = {
+            "task_id",
+            "transition_id",
+            "previous_state",
+            "new_state",
+            "transition_reason",
+            "transition_source",
+            "wall_clock_ms",
+            "waiting_ms",
+            "active_execution_ms",
+            "checkpoint_fingerprint",
+            "trace_id",
+            "correlation_id",
+        }
+        self.assertTrue(required_event_fields.issubset(self.events[0].payload))
 
     def test_running_cannot_complete_without_verification(self):
         task = self.machine.transition(self.task, TaskState.RUNNING)

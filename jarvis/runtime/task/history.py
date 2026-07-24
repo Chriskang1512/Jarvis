@@ -24,3 +24,11 @@ class TaskHistory:
             return None
 
         return self._items[-1]
+
+    def get(self, task_id):
+        """Return the newest snapshot for one RuntimeTask ID."""
+        expected = str(task_id or "")
+        return next(
+            (task for task in reversed(self._items) if str(getattr(task, "id", "")) == expected),
+            None,
+        )
