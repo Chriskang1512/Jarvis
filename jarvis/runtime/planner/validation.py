@@ -1,6 +1,14 @@
 from dataclasses import dataclass
+from enum import Enum
 
 from jarvis.runtime.planner.contracts import CONTRACT_VERSION
+from jarvis.runtime.planner.versioning import compare_contract_versions, normalize_contract_version
+
+
+class ValidationStatus(str, Enum):
+    VALID = "VALID"
+    WARNING = "WARNING"
+    BLOCKED = "BLOCKED"
 
 
 @dataclass(frozen=True)
@@ -10,6 +18,8 @@ class ValidationIssue:
     step_id: str = ""
     field: str = ""
     message_key: str = ""
+    expected: str = ""
+    actual: str = ""
 
 
 @dataclass(frozen=True)
@@ -18,7 +28,15 @@ class PlanValidationResult:
 
     @property
     def valid(self):
-        return not any(issue.severity == "error" for issue in self.issues)
+        return self.status != ValidationStatus.BLOCKED
+
+    @property
+    def status(self):
+        if any(issue.severity == "error" for issue in self.issues):
+            return ValidationStatus.BLOCKED
+        if any(issue.severity == "warning" for issue in self.issues):
+            return ValidationStatus.WARNING
+        return ValidationStatus.VALID
 
 
 class PlanValidator:
@@ -38,11 +56,11 @@ class PlanValidator:
             issues.append(ValidationIssue("DUPLICATE_STEP_ID", field="steps"))
 
         known_ids = set(step_ids)
+        steps_by_id = {step.step_id: step for step in plan.steps}
         for step in plan.steps:
-            capability_id = f"{step.capability}.{step.operation}" if step.operation else step.capability
-            capability_exists = bool(self.ability_registry.find_by_capability(capability_id))
             ability_exists = bool(self.ability_registry.get(step.capability))
-            if not capability_exists and not ability_exists:
+            operation = self.ability_registry.get_operation(step.capability, step.operation)
+            if not ability_exists:
                 issues.append(
                     ValidationIssue(
                         "CAPABILITY_NOT_FOUND",
@@ -51,6 +69,40 @@ class PlanValidator:
                         message_key="planner.capability_not_found",
                     )
                 )
+            elif operation is None:
+                issues.append(
+                    ValidationIssue(
+                        "UNKNOWN_OPERATION",
+                        step_id=step.step_id,
+                        field="operation",
+                        message_key="planner.operation_not_found",
+                        actual=step.operation,
+                    )
+                )
+            else:
+                issues.extend(
+                    validate_operation_contract(
+                        step,
+                        operation,
+                        plan.bindings,
+                        plan.contract_version,
+                    )
+                )
+                dependency_operations = {
+                    f"{steps_by_id[dependency].capability}.{steps_by_id[dependency].operation}"
+                    for dependency in step.depends_on
+                    if dependency in steps_by_id
+                }
+                for required_capability in operation.required_predecessors:
+                    if required_capability not in dependency_operations:
+                        issues.append(
+                            ValidationIssue(
+                                "DEPENDENCY_MISSING",
+                                step_id=step.step_id,
+                                field="depends_on",
+                                expected=required_capability,
+                            )
+                        )
             for dependency in step.depends_on:
                 if dependency not in known_ids:
                     issues.append(ValidationIssue("DEPENDENCY_NOT_FOUND", step_id=step.step_id, field="depends_on"))
@@ -68,8 +120,139 @@ class PlanValidator:
         for binding in plan.bindings:
             if binding.source_step_id not in known_ids or binding.target_step_id not in known_ids:
                 issues.append(ValidationIssue("BINDING_STEP_NOT_FOUND", field="bindings"))
+                continue
+            target = steps_by_id[binding.target_step_id]
+            if binding.source_step_id not in target.depends_on:
+                issues.append(
+                    ValidationIssue(
+                        "DEPENDENCY_MISSING",
+                        step_id=binding.target_step_id,
+                        field="depends_on",
+                        expected=binding.source_step_id,
+                    )
+                )
 
         return PlanValidationResult(tuple(issues))
+
+
+def validate_operation_contract(step, operation, bindings, plan_contract_version):
+    issues = []
+    if compare_contract_versions(plan_contract_version, operation.contract_version) < 0:
+        issues.append(
+            ValidationIssue(
+                "OPERATION_CONTRACT_VERSION_UNSUPPORTED",
+                step_id=step.step_id,
+                field="contract_version",
+                expected=operation.contract_version,
+                actual=plan_contract_version,
+            )
+        )
+    if normalize_contract_version(step.input_schema_version) != normalize_contract_version(
+        operation.input_schema_version
+    ):
+        issues.append(
+            ValidationIssue(
+                "INPUT_SCHEMA_VERSION_MISMATCH",
+                step_id=step.step_id,
+                field="input_schema_version",
+                expected=operation.input_schema_version,
+                actual=step.input_schema_version,
+            )
+        )
+    if normalize_contract_version(step.output_schema_version) != normalize_contract_version(
+        operation.output_schema_version
+    ):
+        issues.append(
+            ValidationIssue(
+                "OUTPUT_SCHEMA_VERSION_MISMATCH",
+                step_id=step.step_id,
+                field="output_schema_version",
+                expected=operation.output_schema_version,
+                actual=step.output_schema_version,
+            )
+        )
+    issues.extend(validate_input_schema(step, operation.input_schema, bindings))
+    if not operation.output_schema:
+        issues.append(ValidationIssue("OUTPUT_SCHEMA_REQUIRED", step_id=step.step_id, field="output_schema"))
+    if step.permission != operation.permission:
+        issues.append(
+            ValidationIssue(
+                "PERMISSION_MISMATCH",
+                step_id=step.step_id,
+                field="permission",
+                expected=operation.permission,
+                actual=step.permission,
+            )
+        )
+    if step.side_effect != operation.side_effect:
+        issues.append(
+            ValidationIssue(
+                "SIDE_EFFECT_MISMATCH",
+                step_id=step.step_id,
+                field="side_effect",
+                expected=operation.side_effect,
+                actual=step.side_effect,
+            )
+        )
+    if operation.lifecycle == "experimental":
+        issues.append(ValidationIssue("EXPERIMENTAL_CAPABILITY", "info", step.step_id, "lifecycle"))
+    elif operation.lifecycle == "deprecated":
+        issues.append(ValidationIssue("DEPRECATED_CAPABILITY", "warning", step.step_id, "lifecycle"))
+    elif operation.lifecycle == "sunset":
+        issues.append(ValidationIssue("SUNSET_CAPABILITY", "error", step.step_id, "lifecycle"))
+    return issues
+
+
+def validate_input_schema(step, schema, bindings):
+    if not isinstance(step.input, dict):
+        return [ValidationIssue("INPUT_SCHEMA_INVALID", step_id=step.step_id, field="input")]
+    if not isinstance(schema, dict):
+        return [ValidationIssue("INPUT_SCHEMA_REQUIRED", step_id=step.step_id, field="input_schema")]
+    schema_type = schema.get("type", "object")
+    if schema_type not in {"object", ""} and not str(schema_type).endswith("Query"):
+        return ()
+    bound_fields = {
+        binding.target_path.removeprefix("input.").split(".", 1)[0]
+        for binding in bindings
+        if binding.target_step_id == step.step_id
+    }
+    issues = []
+    for field_name in schema.get("required", []):
+        if field_name not in step.input and field_name not in bound_fields:
+            issues.append(
+                ValidationIssue(
+                    "INPUT_REQUIRED_FIELD_MISSING",
+                    step_id=step.step_id,
+                    field=f"input.{field_name}",
+                )
+            )
+    for field_name, property_schema in schema.get("properties", {}).items():
+        if field_name not in step.input or not isinstance(property_schema, dict):
+            continue
+        expected_type = property_schema.get("type", "")
+        if expected_type and not value_matches_schema_type(step.input[field_name], expected_type):
+            issues.append(
+                ValidationIssue(
+                    "INPUT_FIELD_TYPE_MISMATCH",
+                    step_id=step.step_id,
+                    field=f"input.{field_name}",
+                    expected=expected_type,
+                    actual=type(step.input[field_name]).__name__,
+                )
+            )
+    return issues
+
+
+def value_matches_schema_type(value, expected_type):
+    types = {
+        "array": (list, tuple),
+        "boolean": (bool,),
+        "integer": (int,),
+        "number": (int, float),
+        "object": (dict,),
+        "string": (str,),
+    }
+    return isinstance(value, types.get(expected_type, (object,)))
 
 
 def _has_cycle(steps):

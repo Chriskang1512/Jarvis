@@ -61,6 +61,7 @@ class PlanStep:
     retry_policy: str = "none"
     verification_policy: str = "none"
     idempotency_policy: str = "none"
+    parallel_group: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "depends_on", tuple(self.depends_on))
@@ -136,3 +137,89 @@ class AgentPlan:
 
 def _now():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def agent_plan_to_dict(plan, redact_inputs=False):
+    """Serialize an AgentPlan for journal replay."""
+    return {
+        "goal_id": plan.goal_id,
+        "steps": [
+            {
+                "step_id": step.step_id,
+                "ordinal": step.ordinal,
+                "capability": step.capability,
+                "operation": step.operation,
+                "input": (
+                    _redact_replay_value(dict(step.input))
+                    if redact_inputs
+                    else dict(step.input)
+                ),
+                "input_schema_version": step.input_schema_version,
+                "output_schema_version": step.output_schema_version,
+                "depends_on": list(step.depends_on),
+                "required": step.required,
+                "side_effect": step.side_effect,
+                "permission": step.permission,
+                "retry_policy": step.retry_policy,
+                "verification_policy": step.verification_policy,
+                "idempotency_policy": step.idempotency_policy,
+                "parallel_group": step.parallel_group,
+            }
+            for step in plan.steps
+        ],
+        "bindings": [
+            {
+                "source_step_id": binding.source_step_id,
+                "source_path": binding.source_path,
+                "target_step_id": binding.target_step_id,
+                "target_path": binding.target_path,
+                "transform": binding.transform,
+                "required": binding.required,
+            }
+            for binding in plan.bindings
+        ],
+        "required_permissions": list(plan.required_permissions),
+        "status": plan.status,
+        "plan_id": plan.plan_id,
+        "plan_version": plan.plan_version,
+        "planner_version": plan.planner_version,
+        "created_at": plan.created_at,
+        "optimized_from_version": plan.optimized_from_version,
+        "contract_version": plan.contract_version,
+    }
+
+
+def agent_plan_from_dict(data):
+    """Restore an AgentPlan from a privacy-controlled journal snapshot."""
+    return AgentPlan(
+        goal_id=data["goal_id"],
+        steps=tuple(PlanStep(**step) for step in data.get("steps", [])),
+        bindings=tuple(PlanBinding(**binding) for binding in data.get("bindings", [])),
+        required_permissions=tuple(data.get("required_permissions", [])),
+        status=data.get("status", "proposed"),
+        plan_id=data.get("plan_id", ""),
+        plan_version=int(data.get("plan_version", 1)),
+        planner_version=data.get("planner_version", CONTRACT_VERSION),
+        created_at=data.get("created_at", ""),
+        optimized_from_version=data.get("optimized_from_version"),
+        contract_version=data.get("contract_version", CONTRACT_VERSION),
+    )
+
+
+def _redact_replay_value(value):
+    """Preserve validation-relevant shape without retaining sensitive values."""
+    if isinstance(value, dict):
+        return {str(key): _redact_replay_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_replay_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_replay_value(item) for item in value]
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return 0
+    if isinstance(value, float):
+        return 0.0
+    if isinstance(value, str):
+        return "<redacted>"
+    return None

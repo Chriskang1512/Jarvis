@@ -4,6 +4,19 @@
 
 ### Added
 
+- Sprint 18.2 operation-level Registry metadata for schema, permission,
+  lifecycle, side-effect, dependency, deduplication, and parallel policy.
+- Three-level Plan validation results: `VALID`, `WARNING`, and `BLOCKED`.
+- Registry schema validation, missing dependency detection, and dependency
+  cycle blocking.
+- Smart Optimizer rules `OPT-001` through `OPT-004` for duplicate removal,
+  dependency reorder, parallel safe-read grouping, and explicit dead-step
+  removal.
+- Rule-level Optimization Journal entries with reasons and before/after step
+  IDs.
+- `PlanCompiler` original validation, optimization, revalidation, and
+  execution-ready boundary.
+- Serializable Validator Journal snapshots with deterministic replay checks.
 - Contract support declarations and version negotiation for Planner and Runtime
   components.
 - A deterministic Version Adapter Registry supporting explicit multi-step
@@ -40,6 +53,10 @@
   `Experimental -> Stable -> Deprecated -> Sunset` capability lifecycle.
 - Experimental capabilities will remain operational while emitting only
   privacy-safe Telemetry; this proposal does not change runtime behavior yet.
+
+### Verified
+
+- Full regression suite: `743 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

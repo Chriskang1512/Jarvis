@@ -8,10 +8,28 @@ from jarvis.runtime.planner.contracts import (
     PlanBinding,
     PlanStep,
     SUPPORTED_CONTRACT_VERSIONS,
+    agent_plan_from_dict,
+    agent_plan_to_dict,
+)
+from jarvis.runtime.planner.compiler import PlanCompilationResult, PlanCompiler
+from jarvis.runtime.planner.journal import (
+    PlanValidationJournalEntry,
+    PlanValidationReplayResult,
 )
 from jarvis.runtime.planner.legacy_adapter import adapt_execution_plan
-from jarvis.runtime.planner.optimizer import NoOpPlanOptimizer, OptimizationRecord, OptimizationResult
-from jarvis.runtime.planner.validation import PlanValidationResult, PlanValidator, ValidationIssue
+from jarvis.runtime.planner.optimizer import (
+    NoOpPlanOptimizer,
+    OptimizationJournalEntry,
+    OptimizationRecord,
+    OptimizationResult,
+    SmartPlanOptimizer,
+)
+from jarvis.runtime.planner.validation import (
+    PlanValidationResult,
+    PlanValidator,
+    ValidationIssue,
+    ValidationStatus,
+)
 from jarvis.runtime.planner.versioning import (
     CapabilityCompatibilityIssue,
     CapabilityCompatibilityResult,
@@ -35,14 +53,21 @@ __all__ = [
     "AgentPlan",
     "GoalEnvelope",
     "PlanBinding",
+    "PlanCompiler",
+    "PlanCompilationResult",
     "PlanStep",
     "SUPPORTED_CONTRACT_VERSIONS",
     "PlanValidationResult",
     "PlanValidator",
     "ValidationIssue",
     "NoOpPlanOptimizer",
+    "SmartPlanOptimizer",
+    "OptimizationJournalEntry",
     "OptimizationRecord",
     "OptimizationResult",
+    "PlanValidationJournalEntry",
+    "PlanValidationReplayResult",
+    "ValidationStatus",
     "ContractNegotiationError",
     "ContractNegotiationResult",
     "ContractSupport",
@@ -57,6 +82,8 @@ __all__ = [
     "PlanStepResult",
     "RuntimePlanner",
     "adapt_execution_plan",
+    "agent_plan_from_dict",
+    "agent_plan_to_dict",
     "create_execution_plan",
     "compare_contract_versions",
     "normalize_contract_version",

@@ -16,6 +16,7 @@ The approved migration design is documented in:
 
 - [`Agent Core gap analysis`](docs/architecture/agent-core-gap-analysis.md)
 - [`Planner contract`](docs/architecture/planner-contract.md)
+- [`Plan Validator and Optimizer`](docs/architecture/plan-validator-optimizer.md)
 - [`Task state machine`](docs/architecture/task-state-machine.md)
 - [`Checkpoint and resume contract`](docs/architecture/checkpoint-resume-contract.md)
 - [`Execution Journal`](docs/architecture/execution-journal.md)

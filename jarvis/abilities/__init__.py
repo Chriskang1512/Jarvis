@@ -3,5 +3,6 @@
 from jarvis.abilities.adapter import AbilityToolAdapter
 from jarvis.abilities.base import Ability
 from jarvis.abilities.metadata import AbilityMetadata, AbilityType
+from jarvis.abilities.operations import CapabilityOperationMetadata
 from jarvis.abilities.registry import AbilityRegistry
 from jarvis.abilities.result import AbilityHealth, AbilityResult, BaseAbilityResult

@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from jarvis.abilities.adapter import AbilityToolAdapter
+from jarvis.abilities.operations import derive_operation_metadata
 
 
 class AbilityRegistry:
@@ -10,6 +11,7 @@ class AbilityRegistry:
         """Create an empty ability registry."""
         self.abilities = {}
         self.capability_index = {}
+        self.operation_index = {}
 
     def register(self, ability):
         """Register one ability by metadata ID."""
@@ -21,6 +23,8 @@ class AbilityRegistry:
 
         self.abilities[name] = ability
         self.index_capabilities(ability)
+        for operation in derive_operation_metadata(ability):
+            self.register_operation(operation)
 
     def get(self, name):
         """Return one ability by name."""
@@ -55,6 +59,24 @@ class AbilityRegistry:
             self.abilities[ability_id]
             for ability_id in self.capability_index.get(capability, [])
         ]
+
+    def register_operation(self, metadata, replace_existing=False):
+        """Register one operation-level execution contract."""
+        if metadata.id in self.operation_index and not replace_existing:
+            raise ValueError(f"Operation '{metadata.id}' is already registered.")
+        self.operation_index[metadata.id] = metadata
+
+    def get_operation(self, capability, operation=""):
+        """Return operation metadata by separate or combined identifier."""
+        operation_id = capability if not operation else f"{capability}.{operation}"
+        return self.operation_index.get(operation_id)
+
+    def list_operations(self, capability=None):
+        """Return normalized operation contracts."""
+        operations = [self.operation_index[key] for key in sorted(self.operation_index)]
+        if capability is None:
+            return operations
+        return [item for item in operations if item.capability == capability]
 
     def index_capabilities(self, ability):
         """Record capability-to-ability mappings for intent parsing."""
