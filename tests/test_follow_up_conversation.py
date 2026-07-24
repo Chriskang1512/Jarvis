@@ -313,8 +313,8 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertIn("1번째 일정은 10:00 회의입니다", tts_provider.spoken[1])
         self.assertIn("2번째 일정은 15:00 치과입니다", tts_provider.spoken[2])
 
-    def test_mail_ordinal_read_is_not_intercepted_by_calendar_follow_up(self):
-        """Check Mail owns ordinal reads and preserves the selected reply context."""
+    def test_mail_read_reply_offer_collects_body_then_confirms(self):
+        """Check a selected mail offers reply composition before final confirmation."""
         provider = FollowUpMailProvider()
         tool_registry = ToolRegistry()
         ability_registry = AbilityRegistry()
@@ -326,7 +326,7 @@ class TestFollowUpConversationMode(unittest.TestCase):
             wake_listener=CountingWakeListener(),
             stt_provider=FollowUpSTTProvider(
                 first="최근 메일 알려줘",
-                follow_ups=["첫 번째 메일 읽어줘", "확인했다고 답장해줘", "아니", ""],
+                follow_ups=["첫 번째 메일 읽어줘", "응", "확인했습니다", "아니", ""],
             ),
             chat_service=CapturingChatService(),
             tts_provider=tts_provider,
@@ -337,6 +337,9 @@ class TestFollowUpConversationMode(unittest.TestCase):
         pipeline.run_once()
 
         self.assertTrue(any("테스트 본문" in text for text in tts_provider.spoken))
+        self.assertFalse(any("아야," in text for text in tts_provider.spoken))
+        self.assertTrue(any("답장하시겠습니까?" in text for text in tts_provider.spoken))
+        self.assertIn("어떤 내용으로 답장할까요?", tts_provider.spoken)
         self.assertTrue(any("답장을 보낼까요" in text for text in tts_provider.spoken))
         self.assertIn("취소했습니다.", tts_provider.spoken)
         self.assertEqual(provider.reply_calls, 0)
@@ -1549,7 +1552,7 @@ class FollowUpMailProvider:
             MailMessage(
                 id="mail-1",
                 thread_id="thread-1",
-                sender_name="아야",
+                sender_name="아야,",
                 sender_email="aya@example.com",
                 subject="일정 확인",
                 body_summary="테스트 본문",

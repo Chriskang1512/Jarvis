@@ -27,7 +27,7 @@ def outgoing_preview(outgoing):
     """Return the exact draft preview shown before confirmation."""
     if outgoing is None:
         return "메일 내용을 확인하지 못했습니다."
-    recipient = outgoing.recipient_name or masked_recipient(outgoing.to[0] if outgoing.to else "")
+    recipient = clean_sender(outgoing.recipient_name) or masked_recipient(outgoing.to[0] if outgoing.to else "")
     action = "답장" if outgoing.reply_to_message_id else "메일"
     return (
         f"{recipient}에게 '{outgoing.subject}'라는 제목의 {action}을 보낼까요? "
@@ -41,7 +41,7 @@ def format_mail_send_result(result):
         return result.user_message
     if not result.success:
         return send_error_message(result)
-    recipient = result.recipient_name or masked_recipient(result.recipient)
+    recipient = clean_sender(result.recipient_name) or masked_recipient(result.recipient)
     if result.action == "reply":
         return f"{recipient}에게 답장을 보냈습니다. 제목은 '{result.subject}'입니다."
     return f"{recipient}에게 메일을 보냈습니다. 제목은 '{result.subject}'입니다."
@@ -91,13 +91,13 @@ def list_message(messages, query=""):
     lines = [f"{prefix}은 {len(items)}건입니다."]
 
     for index, message in enumerate(items, start=1):
-        sender = message.sender_name or message.sender_email or "보낸 사람 없음"
+        sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
         subject = message.subject or "제목 없음"
-        attachment = " 첨부파일 있음." if message.has_attachment else ""
         received = format_received_at(message.received_at)
         suffix = f" {received}." if received else ""
-        lines.append(f"{index}. {sender}. {subject}.{attachment}{suffix}")
+        lines.append(f"{index}. {sender}. {subject}.{suffix}")
 
+    lines.append("읽고 싶은 메일 번호를 말씀해 주세요.")
     return "\n".join(lines)
 
 
@@ -106,14 +106,14 @@ def get_message(message, include_body=False):
     if message is None:
         return "메일을 찾지 못했습니다."
 
-    sender = message.sender_name or message.sender_email or "보낸 사람 없음"
+    sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
     subject = message.subject or "제목 없음"
     snippet = message.body_summary or message.snippet
     received = format_received_at(message.received_at)
     received_sentence = f" 받은 시각은 {received}입니다." if received else ""
 
     if include_body and snippet:
-        return f"{sender}의 메일입니다. 제목은 {subject}입니다.{received_sentence} 요약은 {snippet}"
+        return f"{sender}의 메일입니다. 제목은 {subject}입니다.{received_sentence} 요약은 {snippet}. 답장하시겠습니까?"
 
     return f"{sender}의 메일입니다. 제목은 {subject}입니다.{received_sentence}"
 
@@ -135,8 +135,12 @@ def format_received_at(value):
     day_prefix = "오늘" if received.date() == today else f"{received.month}월 {received.day}일"
     period = "오전" if received.hour < 12 else "오후"
     hour = received.hour % 12 or 12
-    minute = f" {received.minute}분" if received.minute else ""
-    return f"{day_prefix} {period} {hour}시{minute}"
+    return f"{day_prefix} {period} {hour}시"
+
+
+def clean_sender(value):
+    """Remove whitespace and a stray trailing comma from sender display names."""
+    return str(value or "").strip().rstrip(",，").strip()
 
 
 def error_message(result):

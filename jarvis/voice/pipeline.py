@@ -153,6 +153,7 @@ class VoicePipeline:
             reply = intent_result.response
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
+            self.remember_mail_reply_offer(intent_result)
             self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
             self.remember_reminder_result(intent_result)
@@ -289,6 +290,7 @@ class VoicePipeline:
             reply = intent_result.response
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
+            self.remember_mail_reply_offer(intent_result)
             memory_context_refreshed = self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
             self.remember_reminder_result(intent_result)
@@ -839,6 +841,28 @@ class VoicePipeline:
         if pending.get("kind", "") == "contact_ambiguous":
             return self.try_contact_ambiguous_clarification_reply(pending, user_message)
 
+        if pending.get("kind", "") == "mail_reply_offer":
+            decision = confirmation_decision(user_message)
+            if decision == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "알겠습니다."
+            if decision == "yes":
+                self.conversation_session.set_pending_clarification({"kind": "mail_reply_body"})
+                return "어떤 내용으로 답장할까요?"
+            self.conversation_session.clear_pending_clarification()
+            return None
+
+        if pending.get("kind", "") == "mail_reply_body":
+            if rejection_decision(user_message) == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "취소했습니다."
+            self.conversation_session.clear_pending_clarification()
+            result = self.try_intent_runtime(f"{str(user_message or '').strip()}라고 답장해줘")
+            if result is None or not getattr(result, "handled", False):
+                return "답장 내용을 처리하지 못했습니다."
+            self.remember_pending_action(result)
+            return result.response
+
         if pending.get("kind", "") != "reminder_time":
             return None
 
@@ -850,6 +874,22 @@ class VoicePipeline:
 
         self.conversation_session.clear_pending_clarification()
         return self.execute_pending_reminder_clarification(pending, minutes, user_message)
+
+    def remember_mail_reply_offer(self, intent_result):
+        """Offer a reply after a selected mail message has been read."""
+        if self.conversation_session is None:
+            return False
+
+        tool = getattr(intent_result, "tool", "") or getattr(intent_result, "tool_name", "")
+        output = getattr(intent_result, "tool_output", None)
+        data = getattr(output, "data", None)
+
+        if tool != "mail" or not getattr(data, "success", False) or getattr(data, "action", "") != "get":
+            return False
+
+        self.conversation_session.set_pending_clarification({"kind": "mail_reply_offer"})
+        trace_event("voice.pending_clarification.saved", kind="mail_reply_offer")
+        return True
 
     def try_contact_ambiguous_clarification_reply(self, pending, user_message):
         """Resolve a pending ambiguous contact candidate with a follow-up answer."""

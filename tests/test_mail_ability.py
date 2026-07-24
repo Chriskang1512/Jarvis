@@ -82,7 +82,9 @@ class TestMailAbilityVerticalSlice(unittest.TestCase):
         self.assertEqual(result.output.data.message_count, 2)
         self.assertIn("최근 메일은 2건입니다.", result.output.to_natural_language())
         self.assertIn("1. GitHub. Pull Request 리뷰 요청.", result.output.to_natural_language())
-        self.assertIn("오늘 오후 5시 25분", result.output.to_natural_language())
+        self.assertIn("오늘 오후 5시", result.output.to_natural_language())
+        self.assertNotIn("25분", result.output.to_natural_language())
+        self.assertIn("읽고 싶은 메일 번호를 말씀해 주세요.", result.output.to_natural_language())
         self.assertNotIn("body-1", result.output.to_natural_language())
 
     def test_mail_ordinal_get_reads_selected_summary(self):
@@ -95,6 +97,7 @@ class TestMailAbilityVerticalSlice(unittest.TestCase):
         self.assertIn("OpenAI의 메일입니다.", result.output.to_natural_language())
         self.assertIn("제목은 API 업데이트입니다.", result.output.to_natural_language())
         self.assertIn("body-2", result.output.to_natural_language())
+        self.assertIn("답장하시겠습니까?", result.output.to_natural_language())
 
     def test_mail_this_one_followup_routes_to_first_message(self):
         plan = self.dispatcher.create_plan("이번 읽어줘")
