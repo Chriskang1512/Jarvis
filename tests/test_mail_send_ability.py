@@ -151,6 +151,9 @@ class TestMailSendAbility(unittest.TestCase):
         self.assertEqual(query.to, ("aya@example.com",))
         self.assertEqual(query.body, "확인했습니다.")
         self.assertEqual(query.subject, "Re: 내일 일정")
+        preview_text = preview.data.to_natural_language()
+        self.assertEqual(preview_text, '아야님께 "확인했습니다."라는 내용으로 답장을 보낼까요?')
+        self.assertNotIn("Re:", preview_text)
 
     def test_reply_without_context_is_blocked(self):
         ability = MailAbility(provider=FakeSendProvider())

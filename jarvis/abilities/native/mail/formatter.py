@@ -28,9 +28,11 @@ def outgoing_preview(outgoing):
     if outgoing is None:
         return "메일 내용을 확인하지 못했습니다."
     recipient = clean_sender(outgoing.recipient_name) or masked_recipient(outgoing.to[0] if outgoing.to else "")
-    action = "답장" if outgoing.reply_to_message_id else "메일"
+    if outgoing.reply_to_message_id:
+        return f'{reply_recipient(recipient)} "{outgoing.body}"라는 내용으로 답장을 보낼까요?'
+
     return (
-        f"{recipient}에게 '{outgoing.subject}'라는 제목의 {action}을 보낼까요? "
+        f"{recipient}에게 '{outgoing.subject}'라는 제목의 메일을 보낼까요? "
         f"내용은 '{outgoing.body}'입니다."
     )
 
@@ -141,6 +143,14 @@ def format_received_at(value):
 def clean_sender(value):
     """Remove whitespace and a stray trailing comma from sender display names."""
     return str(value or "").strip().rstrip(",，").strip()
+
+
+def reply_recipient(value):
+    """Return a natural Korean dative phrase for a reply recipient."""
+    recipient = str(value or "").strip()
+    if "@" in recipient or recipient.endswith("님"):
+        return f"{recipient}께"
+    return f"{recipient}님께"
 
 
 def error_message(result):
