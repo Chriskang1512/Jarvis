@@ -153,6 +153,7 @@ class VoicePipeline:
             reply = intent_result.response
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
+            self.remember_mail_context(intent_result)
             self.remember_mail_reply_offer(intent_result)
             self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
@@ -290,6 +291,7 @@ class VoicePipeline:
             reply = intent_result.response
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
+            self.remember_mail_context(intent_result)
             self.remember_mail_reply_offer(intent_result)
             memory_context_refreshed = self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
@@ -875,6 +877,26 @@ class VoicePipeline:
         self.conversation_session.clear_pending_clarification()
         return self.execute_pending_reminder_clarification(pending, minutes, user_message)
 
+    def remember_mail_context(self, intent_result):
+        """Make a successful mail read the active ordinal follow-up context."""
+        if self.conversation_session is None:
+            return False
+
+        tool = getattr(intent_result, "tool", "") or getattr(intent_result, "tool_name", "")
+        output = getattr(intent_result, "tool_output", None)
+        data = getattr(output, "data", None)
+
+        if (
+            tool != "mail"
+            or not getattr(data, "success", False)
+            or getattr(data, "action", "") not in ["list", "get"]
+        ):
+            return False
+
+        self.conversation_session.clear_last_calendar_result()
+        trace_event("voice.context.focused", ability="mail")
+        return True
+
     def remember_mail_reply_offer(self, intent_result):
         """Offer a reply after a selected mail message has been read."""
         if self.conversation_session is None:
@@ -1380,6 +1402,9 @@ class VoicePipeline:
 
         calendar = self.conversation_session.get_last_calendar_result() or {}
         events = calendar.get("events", [])
+
+        if len(events) == 0:
+            return None
 
         if index >= len(events):
             return "해당 순서의 일정은 없습니다."

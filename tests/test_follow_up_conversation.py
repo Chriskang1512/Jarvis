@@ -353,6 +353,16 @@ class TestFollowUpConversationMode(unittest.TestCase):
             intent_runtime=runtime,
             follow_up_timeout=8,
         )
+        pipeline.runtime_last_calendar_result = {
+            "events": [
+                {
+                    "id": "old-event",
+                    "title": "Old calendar event",
+                    "date": "2026-07-24",
+                    "time": "10:00",
+                }
+            ]
+        }
 
         pipeline.run_once()
 
@@ -363,6 +373,41 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertTrue(any("답장을 보낼까요" in text for text in tts_provider.spoken))
         self.assertIn("취소했습니다.", tts_provider.spoken)
         self.assertEqual(provider.reply_calls, 0)
+
+    def test_bare_ordinal_read_uses_latest_mail_list_over_stale_calendar(self):
+        """Check Mail becomes the ordinal focus after listing over old Calendar context."""
+        provider = FollowUpMailProvider()
+        tool_registry = ToolRegistry()
+        ability_registry = AbilityRegistry()
+        ability_registry.register(MailAbility(provider=provider))
+        ability_registry.register_tools(tool_registry)
+        tts_provider = CapturingTTSProvider()
+        pipeline = VoicePipeline(
+            wake_listener=CountingWakeListener(),
+            stt_provider=FollowUpSTTProvider(
+                first="\ucd5c\uadfc \uba54\uc77c \uc54c\ub824\uc918",
+                follow_ups=["\uccab \ubc88\uc9f8 \uc77d\uc5b4\uc918", ""],
+            ),
+            chat_service=CapturingChatService(),
+            tts_provider=tts_provider,
+            intent_runtime=IntentRuntime(tool_dispatcher=RuntimeToolDispatcher(tool_registry)),
+            follow_up_timeout=8,
+        )
+        pipeline.runtime_last_calendar_result = {
+            "events": [
+                {
+                    "id": "old-event",
+                    "title": "Old calendar event",
+                    "date": "2026-07-24",
+                    "time": "10:00",
+                }
+            ]
+        }
+
+        pipeline.run_once()
+
+        self.assertTrue(any("\ud14c\uc2a4\ud2b8 \ubcf8\ubb38" in text for text in tts_provider.spoken))
+        self.assertFalse(any("Old calendar event" in text for text in tts_provider.spoken))
 
     def test_calendar_pending_create_survives_stt_failure_and_confirms_yes(self):
         """Check pending calendar create retries after STT failure and executes on yes."""
