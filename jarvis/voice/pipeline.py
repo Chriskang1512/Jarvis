@@ -842,7 +842,7 @@ class VoicePipeline:
             return self.try_contact_ambiguous_clarification_reply(pending, user_message)
 
         if pending.get("kind", "") == "mail_reply_offer":
-            decision = confirmation_decision(user_message)
+            decision = mail_reply_offer_decision(user_message)
             if decision == "no":
                 self.conversation_session.clear_pending_clarification()
                 return "알겠습니다."
@@ -977,6 +977,10 @@ class VoicePipeline:
 
         if self.conversation_session is None:
             return False
+
+        pending = self.conversation_session.get_pending_clarification() or {}
+        if pending.get("kind", "") == "mail_reply_offer":
+            return True
 
         task = self.conversation_session.get_conversation_task()
         return (
@@ -2566,6 +2570,20 @@ def rejection_decision(message):
     """Return no or unknown for compatibility with older rejection checks."""
     decision = confirmation_decision(message)
     return "no" if decision == "no" else "unknown"
+
+
+def mail_reply_offer_decision(message):
+    """Resolve reply-offer confirmation, including a narrow Korean STT false negative."""
+    decision = confirmation_decision(message)
+
+    if decision != "unknown":
+        return decision
+
+    compact = normalize_confirmation_text(message).replace(" ", "")
+    if compact in {"약사기"}:
+        return "no"
+
+    return "unknown"
 
 
 def is_confirmation_yes(message):

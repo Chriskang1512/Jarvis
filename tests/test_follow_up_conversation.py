@@ -37,6 +37,7 @@ from jarvis.voice.pipeline import (
     confirmation_decision,
     extract_pending_action,
     is_unprompted_short_follow_up_noise,
+    mail_reply_offer_decision,
     runtime_result_from_plan_result,
     should_skip_embedded_google_calendar_reminder_continuation,
 )
@@ -71,6 +72,25 @@ class TestFollowUpConversationMode(unittest.TestCase):
         """Check one-syllable yes aliases do not confirm unrelated words."""
         self.assertEqual(confirmation_decision("다음"), "unknown")
         self.assertEqual(calendar_confirmation_decision("다음"), "")
+
+    def test_mail_reply_offer_treats_stt_yak_sagi_as_no_only_in_offer_context(self):
+        self.assertEqual(confirmation_decision("약 사기."), "unknown")
+        self.assertEqual(mail_reply_offer_decision("약 사기."), "no")
+
+        session = create_conversation_session(follow_up_timeout=8)
+        session.start()
+        session.set_pending_clarification({"kind": "mail_reply_offer"})
+        pipeline = VoicePipeline(
+            wake_listener=None,
+            stt_provider=None,
+            chat_service=None,
+            tts_provider=None,
+            conversation_session=session,
+        )
+
+        self.assertTrue(pipeline.should_listen_for_confirmation())
+        self.assertEqual(pipeline.try_pending_clarification_reply("약 사기."), "알겠습니다.")
+        self.assertIsNone(session.get_pending_clarification())
 
     def test_unprompted_short_follow_up_noise_blocks_bare_todo_subject(self):
         """Check a bare Todo subject is ignored unless it has an action verb."""
