@@ -31,6 +31,7 @@ legacy runtime:
 - a compatibility adapter from the current `ExecutionPlan`;
 - contract version negotiation with explicit multi-version Adapter paths.
 - operation-level minimum and recommended contract-version gates.
+- capability deprecation and calendar-date sunset lifecycle policies.
 
 ## Current Version
 

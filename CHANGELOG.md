@@ -14,6 +14,10 @@
   negotiation and before execution.
 - Fail-closed `CAPABILITY_CONTRACT_VERSION_UNSUPPORTED` errors and structured
   below-recommended warnings.
+- Capability `deprecated_after` warnings and `YYYY-MM`/`YYYY-MM-DD` sunset
+  policies with deterministic clock injection.
+- Fail-closed `CAPABILITY_SUNSET_REACHED` handling once a registered lifecycle
+  deadline arrives.
 - Versioned `GoalEnvelope`, `AgentPlan`, `PlanStep`, and `PlanBinding`
   contracts alongside the current runtime Planner.
 - Fail-closed Plan validation for Registry capability resolution, dependency

@@ -70,6 +70,8 @@ Each registered requirement declares:
 capability
 min_contract
 recommended
+deprecated_after
+sunset
 ```
 
 If the selected version is below `min_contract`, execution fails with
@@ -81,6 +83,16 @@ If the selected version is below `min_contract`, execution fails with
 `mail.send` directly from Plan steps so callers cannot accidentally omit a
 requested capability from the gate. Unregistered operations remain compatible
 during the legacy metadata migration.
+
+`deprecated_after` is a contract-version lifecycle boundary. A selected
+version greater than that boundary remains executable but emits
+`CAPABILITY_CONTRACT_DEPRECATED`.
+
+`sunset` accepts `YYYY-MM` or `YYYY-MM-DD`; month-only values normalize to the
+first day of that month. Before that date Core emits
+`CAPABILITY_SUNSET_SCHEDULED`. On or after the date, execution fails closed
+with `CAPABILITY_SUNSET_REACHED`. Runtime supplies the current date through an
+injectable clock so replay and tests remain deterministic.
 
 ## Goal Envelope
 

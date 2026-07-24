@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+from datetime import date, datetime
 
 
 class ContractNegotiationError(ValueError):
@@ -65,15 +66,27 @@ class CapabilityVersionRequirement:
     capability: str
     min_contract: str
     recommended: str = ""
+    deprecated_after: str = ""
+    sunset: str = ""
 
     def __post_init__(self):
         minimum = normalize_contract_version(self.min_contract)
         recommended = normalize_contract_version(self.recommended) if self.recommended else minimum
+        deprecated_after = (
+            normalize_contract_version(self.deprecated_after)
+            if self.deprecated_after
+            else ""
+        )
+        sunset = normalize_sunset_date(self.sunset) if self.sunset else ""
         if compare_contract_versions(recommended, minimum) < 0:
             raise ContractNegotiationError("CAPABILITY_RECOMMENDED_BELOW_MINIMUM")
+        if deprecated_after and compare_contract_versions(deprecated_after, minimum) < 0:
+            raise ContractNegotiationError("CAPABILITY_DEPRECATION_BELOW_MINIMUM")
         object.__setattr__(self, "capability", str(self.capability or "").strip())
         object.__setattr__(self, "min_contract", minimum)
         object.__setattr__(self, "recommended", recommended)
+        object.__setattr__(self, "deprecated_after", deprecated_after)
+        object.__setattr__(self, "sunset", sunset)
         if not self.capability:
             raise ContractNegotiationError("CAPABILITY_REQUIRED")
 
@@ -110,8 +123,9 @@ class CapabilityVersionRegistry:
     def get(self, capability):
         return self._requirements.get(str(capability or "").strip())
 
-    def validate(self, selected_version, capabilities):
+    def validate(self, selected_version, capabilities, current_date=None):
         selected = normalize_contract_version(selected_version)
+        today = normalize_current_date(current_date)
         issues = []
         for capability in tuple(dict.fromkeys(str(item or "").strip() for item in capabilities)):
             requirement = self.get(capability)
@@ -137,6 +151,41 @@ class CapabilityVersionRegistry:
                         "warning",
                     )
                 )
+            if (
+                requirement.deprecated_after
+                and compare_contract_versions(selected, requirement.deprecated_after) > 0
+            ):
+                issues.append(
+                    CapabilityCompatibilityIssue(
+                        "CAPABILITY_CONTRACT_DEPRECATED",
+                        capability,
+                        selected,
+                        requirement.deprecated_after,
+                        "warning",
+                    )
+                )
+            if requirement.sunset:
+                sunset_date = date.fromisoformat(requirement.sunset)
+                if today >= sunset_date:
+                    issues.append(
+                        CapabilityCompatibilityIssue(
+                            "CAPABILITY_SUNSET_REACHED",
+                            capability,
+                            selected,
+                            requirement.sunset,
+                            "error",
+                        )
+                    )
+                else:
+                    issues.append(
+                        CapabilityCompatibilityIssue(
+                            "CAPABILITY_SUNSET_SCHEDULED",
+                            capability,
+                            selected,
+                            requirement.sunset,
+                            "warning",
+                        )
+                    )
         return CapabilityCompatibilityResult(tuple(issues))
 
 
@@ -187,9 +236,10 @@ class VersionAdapterRegistry:
 class ContractVersionNegotiator:
     """Select a common version or an explicit adapter path."""
 
-    def __init__(self, adapter_registry=None, capability_registry=None):
+    def __init__(self, adapter_registry=None, capability_registry=None, today_provider=None):
         self.adapter_registry = adapter_registry or VersionAdapterRegistry()
         self.capability_registry = capability_registry or CapabilityVersionRegistry()
+        self.today_provider = today_provider or date.today
 
     def negotiate(self, producer, consumer, capabilities=()):
         common = set(producer.supported_versions) & set(consumer.supported_versions)
@@ -221,10 +271,15 @@ class ContractVersionNegotiator:
         return self.negotiate(producer, consumer, capabilities=capabilities)
 
     def _check_capabilities(self, result, capabilities):
-        compatibility = self.capability_registry.validate(result.selected_version, capabilities)
+        compatibility = self.capability_registry.validate(
+            result.selected_version,
+            capabilities,
+            current_date=self.today_provider(),
+        )
         if not compatibility.compatible:
+            first_error = next(issue for issue in compatibility.issues if issue.severity == "error")
             raise ContractNegotiationError(
-                "CAPABILITY_CONTRACT_VERSION_UNSUPPORTED",
+                first_error.code,
                 "The negotiated contract version does not support every requested capability.",
                 details=compatibility.issues,
             )
@@ -263,6 +318,30 @@ def compare_contract_versions(left, right):
     if left_key > right_key:
         return 1
     return 0
+
+
+def normalize_sunset_date(value):
+    """Normalize YYYY-MM or YYYY-MM-DD lifecycle dates."""
+    text = str(value or "").strip()
+    try:
+        if len(text) == 7:
+            return datetime.strptime(text, "%Y-%m").date().replace(day=1).isoformat()
+        return date.fromisoformat(text).isoformat()
+    except ValueError as error:
+        raise ContractNegotiationError("CAPABILITY_SUNSET_INVALID") from error
+
+
+def normalize_current_date(value):
+    if value is None:
+        return date.today()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as error:
+        raise ContractNegotiationError("CURRENT_DATE_INVALID") from error
 
 
 def _preferred_first(support):

@@ -24,6 +24,7 @@ from jarvis.runtime.planner.versioning import (
     VersionAdapter,
     VersionAdapterRegistry,
     compare_contract_versions,
+    normalize_sunset_date,
     normalize_contract_version,
 )
 
@@ -59,4 +60,5 @@ __all__ = [
     "create_execution_plan",
     "compare_contract_versions",
     "normalize_contract_version",
+    "normalize_sunset_date",
 ]

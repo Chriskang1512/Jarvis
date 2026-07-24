@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 
 from jarvis.runtime.planner import (
     AgentPlan,
@@ -11,6 +12,7 @@ from jarvis.runtime.planner import (
     VersionAdapter,
     VersionAdapterRegistry,
     normalize_contract_version,
+    normalize_sunset_date,
 )
 
 
@@ -129,6 +131,65 @@ class TestContractVersionNegotiation(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.details[0].capability, "calendar.create")
+
+    def test_warns_when_runtime_passes_deprecated_after_version(self):
+        capabilities = CapabilityVersionRegistry()
+        capabilities.register(
+            CapabilityVersionRequirement(
+                "calendar.create",
+                "2.0",
+                recommended="3.0",
+                deprecated_after="4.0",
+            )
+        )
+
+        result = ContractVersionNegotiator(capability_registry=capabilities).negotiate(
+            ContractSupport("planner", ("5.0",)),
+            ContractSupport("runtime", ("5.0",)),
+            capabilities=("calendar.create",),
+        )
+
+        self.assertEqual(result.capability_issues[0].code, "CAPABILITY_CONTRACT_DEPRECATED")
+        self.assertEqual(result.capability_issues[0].required_version, "4.0")
+
+    def test_future_sunset_returns_scheduled_warning(self):
+        capabilities = CapabilityVersionRegistry()
+        capabilities.register(CapabilityVersionRequirement("mail.send", "1.0", sunset="2027-01"))
+
+        result = ContractVersionNegotiator(
+            capability_registry=capabilities,
+            today_provider=lambda: date(2026, 7, 24),
+        ).negotiate(
+            ContractSupport("planner", ("1.0",)),
+            ContractSupport("runtime", ("1.0",)),
+            capabilities=("mail.send",),
+        )
+
+        self.assertEqual(result.capability_issues[0].code, "CAPABILITY_SUNSET_SCHEDULED")
+        self.assertEqual(result.capability_issues[0].required_version, "2027-01-01")
+
+    def test_reached_sunset_blocks_execution(self):
+        capabilities = CapabilityVersionRegistry()
+        capabilities.register(CapabilityVersionRequirement("mail.send", "1.0", sunset="2027-01-01"))
+
+        with self.assertRaises(ContractNegotiationError) as raised:
+            ContractVersionNegotiator(
+                capability_registry=capabilities,
+                today_provider=lambda: date(2027, 1, 1),
+            ).negotiate(
+                ContractSupport("planner", ("1.0",)),
+                ContractSupport("runtime", ("1.0",)),
+                capabilities=("mail.send",),
+            )
+
+        self.assertEqual(raised.exception.code, "CAPABILITY_SUNSET_REACHED")
+
+    def test_sunset_normalization_rejects_invalid_dates(self):
+        self.assertEqual(normalize_sunset_date("2027-01"), "2027-01-01")
+        self.assertEqual(normalize_sunset_date("2027-01-15"), "2027-01-15")
+        with self.assertRaises(ContractNegotiationError) as raised:
+            normalize_sunset_date("2027-13")
+        self.assertEqual(raised.exception.code, "CAPABILITY_SUNSET_INVALID")
 
 
 if __name__ == "__main__":
