@@ -1,6 +1,26 @@
 # Changelog
 
-## [Unreleased] - Sprint 18.0 Agent Core Design
+## [Unreleased] - Sprint 18.1 Agent Core Planner Contract
+
+### Added
+
+- Versioned `GoalEnvelope`, `AgentPlan`, `PlanStep`, and `PlanBinding`
+  contracts alongside the current runtime Planner.
+- Fail-closed Plan validation for Registry capability resolution, dependency
+  references and cycles, and external-write safety policies.
+- An auditable no-op Plan Optimizer that versions plans while enforcing an
+  unchanged semantic fingerprint.
+- A compatibility adapter from `ExecutionPlan` and `ExecutionStep` into the
+  new Agent Core contracts.
+
+### Compatibility
+
+- Existing Planner and RuntimeTask execution remain unchanged while the new
+  contract is introduced.
+- Current Ability IDs are accepted as capability owners until operation-level
+  Registry metadata is migrated.
+
+## Sprint 18.0 Agent Core Design
 
 ### Architecture
 

@@ -21,6 +21,15 @@ The approved migration design is documented in:
 - [`Execution Journal`](docs/architecture/execution-journal.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
+Sprint 18.1 now provides the first executable contract layer alongside the
+legacy runtime:
+
+- versioned `GoalEnvelope`, `AgentPlan`, `PlanStep`, and `PlanBinding` models;
+- fail-closed Registry, dependency, side-effect, verification, and idempotency
+  validation;
+- an auditable no-op optimizer that rejects semantic fingerprint changes;
+- a compatibility adapter from the current `ExecutionPlan`.
+
 ## Current Version
 
 v0.6.0 - Sprint 17.6 Google Workspace Integration Polish
