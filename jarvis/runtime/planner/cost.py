@@ -1,5 +1,5 @@
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 
@@ -40,6 +40,13 @@ class ResumeMode(str, Enum):
     FULL_RESTART = "FULL_RESTART"
 
 
+class ResumeValidation(str, Enum):
+    NONE = "NONE"
+    STEP_ONLY = "STEP_ONLY"
+    CHECKPOINT = "CHECKPOINT"
+    FULL = "FULL"
+
+
 @dataclass(frozen=True)
 class RecoveryDecision:
     retry_allowed: bool
@@ -51,6 +58,8 @@ class RecoveryDecision:
     exhausted_strategy: RecoveryStrategy = RecoveryStrategy.ABORT
     priority: RecoveryPriority = RecoveryPriority.NORMAL
     resume_mode: ResumeMode = ResumeMode.FROM_CHECKPOINT
+    resume_validation: ResumeValidation = ResumeValidation.CHECKPOINT
+    checkpoint_fingerprint: str = ""
 
     def __post_init__(self):
         if self.max_retry is not None and int(self.max_retry) < 0:
@@ -85,6 +94,21 @@ class RecoveryDecision:
             self.recovery_strategy.value,
         )
 
+    def bind_checkpoint(self, checkpoint):
+        """Freeze the checkpoint fingerprint into this recovery contract."""
+        from jarvis.runtime.task.checkpoint import create_checkpoint_fingerprint
+
+        return replace(
+            self,
+            checkpoint_fingerprint=create_checkpoint_fingerprint(checkpoint),
+        )
+
+    def validate_resume(self, checkpoint):
+        """Validate checkpoint identity and return the effective resume mode."""
+        from jarvis.runtime.task.checkpoint import validate_checkpoint_resume
+
+        return validate_checkpoint_resume(self, checkpoint)
+
     def to_dict(self):
         """Return a checkpoint and journal friendly recovery contract."""
         return {
@@ -97,6 +121,8 @@ class RecoveryDecision:
             "exhausted_strategy": self.exhausted_strategy.value,
             "priority": self.priority.value,
             "resume_mode": self.resume_mode.value,
+            "resume_validation": self.resume_validation.value,
+            "checkpoint_fingerprint": self.checkpoint_fingerprint,
         }
 
 
@@ -115,6 +141,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.NONE,
                 priority=RecoveryPriority.LOW,
                 resume_mode=ResumeMode.FROM_STEP,
+                resume_validation=ResumeValidation.NONE,
             ),
             HealthReason.TIMEOUT: RecoveryDecision(
                 True,
@@ -125,6 +152,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.FALLBACK,
                 priority=RecoveryPriority.NORMAL,
                 resume_mode=ResumeMode.FROM_CHECKPOINT,
+                resume_validation=ResumeValidation.CHECKPOINT,
             ),
             HealthReason.RATE_LIMIT: RecoveryDecision(
                 True,
@@ -135,6 +163,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.WAIT,
                 priority=RecoveryPriority.LOW,
                 resume_mode=ResumeMode.FROM_STEP,
+                resume_validation=ResumeValidation.STEP_ONLY,
             ),
             HealthReason.AUTH_FAILURE: RecoveryDecision(
                 False,
@@ -146,6 +175,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.ABORT,
                 priority=RecoveryPriority.HIGH,
                 resume_mode=ResumeMode.FROM_STEP,
+                resume_validation=ResumeValidation.STEP_ONLY,
             ),
             HealthReason.NETWORK: RecoveryDecision(
                 False,
@@ -155,6 +185,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.WAIT,
                 priority=RecoveryPriority.HIGH,
                 resume_mode=ResumeMode.FROM_CHECKPOINT,
+                resume_validation=ResumeValidation.CHECKPOINT,
             ),
             HealthReason.SERVER_ERROR: RecoveryDecision(
                 True,
@@ -165,6 +196,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.FALLBACK,
                 priority=RecoveryPriority.NORMAL,
                 resume_mode=ResumeMode.FROM_CHECKPOINT,
+                resume_validation=ResumeValidation.CHECKPOINT,
             ),
             HealthReason.UNKNOWN: RecoveryDecision(
                 False,
@@ -174,6 +206,7 @@ class HealthRecoveryPolicy:
                 exhausted_strategy=RecoveryStrategy.ABORT,
                 priority=RecoveryPriority.HIGH,
                 resume_mode=ResumeMode.FULL_RESTART,
+                resume_validation=ResumeValidation.FULL,
             ),
         }
         return decisions[normalized]

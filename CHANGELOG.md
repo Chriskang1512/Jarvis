@@ -36,6 +36,11 @@
   key.
 - `FROM_STEP`, `FROM_CHECKPOINT`, and `FULL_RESTART` resume modes so Task State
   Machine does not interpret Health Reason.
+- `NONE`, `STEP_ONLY`, `CHECKPOINT`, and `FULL` resume validation contracts
+  carried by each Recovery Decision.
+- Privacy-safe checkpoint fingerprints with automatic `FULL_RESTART`
+  escalation when task, input, permission, schema, draft, artifact, or external
+  operation identity changes.
 - Health reason propagation into Validator issues and `OPT-005` audit entries.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
@@ -81,7 +86,7 @@
 
 ### Verified
 
-- Full regression suite: `757 tests OK (skipped=2)`.
+- Full regression suite: `762 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

@@ -110,11 +110,51 @@ Sensitive values may participate in the hash but are never stored in plaintext
 solely for diagnostics. Salted or keyed hashes should be used where dictionary
 attacks are realistic.
 
+`RecoveryDecision.checkpoint_fingerprint` is a separate identity hash over a
+normalized allowlist:
+
+```text
+task_id
+plan_version
+current_step_id
+completed_step_ids
+pending_step_ids
+step_input_fingerprint
+external_operation_id
+confirmation_state
+draft_version
+permission_snapshot
+schema_versions
+artifact_refs
+resume_policy
+```
+
+Raw mail bodies, recipient addresses, provider payloads, tokens, and headers
+are excluded. Their already-derived fingerprints or immutable artifact
+references may participate.
+
+For `CHECKPOINT` or `FULL` resume validation:
+
+```text
+stored fingerprint == recomputed fingerprint
+  -> continue with requested resume mode
+
+missing or different fingerprint
+  -> CHECKPOINT_FINGERPRINT_REQUIRED/MISMATCH
+  -> effective resume mode = FULL_RESTART
+  -> full validation and replanning
+```
+
+`FULL_RESTART` never authorizes blind repetition of an external write. Changes
+to `external_operation_id`, step input, permission, schema, confirmation, or
+draft identity return execution to the unknown-side-effect verification gate.
+
 ## Resume Algorithm
 
 ```text
 load checkpoint
 verify checksum and schema
+verify checkpoint fingerprint required by RecoveryDecision
 load exact plan version
 rebuild task projection from journal through journal_sequence
 compare projection with checkpoint

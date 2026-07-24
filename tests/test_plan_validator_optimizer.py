@@ -13,6 +13,7 @@ from jarvis.runtime.planner import (
     RecoveryStrategy,
     RecoveryPriority,
     ResumeMode,
+    ResumeValidation,
     PlanBinding,
     PlanCompiler,
     PlanStep,
@@ -546,22 +547,26 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(timeout.exhausted_strategy, RecoveryStrategy.FALLBACK)
         self.assertEqual(timeout.priority, RecoveryPriority.NORMAL)
         self.assertEqual(timeout.resume_mode, ResumeMode.FROM_CHECKPOINT)
+        self.assertEqual(timeout.resume_validation, ResumeValidation.CHECKPOINT)
         self.assertEqual((rate_limit.action, rate_limit.retry_after_seconds), ("RETRY_AFTER", 300))
         self.assertIsNone(rate_limit.max_retry)
         self.assertEqual(rate_limit.recovery_strategy, RecoveryStrategy.WAIT)
         self.assertEqual(rate_limit.priority, RecoveryPriority.LOW)
         self.assertEqual(rate_limit.resume_mode, ResumeMode.FROM_STEP)
+        self.assertEqual(rate_limit.resume_validation, ResumeValidation.STEP_ONLY)
         self.assertFalse(auth.retry_allowed)
         self.assertTrue(auth.requires_reauthentication)
         self.assertEqual(auth.action, "REAUTHENTICATE")
         self.assertEqual(auth.recovery_strategy, RecoveryStrategy.REAUTH)
         self.assertEqual(auth.priority, RecoveryPriority.HIGH)
         self.assertEqual(auth.resume_mode, ResumeMode.FROM_STEP)
+        self.assertEqual(auth.resume_validation, ResumeValidation.STEP_ONLY)
         self.assertEqual(network.action, "WAIT_FOR_NETWORK")
         self.assertFalse(network.retry_allowed)
         self.assertEqual(network.recovery_strategy, RecoveryStrategy.WAIT)
         self.assertEqual(network.priority, RecoveryPriority.HIGH)
         self.assertEqual(network.resume_mode, ResumeMode.FROM_CHECKPOINT)
+        self.assertEqual(network.resume_validation, ResumeValidation.CHECKPOINT)
         self.assertEqual((server.action, server.retry_after_seconds), ("RETRY_BACKOFF", 60))
         self.assertEqual(server.max_retry, 5)
         self.assertEqual(server.resume_mode, ResumeMode.FROM_CHECKPOINT)
@@ -570,6 +575,7 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(unknown.recovery_strategy, RecoveryStrategy.ABORT)
         self.assertEqual(unknown.priority, RecoveryPriority.HIGH)
         self.assertEqual(unknown.resume_mode, ResumeMode.FULL_RESTART)
+        self.assertEqual(unknown.resume_validation, ResumeValidation.FULL)
 
     def test_retry_budget_switches_to_fallback_when_exhausted(self):
         policy = HealthRecoveryPolicy()
@@ -590,6 +596,7 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         self.assertEqual(timeout.to_dict()["exhausted_strategy"], "FALLBACK")
         self.assertEqual(timeout.to_dict()["priority"], "NORMAL")
         self.assertEqual(timeout.to_dict()["resume_mode"], "FROM_CHECKPOINT")
+        self.assertEqual(timeout.to_dict()["resume_validation"], "CHECKPOINT")
 
     def test_recovery_decisions_expose_scheduler_priority_order(self):
         policy = HealthRecoveryPolicy()
@@ -605,6 +612,84 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
             [decision.priority for decision in ordered],
             [RecoveryPriority.HIGH, RecoveryPriority.NORMAL, RecoveryPriority.LOW],
         )
+
+    def test_checkpoint_fingerprint_allows_identical_resume(self):
+        checkpoint = self.checkpoint_fixture()
+        decision = HealthRecoveryPolicy().evaluate(HealthReason.TIMEOUT).bind_checkpoint(checkpoint)
+
+        result = decision.validate_resume(dict(checkpoint))
+
+        self.assertTrue(result.valid)
+        self.assertFalse(result.escalated)
+        self.assertEqual(result.code, "CHECKPOINT_FINGERPRINT_VALID")
+        self.assertEqual(result.effective_resume_mode, ResumeMode.FROM_CHECKPOINT)
+        self.assertEqual(
+            decision.to_dict()["checkpoint_fingerprint"],
+            result.actual_fingerprint,
+        )
+
+    def test_checkpoint_mismatch_escalates_to_full_restart(self):
+        checkpoint = self.checkpoint_fixture()
+        decision = HealthRecoveryPolicy().evaluate(HealthReason.SERVER_ERROR).bind_checkpoint(checkpoint)
+        changed = dict(checkpoint)
+        changed["permission_snapshot"] = {"mail.send": "expired"}
+
+        result = decision.validate_resume(changed)
+
+        self.assertFalse(result.valid)
+        self.assertTrue(result.escalated)
+        self.assertEqual(result.code, "CHECKPOINT_FINGERPRINT_MISMATCH")
+        self.assertEqual(result.effective_resume_mode, ResumeMode.FULL_RESTART)
+
+    def test_external_operation_change_blocks_duplicate_mail_resume(self):
+        checkpoint = self.checkpoint_fixture()
+        decision = HealthRecoveryPolicy().evaluate(HealthReason.TIMEOUT).bind_checkpoint(checkpoint)
+        changed = dict(checkpoint)
+        changed["external_operation_id"] = "gmail-message-already-sent"
+
+        result = decision.validate_resume(changed)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.effective_resume_mode, ResumeMode.FULL_RESTART)
+
+    def test_checkpoint_fingerprint_ignores_raw_sensitive_payloads(self):
+        checkpoint = self.checkpoint_fixture()
+        first = dict(checkpoint, mail_body="first secret", recipient="one@example.com")
+        second = dict(checkpoint, mail_body="other secret", recipient="two@example.com")
+        first_decision = HealthRecoveryPolicy().evaluate(HealthReason.TIMEOUT).bind_checkpoint(first)
+        second_decision = HealthRecoveryPolicy().evaluate(HealthReason.TIMEOUT).bind_checkpoint(second)
+
+        self.assertEqual(
+            first_decision.checkpoint_fingerprint,
+            second_decision.checkpoint_fingerprint,
+        )
+
+    def test_step_only_resume_does_not_require_checkpoint_fingerprint(self):
+        decision = HealthRecoveryPolicy().evaluate(HealthReason.AUTH_FAILURE)
+
+        result = decision.validate_resume({})
+
+        self.assertTrue(result.valid)
+        self.assertEqual(result.code, "CHECKPOINT_VALIDATION_NOT_REQUIRED")
+        self.assertEqual(result.effective_resume_mode, ResumeMode.FROM_STEP)
+
+    @staticmethod
+    def checkpoint_fixture():
+        return {
+            "task_id": "task-1",
+            "plan_version": 3,
+            "current_step_id": "mail-send",
+            "completed_step_ids": ["contacts-get", "mail-draft"],
+            "pending_step_ids": ["mail-send"],
+            "step_input_fingerprint": "input-sha256",
+            "external_operation_id": "pending-mail-1",
+            "confirmation_state": "confirmed",
+            "draft_version": 2,
+            "permission_snapshot": {"mail.send": "confirmed"},
+            "schema_versions": {"mail.send.input": "1.0"},
+            "artifact_refs": ["draft:sha256"],
+            "resume_policy": "verify-before-send",
+        }
 
     def test_successful_runtime_observation_clears_health_reason(self):
         primary = self.registry.get_operation("calendar", "list")

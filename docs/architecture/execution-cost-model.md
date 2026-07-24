@@ -146,6 +146,8 @@ exhausted_strategy
 requires_reauthentication
 priority
 resume_mode
+resume_validation
+checkpoint_fingerprint
 ```
 
 Recovery priority is `HIGH`, `NORMAL`, or `LOW`. `scheduler_key()` exposes the
@@ -162,8 +164,26 @@ Resume mode removes Reason-specific inference from Task State Machine:
 | `SERVER_ERROR` | `NORMAL` | `FROM_CHECKPOINT` |
 | `UNKNOWN` | `HIGH` | `FULL_RESTART` |
 
-The State Machine consumes `recovery_strategy` and `resume_mode`; it does not
-branch on Health Reason.
+Resume validation is an independent contract:
+
+| Reason | Resume validation |
+| --- | --- |
+| `TIMEOUT` | `CHECKPOINT` |
+| `RATE_LIMIT` | `STEP_ONLY` |
+| `AUTH_FAILURE` | `STEP_ONLY` |
+| `NETWORK` | `CHECKPOINT` |
+| `SERVER_ERROR` | `CHECKPOINT` |
+| `UNKNOWN` | `FULL` |
+
+The State Machine consumes `recovery_strategy`, `resume_mode`, and
+`resume_validation`; it does not branch on Health Reason.
+
+For `CHECKPOINT` and `FULL` validation, the decision is bound to a
+privacy-safe `checkpoint_fingerprint` when the checkpoint is persisted.
+A missing or changed fingerprint escalates the effective resume mode to
+`FULL_RESTART`. This means full validation and replanning, not blind replay of
+side effects. Unknown external writes still pass through the
+`UNKNOWN_SIDE_EFFECT` verification gate.
 
 Recovery decisions are policy data; Cost Model does not sleep, refresh OAuth,
 or retry by itself. Sprint 18.3 Task State Machine consumes these decisions.
