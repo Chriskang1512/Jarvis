@@ -18,12 +18,17 @@ architecture tracks. New v0.4 orchestration ADRs continue from 0014 onward.
 - 0022 - AI Intent Parser Boundary
 - 0023 - Google Workspace Cross-Ability Context
 - 0024 - Agent Core Integration
+- 0025 - Capability Lifecycle Status (Proposed)
 
 ## Sprint 18 Agent Core
 
 ADR 0024 defines the integration direction for the existing Planner,
 Ability Registry, Permission Layer, RuntimeTask, conversation state, checkpoint
 resume contract, and Execution Journal.
+
+ADR 0025 records the proposed `Experimental -> Stable -> Deprecated -> Sunset`
+capability lifecycle and its privacy-safe Telemetry boundary. It does not
+change runtime behavior yet.
 
 ## Release Candidate Review
 

@@ -94,6 +94,10 @@ first day of that month. Before that date Core emits
 with `CAPABILITY_SUNSET_REACHED`. Runtime supplies the current date through an
 injectable clock so replay and tests remain deterministic.
 
+Future lifecycle maturity states are recorded in ADR 0025. The proposed flow is
+`Experimental -> Stable -> Deprecated -> Sunset`. This remains a Registry
+extension point and does not change current execution behavior.
+
 ## Goal Envelope
 
 Minimum fields:

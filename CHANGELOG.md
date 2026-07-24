@@ -34,6 +34,13 @@
 - Current Ability IDs are accepted as capability owners until operation-level
   Registry metadata is migrated.
 
+### Proposed
+
+- ADR 0025 records the future
+  `Experimental -> Stable -> Deprecated -> Sunset` capability lifecycle.
+- Experimental capabilities will remain operational while emitting only
+  privacy-safe Telemetry; this proposal does not change runtime behavior yet.
+
 ## Sprint 18.0 Agent Core Design
 
 ### Architecture
