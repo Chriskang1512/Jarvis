@@ -1,4 +1,40 @@
+from collections import deque
 from dataclasses import dataclass
+from enum import Enum
+
+
+class Availability(str, Enum):
+    ONLINE = "ONLINE"
+    DEGRADED = "DEGRADED"
+    OFFLINE = "OFFLINE"
+
+
+@dataclass(frozen=True)
+class ExecutionSelectionPolicy:
+    reliability_first: bool = True
+    min_reliability: float = 0.0
+
+    def __post_init__(self):
+        if not 0.0 <= float(self.min_reliability) <= 1.0:
+            raise ValueError("min_reliability must be between 0.0 and 1.0.")
+
+
+@dataclass(frozen=True)
+class EffectiveExecutionProfile:
+    implementation_id: str
+    estimated_cost: float
+    estimated_latency_ms: int
+    network_required: bool
+    availability: Availability
+    reliability_score: float
+    metric_samples: int = 0
+
+
+@dataclass(frozen=True)
+class RuntimeMetric:
+    success: bool
+    latency_ms: int
+    cost: float
 
 
 @dataclass(frozen=True)
@@ -23,7 +59,94 @@ def operation_cost(metadata):
     )
 
 
-def estimate_plan_cost(plan, ability_registry):
+class AdaptiveExecutionCostModel:
+    """Combine Registry estimates with bounded recent Runtime observations."""
+
+    def __init__(self, window_size=20):
+        self.window_size = max(1, int(window_size))
+        self._metrics = {}
+        self._availability = {}
+
+    def observe(self, operation_id, implementation_id, success, latency_ms, cost=0.0):
+        key = (str(operation_id), str(implementation_id))
+        samples = self._metrics.setdefault(key, deque(maxlen=self.window_size))
+        samples.append(
+            RuntimeMetric(
+                success=bool(success),
+                latency_ms=max(0, int(latency_ms)),
+                cost=max(0.0, float(cost)),
+            )
+        )
+        self._availability[key] = (
+            Availability.ONLINE if success else Availability.DEGRADED
+        )
+
+    def set_availability(self, operation_id, implementation_id, availability):
+        key = (str(operation_id), str(implementation_id))
+        self._availability[key] = normalize_availability(availability)
+
+    def profile(self, metadata):
+        key = (metadata.id, metadata.implementation_id)
+        samples = tuple(self._metrics.get(key, ()))
+        availability = self._availability.get(
+            key,
+            normalize_availability(metadata.availability),
+        )
+        if not samples:
+            return EffectiveExecutionProfile(
+                implementation_id=metadata.implementation_id,
+                estimated_cost=float(metadata.estimated_cost),
+                estimated_latency_ms=int(metadata.estimated_latency_ms),
+                network_required=bool(metadata.network_required),
+                availability=availability,
+                reliability_score=float(metadata.reliability_score),
+            )
+        successes = sum(1 for sample in samples if sample.success)
+        return EffectiveExecutionProfile(
+            implementation_id=metadata.implementation_id,
+            estimated_cost=sum(sample.cost for sample in samples) / len(samples),
+            estimated_latency_ms=round(
+                sum(sample.latency_ms for sample in samples) / len(samples)
+            ),
+            network_required=bool(metadata.network_required),
+            availability=availability,
+            reliability_score=successes / len(samples),
+            metric_samples=len(samples),
+        )
+
+    def rank(self, metadata, policy):
+        profile = self.profile(metadata)
+        availability_rank = {
+            Availability.ONLINE: 0,
+            Availability.DEGRADED: 1,
+            Availability.OFFLINE: 2,
+        }[profile.availability]
+        if policy.reliability_first:
+            preference = (
+                -profile.reliability_score,
+                profile.estimated_cost,
+            )
+        else:
+            preference = (
+                profile.estimated_cost,
+                -profile.reliability_score,
+            )
+        return (
+            availability_rank,
+            *preference,
+            profile.estimated_latency_ms,
+            profile.network_required,
+            profile.implementation_id,
+        )
+
+
+def normalize_availability(value):
+    if isinstance(value, Availability):
+        return value
+    return Availability(str(value or "").upper())
+
+
+def estimate_plan_cost(plan, ability_registry, cost_model=None):
     """Estimate serial plan cost using selected or default implementations."""
     total = ExecutionCost()
     for step in plan.steps:
@@ -38,5 +161,13 @@ def estimate_plan_cost(plan, ability_registry):
         )
         metadata = selected or ability_registry.get_operation(step.capability, step.operation)
         if metadata is not None:
-            total += operation_cost(metadata)
+            if cost_model is None:
+                total += operation_cost(metadata)
+            else:
+                profile = cost_model.profile(metadata)
+                total += ExecutionCost(
+                    estimated_cost=profile.estimated_cost,
+                    estimated_latency_ms=profile.estimated_latency_ms,
+                    network_operations=1 if profile.network_required else 0,
+                )
     return total

@@ -65,10 +65,11 @@ class AbilityRegistry:
         """Register one operation-level execution contract."""
         if metadata.id in self.operation_index and not replace_existing:
             raise ValueError(f"Operation '{metadata.id}' is already registered.")
+        previous = self.operation_index.get(metadata.id)
         self.operation_index[metadata.id] = metadata
         candidates = self.operation_candidates.setdefault(metadata.id, {})
-        if replace_existing:
-            candidates.pop(metadata.implementation_id, None)
+        if replace_existing and previous is not None:
+            candidates.pop(previous.implementation_id, None)
         candidates[metadata.implementation_id] = metadata
 
     def register_operation_candidate(self, metadata):

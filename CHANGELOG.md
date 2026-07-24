@@ -17,6 +17,12 @@
 - `OPT-005` deterministic lower-cost implementation selection with
   permission, side-effect, schema, lifecycle, and contract safety filters.
 - Execution-ready `execution_target` validation and serial Plan cost estimates.
+- `ONLINE`, `DEGRADED`, and `OFFLINE` implementation availability metadata.
+- Reliability-first and cost-first deterministic candidate selection policies.
+- A bounded adaptive Runtime Metric model for recent success rate, latency,
+  cost, and availability.
+- Compiler fallback to equivalent ONLINE candidates and fail-closed blocking
+  when every compatible implementation is OFFLINE.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
 - `PlanCompiler` original validation, optimization, revalidation, and
@@ -61,7 +67,7 @@
 
 ### Verified
 
-- Full regression suite: `747 tests OK (skipped=2)`.
+- Full regression suite: `753 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

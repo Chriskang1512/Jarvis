@@ -33,6 +33,11 @@ output_schema_version
 parallel_safe
 deduplicatable
 required_predecessors
+estimated_cost
+estimated_latency_ms
+network_required
+availability
+reliability_score
 ```
 
 Existing Abilities receive compatibility operation metadata during

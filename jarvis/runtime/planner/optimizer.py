@@ -1,7 +1,12 @@
 import json
 from dataclasses import dataclass, field, replace
 
-from jarvis.runtime.planner.cost import estimate_plan_cost
+from jarvis.runtime.planner.cost import (
+    AdaptiveExecutionCostModel,
+    Availability,
+    ExecutionSelectionPolicy,
+    estimate_plan_cost,
+)
 from jarvis.runtime.planner.versioning import compare_contract_versions
 
 
@@ -87,8 +92,10 @@ class SmartPlanOptimizer:
 
     version = "2.0-smart"
 
-    def __init__(self, ability_registry):
+    def __init__(self, ability_registry, cost_model=None, selection_policy=None):
         self.ability_registry = ability_registry
+        self.cost_model = cost_model or AdaptiveExecutionCostModel()
+        self.selection_policy = selection_policy or ExecutionSelectionPolicy()
 
     def optimize(self, plan):
         before = plan.semantic_fingerprint()
@@ -228,7 +235,7 @@ class SmartPlanOptimizer:
     def _select_lower_cost_targets(self, plan):
         selections = {}
         steps = []
-        before_cost = estimate_plan_cost(plan, self.ability_registry)
+        before_cost = estimate_plan_cost(plan, self.ability_registry, self.cost_model)
         for step in plan.steps:
             primary = self.ability_registry.get_operation(step.capability, step.operation)
             candidates = self.ability_registry.list_operation_candidates(step.capability, step.operation)
@@ -243,27 +250,29 @@ class SmartPlanOptimizer:
                 and candidate.output_schema == primary.output_schema
                 and candidate.lifecycle == primary.lifecycle
                 and compare_contract_versions(plan.contract_version, candidate.contract_version) >= 0
+                and self.cost_model.profile(candidate).availability != Availability.OFFLINE
+                and self.cost_model.profile(candidate).reliability_score
+                >= self.selection_policy.min_reliability
             ]
             if not compatible:
                 steps.append(step)
                 continue
             selected = min(
                 compatible,
-                key=lambda item: (
-                    float(item.estimated_cost),
-                    int(item.estimated_latency_ms),
-                    bool(item.network_required),
-                    item.implementation_id,
-                ),
+                key=lambda item: self.cost_model.rank(item, self.selection_policy),
             )
+            selected_profile = self.cost_model.profile(selected)
             current_target = step.execution_target or primary.implementation_id
             if selected.implementation_id != current_target:
                 selections[step.step_id] = {
                     "before": current_target,
                     "after": selected.implementation_id,
-                    "estimated_cost": selected.estimated_cost,
-                    "estimated_latency_ms": selected.estimated_latency_ms,
-                    "network_required": selected.network_required,
+                    "estimated_cost": selected_profile.estimated_cost,
+                    "estimated_latency_ms": selected_profile.estimated_latency_ms,
+                    "network_required": selected_profile.network_required,
+                    "availability": selected_profile.availability.value,
+                    "reliability_score": selected_profile.reliability_score,
+                    "metric_samples": selected_profile.metric_samples,
                 }
                 steps.append(replace(step, execution_target=selected.implementation_id))
             else:
@@ -271,7 +280,7 @@ class SmartPlanOptimizer:
         if not selections:
             return plan, None
         rewritten = replace(plan, steps=tuple(steps))
-        after_cost = estimate_plan_cost(rewritten, self.ability_registry)
+        after_cost = estimate_plan_cost(rewritten, self.ability_registry, self.cost_model)
         return rewritten, OptimizationJournalEntry(
             "OPT-005",
             "Equivalent lower-cost execution target selected",

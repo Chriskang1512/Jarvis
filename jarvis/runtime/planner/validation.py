@@ -42,9 +42,10 @@ class PlanValidationResult:
 class PlanValidator:
     """Fail-closed validation for proposed Agent Core plans."""
 
-    def __init__(self, ability_registry, contract_version=CONTRACT_VERSION):
+    def __init__(self, ability_registry, contract_version=CONTRACT_VERSION, cost_model=None):
         self.ability_registry = ability_registry
         self.contract_version = contract_version
+        self.cost_model = cost_model
 
     def validate(self, plan):
         issues = []
@@ -88,11 +89,12 @@ class PlanValidator:
                         plan.contract_version,
                     )
                 )
+                candidates = self.ability_registry.list_operation_candidates(
+                    step.capability,
+                    step.operation,
+                )
+                active_operation = operation
                 if step.execution_target:
-                    candidates = self.ability_registry.list_operation_candidates(
-                        step.capability,
-                        step.operation,
-                    )
                     target = next(
                         (
                             candidate
@@ -120,6 +122,17 @@ class PlanValidator:
                                 actual=target.implementation_id,
                             )
                         )
+                    else:
+                        active_operation = target
+                issues.extend(
+                    validate_operation_availability(
+                        step,
+                        active_operation,
+                        operation,
+                        candidates,
+                        self.cost_model,
+                    )
+                )
                 dependency_operations = {
                     f"{steps_by_id[dependency].capability}.{steps_by_id[dependency].operation}"
                     for dependency in step.depends_on
@@ -296,6 +309,39 @@ def execution_target_compatible(primary, target):
         and target.output_schema == primary.output_schema
         and target.lifecycle == primary.lifecycle
     )
+
+
+def validate_operation_availability(step, active, primary, candidates, cost_model):
+    active_availability = operation_availability(active, cost_model)
+    if active_availability == "ONLINE":
+        return []
+    compatible_alternatives = [
+        candidate
+        for candidate in candidates
+        if candidate.implementation_id != active.implementation_id
+        and execution_target_compatible(primary, candidate)
+        and operation_availability(candidate, cost_model) == "ONLINE"
+    ]
+    if not step.execution_target and compatible_alternatives:
+        return [
+            ValidationIssue(
+                "PRIMARY_OPERATION_UNAVAILABLE",
+                "warning",
+                step.step_id,
+                "availability",
+                expected="ONLINE alternative",
+                actual=active_availability,
+            )
+        ]
+    code = "OPERATION_OFFLINE" if active_availability == "OFFLINE" else "OPERATION_DEGRADED"
+    severity = "error" if active_availability == "OFFLINE" else "warning"
+    return [ValidationIssue(code, severity, step.step_id, "availability")]
+
+
+def operation_availability(metadata, cost_model):
+    if cost_model is None:
+        return metadata.availability
+    return cost_model.profile(metadata).availability.value
 
 
 def _has_cycle(steps):

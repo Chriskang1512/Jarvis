@@ -24,12 +24,17 @@ result_equivalence_key
 estimated_cost
 estimated_latency_ms
 network_required
+availability
+reliability_score
 ```
 
 `estimated_cost` is a non-negative normalized planning value. It is not
 currency unless a provider-specific adapter explicitly defines that mapping.
 Latency is an estimate in milliseconds. `network_required` identifies external
 network work for planning and diagnostics.
+
+Availability is `ONLINE`, `DEGRADED`, or `OFFLINE`. Reliability is a normalized
+score from `0.0` to `1.0`.
 
 ## Candidate Safety
 
@@ -60,6 +65,44 @@ Compatible candidates use this deterministic order:
 4. stable lexical `implementation_id` tie-break.
 
 The selection is `OPT-005 Cost-based Implementation Selection`.
+
+## Adaptive Selection
+
+`ExecutionSelectionPolicy` supports two explicit strategies:
+
+- reliability-first: availability, reliability, cost, latency, network use;
+- cost-first: availability, cost, reliability, latency, network use.
+
+`OFFLINE` candidates are excluded. `DEGRADED` candidates rank behind every
+compatible `ONLINE` candidate. A configurable minimum reliability threshold
+may exclude weak candidates.
+
+When the primary target is unavailable but an equivalent ONLINE candidate
+exists, Validator returns a warning so Optimizer can select the fallback.
+When every compatible candidate is OFFLINE, Plan Compiler returns `BLOCKED`.
+
+## Runtime Metrics
+
+`AdaptiveExecutionCostModel` keeps a bounded recent observation window per
+operation and implementation:
+
+```text
+success
+latency_ms
+cost
+availability
+```
+
+Recent observations produce an effective reliability score, average latency,
+average cost, and current availability. Runtime values override static
+Registry estimates for selection without mutating Registry metadata.
+
+A failed observation marks the implementation `DEGRADED`; a successful
+observation marks it `ONLINE`. Runtime may explicitly set `OFFLINE` after a
+health check or provider outage.
+
+Metric records contain implementation IDs and numeric operational data only.
+They must not contain user input or provider payloads.
 
 ## Optimization Journal
 
@@ -97,6 +140,9 @@ The legacy Runtime does not dispatch this target yet.
 Sprint 18.5 Registry Composition will resolve `execution_target` to an actual
 Ability/Provider adapter. Until that migration, Cost Model selection is
 validated and journaled but does not alter the legacy execution route.
+
+Sprint 18.5/18.6 will also connect Provider timeout, health, success, latency,
+and cost events to `AdaptiveExecutionCostModel.observe()`.
 
 ## Future Extensions
 

@@ -48,6 +48,8 @@ class CapabilityOperationMetadata:
     estimated_cost: float = 0.0
     estimated_latency_ms: int = 0
     network_required: bool = False
+    availability: str = "ONLINE"
+    reliability_score: float = 1.0
 
     def __post_init__(self):
         object.__setattr__(self, "required_predecessors", tuple(self.required_predecessors))
@@ -59,6 +61,12 @@ class CapabilityOperationMetadata:
             raise ValueError("estimated_cost must not be negative.")
         if int(self.estimated_latency_ms) < 0:
             raise ValueError("estimated_latency_ms must not be negative.")
+        availability = str(self.availability or "").upper()
+        if availability not in {"ONLINE", "DEGRADED", "OFFLINE"}:
+            raise ValueError("availability must be ONLINE, DEGRADED, or OFFLINE.")
+        object.__setattr__(self, "availability", availability)
+        if not 0.0 <= float(self.reliability_score) <= 1.0:
+            raise ValueError("reliability_score must be between 0.0 and 1.0.")
 
     @property
     def id(self):

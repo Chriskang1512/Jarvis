@@ -5,6 +5,9 @@ from jarvis.abilities import AbilityRegistry, CapabilityOperationMetadata
 from jarvis.abilities.native.calendar import CalendarAbility, MockCalendarProvider
 from jarvis.runtime.planner import (
     AgentPlan,
+    AdaptiveExecutionCostModel,
+    Availability,
+    ExecutionSelectionPolicy,
     PlanBinding,
     PlanCompiler,
     PlanStep,
@@ -366,6 +369,158 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
 
         self.assertEqual(result.status, ValidationStatus.BLOCKED)
         self.assertIn("EXECUTION_TARGET_NOT_FOUND", {issue.code for issue in result.issues})
+
+    def test_adaptive_optimizer_excludes_offline_provider(self):
+        primary = self.registry.get_operation("calendar", "list")
+        cache = replace(
+            primary,
+            implementation_id="cache:calendar",
+            estimated_cost=2.0,
+            reliability_score=0.95,
+            network_required=False,
+        )
+        self.registry.register_operation_candidate(cache)
+        metrics = AdaptiveExecutionCostModel()
+        metrics.set_availability(primary.id, primary.implementation_id, Availability.OFFLINE)
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        optimized = SmartPlanOptimizer(self.registry, cost_model=metrics).optimize(plan).plan
+
+        self.assertEqual(optimized.steps[0].execution_target, "cache:calendar")
+
+    def test_selection_policy_can_prioritize_reliability_or_cost(self):
+        primary = self.registry.get_operation("calendar", "list")
+        reliable = replace(
+            primary,
+            implementation_id="reliable-network",
+            estimated_cost=5.0,
+            reliability_score=0.99,
+        )
+        cheap = replace(
+            primary,
+            implementation_id="cheap-cache",
+            estimated_cost=0.0,
+            reliability_score=0.95,
+            network_required=False,
+        )
+        self.registry.register_operation(reliable, replace_existing=True)
+        self.registry.register_operation_candidate(cheap)
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        reliability_plan = SmartPlanOptimizer(
+            self.registry,
+            selection_policy=ExecutionSelectionPolicy(reliability_first=True),
+        ).optimize(plan).plan
+        cost_plan = SmartPlanOptimizer(
+            self.registry,
+            selection_policy=ExecutionSelectionPolicy(reliability_first=False),
+        ).optimize(plan).plan
+
+        self.assertEqual(reliability_plan.steps[0].execution_target, "")
+        self.assertEqual(cost_plan.steps[0].execution_target, "cheap-cache")
+
+    def test_runtime_timeout_degrades_provider_and_selects_cache(self):
+        primary = self.registry.get_operation("calendar", "list")
+        cache = replace(
+            primary,
+            implementation_id="cache:calendar",
+            estimated_cost=0.5,
+            reliability_score=0.90,
+            network_required=False,
+        )
+        self.registry.register_operation_candidate(cache)
+        metrics = AdaptiveExecutionCostModel()
+        metrics.observe(
+            primary.id,
+            primary.implementation_id,
+            success=False,
+            latency_ms=2000,
+            cost=1.0,
+        )
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        result = SmartPlanOptimizer(self.registry, cost_model=metrics).optimize(plan)
+        selection = next(
+            entry for entry in result.record.journal_entries if entry.rule_id == "OPT-005"
+        ).details["selections"]["read"]
+
+        self.assertEqual(result.plan.steps[0].execution_target, "cache:calendar")
+        self.assertEqual(selection["availability"], "ONLINE")
+
+    def test_dynamic_latency_updates_candidate_ranking(self):
+        primary = self.registry.get_operation("calendar", "list")
+        cache = replace(
+            primary,
+            implementation_id="cache:calendar",
+            estimated_cost=1.0,
+            estimated_latency_ms=500,
+            network_required=False,
+        )
+        self.registry.register_operation_candidate(cache)
+        metrics = AdaptiveExecutionCostModel()
+        metrics.observe(primary.id, primary.implementation_id, True, latency_ms=100, cost=1.0)
+        metrics.observe(cache.id, cache.implementation_id, True, latency_ms=2, cost=1.0)
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        optimized = SmartPlanOptimizer(self.registry, cost_model=metrics).optimize(plan).plan
+
+        self.assertEqual(optimized.steps[0].execution_target, "cache:calendar")
+
+    def test_plan_compiler_uses_online_fallback_for_offline_primary(self):
+        primary = self.registry.get_operation("calendar", "list")
+        cache = replace(
+            primary,
+            implementation_id="cache:calendar",
+            reliability_score=0.95,
+            network_required=False,
+        )
+        self.registry.register_operation_candidate(cache)
+        metrics = AdaptiveExecutionCostModel()
+        metrics.set_availability(primary.id, primary.implementation_id, Availability.OFFLINE)
+        validator = PlanValidator(self.registry, cost_model=metrics)
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        result = PlanCompiler(
+            validator,
+            SmartPlanOptimizer(self.registry, cost_model=metrics),
+        ).compile(plan)
+
+        self.assertTrue(result.execution_ready)
+        self.assertEqual(result.execution_ready_plan.steps[0].execution_target, "cache:calendar")
+
+    def test_plan_compiler_blocks_when_every_candidate_is_offline(self):
+        primary = self.registry.get_operation("calendar", "list")
+        metrics = AdaptiveExecutionCostModel()
+        metrics.set_availability(primary.id, primary.implementation_id, Availability.OFFLINE)
+        validator = PlanValidator(self.registry, cost_model=metrics)
+        plan = AgentPlan(
+            goal_id="goal-1",
+            steps=(PlanStep("read", 1, "calendar", "list"),),
+        )
+
+        result = PlanCompiler(
+            validator,
+            SmartPlanOptimizer(self.registry, cost_model=metrics),
+        ).compile(plan)
+
+        self.assertFalse(result.execution_ready)
+        self.assertEqual(result.status, ValidationStatus.BLOCKED)
+        self.assertIn("OPERATION_OFFLINE", {issue.code for issue in result.original_validation.issues})
 
 
 if __name__ == "__main__":
