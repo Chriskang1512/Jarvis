@@ -1,7 +1,13 @@
 """Runtime task execution engine for multi-step Jarvis plans."""
 
 from jarvis.runtime.task.history import TaskHistory
-from jarvis.runtime.task.models import RuntimeTask, StateTransitionRecord, TaskState, TaskStepRecord
+from jarvis.runtime.task.models import (
+    RuntimeTask,
+    StateTransitionRecord,
+    TaskState,
+    TaskStepRecord,
+    TransitionSource,
+)
 from jarvis.runtime.task.state_machine import (
     InMemoryTaskCheckpointStore,
     InvalidTaskTransition,
@@ -20,6 +26,7 @@ __all__ = [
     "RuntimeTaskCheckpoint",
     "StateTransitionRecord",
     "TaskStateMachine",
+    "TransitionSource",
     "InMemoryTaskCheckpointStore",
     "InvalidTaskTransition",
     "TaskHistory",

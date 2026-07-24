@@ -1,10 +1,17 @@
 from dataclasses import dataclass, replace
+from datetime import datetime
 import hashlib
 import json
 
 from jarvis.core.events import BaseEvent
 from jarvis.runtime.planner.cost import ResumeMode
-from jarvis.runtime.task.models import RuntimeTask, StateTransitionRecord, TaskState, now_iso
+from jarvis.runtime.task.models import (
+    RuntimeTask,
+    StateTransitionRecord,
+    TaskState,
+    TransitionSource,
+    now_iso,
+)
 
 
 class InvalidTaskTransition(ValueError):
@@ -86,6 +93,8 @@ class RuntimeTaskCheckpoint:
     failed_steps: tuple
     retry_count: int
     transition_sequence: int
+    transition_duration_ms: int
+    transition_source: TransitionSource
     checkpoint_created_at: str
     checkpoint_fingerprint: str
 
@@ -112,8 +121,17 @@ class TaskStateMachine:
         self.checkpoint_store = checkpoint_store or InMemoryTaskCheckpointStore()
         self.clock = clock or now_iso
 
-    def transition(self, task, to_state, reason="", step_id="", **changes):
+    def transition(
+        self,
+        task,
+        to_state,
+        reason="",
+        source=TransitionSource.SYSTEM,
+        step_id="",
+        **changes,
+    ):
         to_state = normalize_state(to_state)
+        source = normalize_transition_source(source)
         validate_transition(task.status, to_state)
         occurred_at = self.clock()
         record = StateTransitionRecord(
@@ -121,6 +139,8 @@ class TaskStateMachine:
             from_state=task.status,
             to_state=to_state,
             transition_reason=str(reason or ""),
+            transition_source=source,
+            duration_ms=transition_duration_ms(task.updated_at, occurred_at),
             step_id=str(step_id or changes.get("current_step", "") or ""),
             occurred_at=occurred_at,
         )
@@ -139,12 +159,18 @@ class TaskStateMachine:
         if task.status != TaskState.PAUSED:
             raise InvalidTaskTransition("Resume requires a PAUSED task.")
         validation = decision.validate_resume(checkpoint)
-        resuming = self.transition(task, TaskState.RESUMING, reason="recovery_resume")
+        resuming = self.transition(
+            task,
+            TaskState.RESUMING,
+            reason="recovery_resume",
+            source=TransitionSource.RECOVERY,
+        )
         target = resume_target(validation.effective_resume_mode)
         resumed = self.transition(
             resuming,
             target,
             reason=f"resume:{validation.code}",
+            source=TransitionSource.RECOVERY,
         )
         return resumed, validation
 
@@ -164,6 +190,8 @@ class TaskStateMachine:
                     "from_state": record.from_state.value,
                     "to_state": record.to_state.value,
                     "transition_reason": record.transition_reason,
+                    "transition_source": record.transition_source.value,
+                    "duration_ms": record.duration_ms,
                     "step_id": record.step_id,
                     "checkpoint_revision": checkpoint.revision,
                 },
@@ -171,9 +199,21 @@ class TaskStateMachine:
         )
 
 
-def transition_task(task, to_state, reason="", changes=None):
+def transition_task(
+    task,
+    to_state,
+    reason="",
+    source=TransitionSource.SYSTEM,
+    changes=None,
+):
     """Compatibility entry point used by RuntimeTask.transition()."""
-    return TaskStateMachine().transition(task, to_state, reason=reason, **dict(changes or {}))
+    return TaskStateMachine().transition(
+        task,
+        to_state,
+        reason=reason,
+        source=source,
+        **dict(changes or {}),
+    )
 
 
 def validate_transition(from_state, to_state):
@@ -191,6 +231,21 @@ def normalize_state(state):
     return TaskState(str(state or ""))
 
 
+def normalize_transition_source(source):
+    if isinstance(source, TransitionSource):
+        return source
+    return TransitionSource(str(source or "").upper())
+
+
+def transition_duration_ms(previous_at, occurred_at):
+    try:
+        previous = datetime.fromisoformat(str(previous_at or ""))
+        current = datetime.fromisoformat(str(occurred_at or ""))
+        return max(0, int((current - previous).total_seconds() * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
 def create_runtime_checkpoint(task, occurred_at=None):
     created_at = occurred_at or now_iso()
     payload = {
@@ -201,6 +256,8 @@ def create_runtime_checkpoint(task, occurred_at=None):
         "failed_steps": list(task.failed_steps),
         "retry_count": task.retry_count,
         "transition_sequence": len(task.transition_history),
+        "transition_duration_ms": task.transition_history[-1].duration_ms,
+        "transition_source": task.transition_history[-1].transition_source.value,
         "step_records": [
             {
                 "step_index": record.step_index,
@@ -223,6 +280,8 @@ def create_runtime_checkpoint(task, occurred_at=None):
         failed_steps=tuple(task.failed_steps),
         retry_count=task.retry_count,
         transition_sequence=len(task.transition_history),
+        transition_duration_ms=task.transition_history[-1].duration_ms,
+        transition_source=task.transition_history[-1].transition_source,
         checkpoint_created_at=created_at,
         checkpoint_fingerprint=fingerprint,
     )

@@ -85,6 +85,8 @@ transition_id
 from_state
 to_state
 transition_reason
+transition_source
+duration_ms
 step_id
 occurred_at
 ```
@@ -94,6 +96,13 @@ used as the event revision and idempotency key suffix. `transition_reason` is a
 stable reason code such as `permission_confirmation_required`,
 `user_confirmed`, `network_timeout`, or `retry_started`; it must not contain
 raw user input or provider payloads.
+
+`transition_source` is one of `SYSTEM`, `USER`, `RECOVERY`, or `EVENT`.
+`duration_ms` is the non-negative time spent in `from_state`, measured from the
+previous task update to this transition. It enables phase latency, confirmation
+wait, verification, and recovery metrics without reconstructing timestamps.
+Clock rollback or an unparsable legacy timestamp records `0` rather than a
+negative duration.
 
 The legacy Python properties `sequence` and `reason` remain read-only aliases
 during migration. Serialized history and EventBus payloads use only the

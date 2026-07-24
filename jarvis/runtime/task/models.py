@@ -26,6 +26,15 @@ class TaskState(Enum):
     SUCCESS = "SUCCESS"
 
 
+class TransitionSource(str, Enum):
+    """Actor category responsible for a task state transition."""
+
+    SYSTEM = "SYSTEM"
+    USER = "USER"
+    RECOVERY = "RECOVERY"
+    EVENT = "EVENT"
+
+
 @dataclass(frozen=True)
 class StateTransitionRecord:
     """Privacy-safe record of one RuntimeTask state change."""
@@ -34,6 +43,8 @@ class StateTransitionRecord:
     from_state: TaskState
     to_state: TaskState
     transition_reason: str = ""
+    transition_source: TransitionSource = TransitionSource.SYSTEM
+    duration_ms: int = 0
     step_id: str = ""
     occurred_at: str = ""
 
@@ -102,11 +113,23 @@ class RuntimeTask:
         object.__setattr__(self, "step_records", tuple(self.step_records))
         object.__setattr__(self, "transition_history", tuple(self.transition_history))
 
-    def transition(self, status, reason="legacy_runtime", **changes):
+    def transition(
+        self,
+        status,
+        reason="legacy_runtime",
+        source=TransitionSource.SYSTEM,
+        **changes,
+    ):
         """Route state changes through the single transition validator."""
         from jarvis.runtime.task.state_machine import transition_task
 
-        return transition_task(self, status, reason=reason, changes=changes)
+        return transition_task(
+            self,
+            status,
+            reason=reason,
+            source=source,
+            changes=changes,
+        )
 
     def to_dict(self):
         """Return a diagnostics-friendly dictionary."""
@@ -127,6 +150,8 @@ class RuntimeTask:
                     "from_state": record.from_state.value,
                     "to_state": record.to_state.value,
                     "transition_reason": record.transition_reason,
+                    "transition_source": record.transition_source.value,
+                    "duration_ms": record.duration_ms,
                     "step_id": record.step_id,
                     "occurred_at": record.occurred_at,
                 }

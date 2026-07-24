@@ -6,7 +6,7 @@ from time import perf_counter, sleep
 from jarvis.debug_trace import trace_event
 from jarvis.runtime.planner import PlanResult, PlanStepResult
 from jarvis.runtime.task.history import TaskHistory
-from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, now_iso
+from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, TransitionSource, now_iso
 from jarvis.runtime.task.state_machine import TaskStateMachine
 
 
@@ -111,6 +111,7 @@ class TaskRunner:
                         task,
                         TaskState.RETRYING,
                         reason="step_retry",
+                        source=TransitionSource.RECOVERY,
                         current_step=step.index,
                         retry_count=total_retry_count + retry_number,
                     )
@@ -118,6 +119,7 @@ class TaskRunner:
                         task,
                         TaskState.RUNNING,
                         reason="retry_started",
+                        source=TransitionSource.RECOVERY,
                         current_step=step.index,
                     )
 

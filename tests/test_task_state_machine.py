@@ -8,6 +8,7 @@ from jarvis.runtime.task import (
     RuntimeTask,
     TaskState,
     TaskStateMachine,
+    TransitionSource,
 )
 
 
@@ -22,12 +23,22 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
             checkpoint_store=self.checkpoints,
             clock=SequenceClock(),
         )
-        self.task = RuntimeTask(id="RT-STATE", goal="state machine test")
+        self.task = RuntimeTask(
+            id="RT-STATE",
+            goal="state machine test",
+            created_at="2026-07-24T14:31:00",
+            updated_at="2026-07-24T14:31:00",
+        )
 
     def test_normal_confirmation_and_verification_flow(self):
         task = self.machine.transition(self.task, TaskState.RUNNING, reason="ready")
         task = self.machine.transition(task, TaskState.WAIT_CONFIRM, reason="permission")
-        task = self.machine.transition(task, TaskState.RUNNING, reason="confirmed")
+        task = self.machine.transition(
+            task,
+            TaskState.RUNNING,
+            reason="confirmed",
+            source=TransitionSource.USER,
+        )
         task = self.machine.transition(task, TaskState.VERIFYING, reason="steps_completed")
         task = self.machine.transition(task, TaskState.COMPLETED, reason="verified")
 
@@ -60,11 +71,18 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
             [item.transition_reason for item in task.transition_history],
             ["ready", "permission", "confirmed", "steps_completed", "verified"],
         )
+        self.assertEqual(
+            [item.duration_ms for item in task.transition_history],
+            [1000, 1000, 1000, 1000, 1000],
+        )
+        self.assertEqual(task.transition_history[2].transition_source, TransitionSource.USER)
         self.assertEqual(self.events[1].payload["transition_id"], 2)
         self.assertEqual(
             self.events[1].payload["transition_reason"],
             "permission",
         )
+        self.assertEqual(self.events[2].payload["transition_source"], "USER")
+        self.assertEqual(self.events[2].payload["duration_ms"], 1000)
 
     def test_running_cannot_complete_without_verification(self):
         task = self.machine.transition(self.task, TaskState.RUNNING)
@@ -122,6 +140,8 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertEqual(checkpoint.current_step, 2)
         self.assertEqual(checkpoint.revision, 1)
         self.assertEqual(len(checkpoint.checkpoint_fingerprint), 64)
+        self.assertEqual(checkpoint.transition_duration_ms, 1000)
+        self.assertEqual(checkpoint.transition_source, TransitionSource.SYSTEM)
 
     def test_transition_history_does_not_store_goal_or_provider_payload(self):
         task = self.machine.transition(
@@ -135,6 +155,8 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
         self.assertNotIn("provider_payload", serialized)
         self.assertIn("transition_id", serialized)
         self.assertIn("transition_reason", serialized)
+        self.assertIn("transition_source", serialized)
+        self.assertIn("duration_ms", serialized)
 
 
 class SequenceClock:

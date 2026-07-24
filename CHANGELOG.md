@@ -12,6 +12,8 @@
   Journal projection.
 - Task-local monotonic `transition_id` and stable `transition_reason` fields in
   transition history and EventBus payloads, with read-only legacy aliases.
+- Per-transition state residence `duration_ms` and controlled `SYSTEM`, `USER`,
+  `RECOVERY`, and `EVENT` transition sources for Journal and Metrics analysis.
 - EventBus publication for task start, confirmation wait, pause, resume, retry,
   completion, cancellation, failure, and generic state changes.
 - Per-transition Runtime checkpoints with deterministic fingerprints and
