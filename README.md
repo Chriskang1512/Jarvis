@@ -4,6 +4,23 @@ Python 기반 개인 AI 비서 프로젝트입니다.
 
 Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 작업 성격에 맞는 Agent에게 일을 배정하는 구조로 개발합니다.
 
+## Sprint 18 Agent Core Design
+
+Sprint 18 evolves the existing runtime into a unified Agent Core:
+
+```text
+Goal -> Plan -> Validate -> Optimize -> Execute -> Verify -> Journal
+```
+
+The approved migration design is documented in:
+
+- [`Agent Core gap analysis`](docs/architecture/agent-core-gap-analysis.md)
+- [`Planner contract`](docs/architecture/planner-contract.md)
+- [`Task state machine`](docs/architecture/task-state-machine.md)
+- [`Checkpoint and resume contract`](docs/architecture/checkpoint-resume-contract.md)
+- [`Execution Journal`](docs/architecture/execution-journal.md)
+- [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
+
 ## Current Version
 
 v0.6.0 - Sprint 17.6 Google Workspace Integration Polish

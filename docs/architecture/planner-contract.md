@@ -1,0 +1,181 @@
+# Agent Core Planner Contract
+
+## Principle
+
+> AI turns a goal into a plan. Core validates, optimizes, executes, and
+> remembers that plan.
+
+The AI parser may propose structure. Only Core may accept a plan for execution.
+
+## Pipeline
+
+```text
+GoalEnvelope
+  -> ProposedPlan
+  -> PlanValidator
+  -> PlanOptimizer
+  -> ExecutablePlan
+  -> RuntimeTask
+```
+
+## Goal Envelope
+
+Minimum fields:
+
+```text
+goal_id
+raw_text_ref
+normalized_goal
+requested_outcomes
+constraints
+conversation_id
+created_at
+source
+```
+
+`raw_text_ref` points to privacy-controlled input. Durable records should store
+a hash or redacted summary instead of sensitive voice text.
+
+## Plan
+
+Minimum fields:
+
+```text
+plan_id
+plan_version
+planner_version
+goal_id
+status
+steps
+bindings
+required_permissions
+created_at
+optimized_from_version
+```
+
+Every material mutation creates a new immutable `plan_version`.
+
+## Step
+
+```text
+step_id
+ordinal
+capability
+operation
+input
+input_schema_version
+output_schema_version
+depends_on
+required
+side_effect
+permission
+retry_policy
+verification_policy
+idempotency_policy
+```
+
+`capability` and `operation` are Registry identifiers. Provider and tool names
+are resolved only at execution time.
+
+## Bindings
+
+A binding connects a prior output to a later input:
+
+```text
+source_step_id
+source_path
+target_step_id
+target_path
+transform
+required
+```
+
+The Validator checks both schema paths and type compatibility. Transforms must
+be registered deterministic Core transforms, never arbitrary AI code.
+
+Example:
+
+```text
+calendar.create.output.event.start
+  -> reminder.create.input.event_start
+```
+
+## Validation Stages
+
+Validation is fail-closed and runs before optimization and again after it.
+
+1. Contract version supported.
+2. Every capability operation exists in Ability Registry.
+3. Inputs satisfy operation schemas or have valid required bindings.
+4. Outputs referenced by bindings exist.
+5. Dependencies reference valid steps.
+6. Dependency graph is acyclic.
+7. Permission and side-effect metadata are present.
+8. Required verification/idempotency policies exist for external writes.
+9. No optimizer invariant is violated.
+
+Validation produces structured issues:
+
+```text
+code
+severity
+step_id
+field
+message_key
+```
+
+Raw exceptions do not become user speech.
+
+## Optimization
+
+The Optimizer may:
+
+- topologically order steps within user constraints;
+- move prerequisite reads before dependent writes;
+- remove provably duplicate safe reads;
+- reuse a compatible prior output binding;
+- group independent safe reads when the executor later supports concurrency.
+
+The Optimizer must not:
+
+- add or remove a requested outcome;
+- weaken or bypass permission;
+- add a side effect;
+- change recipient, content, time, or other user-approved data;
+- turn an optional step into required, or the reverse;
+- remove verification or idempotency requirements.
+
+Normative rule:
+
+> The Optimizer may change order, but it must not change the user's goal,
+> permissions, or side effects.
+
+Every optimization records:
+
+```text
+optimizer_version
+input_plan_version
+output_plan_version
+rules_applied
+semantic_fingerprint_before
+semantic_fingerprint_after
+```
+
+The semantic fingerprints must match. Otherwise optimization is rejected.
+
+## Permission Boundary
+
+Planner declares the required permission. Permission Layer decides it.
+Confirmation is bound to:
+
+```text
+task_id + plan_version + step_id + input_fingerprint + draft_version
+```
+
+A plan change invalidates confirmation for affected steps.
+
+## Initial Compatibility Strategy
+
+Current `ExecutionPlan` and `ExecutionStep` remain adapters during migration.
+The adapter maps `tool_name` to a Registry capability operation. New code must
+not add more rule-specific context wiring to the legacy dictionaries.

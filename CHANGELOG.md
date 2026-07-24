@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] - Sprint 18.0 Agent Core Design
+
+### Architecture
+
+- Audited the existing Planner, RuntimeTask, Ability Registry, Permission Layer,
+  conversation state, retry flow, EventBus, history, metrics, and provider
+  metadata against the Agent Core target.
+- Classified current components as reuse, extend/migrate, or
+  deprecate/remove.
+- Defined versioned Planner, schema binding, validation, and semantics-preserving
+  optimization contracts.
+- Defined `PAUSED`, `RESUMING`, checkpoint, permission snapshot, confirmation,
+  fingerprint, and `UNKNOWN_SIDE_EFFECT` safety contracts.
+- Defined an append-only, privacy-safe Execution Journal and task-history
+  projections.
+- Accepted ADR 0024: Agent Core Integration.
+
 ## [v0.6.0-sprint.17.6] - Google Workspace Integration Polish
 
 ### Added
