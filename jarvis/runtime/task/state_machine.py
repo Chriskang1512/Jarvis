@@ -117,10 +117,10 @@ class TaskStateMachine:
         validate_transition(task.status, to_state)
         occurred_at = self.clock()
         record = StateTransitionRecord(
-            sequence=len(task.transition_history) + 1,
+            transition_id=len(task.transition_history) + 1,
             from_state=task.status,
             to_state=to_state,
-            reason=str(reason or ""),
+            transition_reason=str(reason or ""),
             step_id=str(step_id or changes.get("current_step", "") or ""),
             occurred_at=occurred_at,
         )
@@ -157,12 +157,13 @@ class TaskStateMachine:
                 event_type=event_type,
                 aggregate_type="RuntimeTask",
                 aggregate_id=task.id,
-                revision=record.sequence,
-                idempotency_key=f"task-state:{task.id}:{record.sequence}",
+                revision=record.transition_id,
+                idempotency_key=f"task-state:{task.id}:{record.transition_id}",
                 payload={
+                    "transition_id": record.transition_id,
                     "from_state": record.from_state.value,
                     "to_state": record.to_state.value,
-                    "reason": record.reason,
+                    "transition_reason": record.transition_reason,
                     "step_id": record.step_id,
                     "checkpoint_revision": checkpoint.revision,
                 },

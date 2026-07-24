@@ -52,6 +52,19 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
                 "TaskCompleted",
             ],
         )
+        self.assertEqual(
+            [item.transition_id for item in task.transition_history],
+            [1, 2, 3, 4, 5],
+        )
+        self.assertEqual(
+            [item.transition_reason for item in task.transition_history],
+            ["ready", "permission", "confirmed", "steps_completed", "verified"],
+        )
+        self.assertEqual(self.events[1].payload["transition_id"], 2)
+        self.assertEqual(
+            self.events[1].payload["transition_reason"],
+            "permission",
+        )
 
     def test_running_cannot_complete_without_verification(self):
         task = self.machine.transition(self.task, TaskState.RUNNING)
@@ -120,6 +133,8 @@ class TestTaskStateMachineFoundation(unittest.TestCase):
 
         self.assertNotIn(self.task.goal, serialized)
         self.assertNotIn("provider_payload", serialized)
+        self.assertIn("transition_id", serialized)
+        self.assertIn("transition_reason", serialized)
 
 
 class SequenceClock:

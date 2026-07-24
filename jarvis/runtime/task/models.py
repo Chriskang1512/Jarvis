@@ -30,12 +30,22 @@ class TaskState(Enum):
 class StateTransitionRecord:
     """Privacy-safe record of one RuntimeTask state change."""
 
-    sequence: int
+    transition_id: int
     from_state: TaskState
     to_state: TaskState
-    reason: str = ""
+    transition_reason: str = ""
     step_id: str = ""
     occurred_at: str = ""
+
+    @property
+    def sequence(self):
+        """Backward-compatible transition ordering alias."""
+        return self.transition_id
+
+    @property
+    def reason(self):
+        """Backward-compatible reason alias."""
+        return self.transition_reason
 
 
 @dataclass(frozen=True)
@@ -113,10 +123,10 @@ class RuntimeTask:
             "duration_ms": self.duration_ms,
             "transition_history": [
                 {
-                    "sequence": record.sequence,
+                    "transition_id": record.transition_id,
                     "from_state": record.from_state.value,
                     "to_state": record.to_state.value,
-                    "reason": record.reason,
+                    "transition_reason": record.transition_reason,
                     "step_id": record.step_id,
                     "occurred_at": record.occurred_at,
                 }

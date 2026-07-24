@@ -78,9 +78,26 @@ Direct `task.state = ...` or dataclass replacement outside this boundary is
 forbidden. Invalid edges fail with `INVALID_TASK_TRANSITION`. In particular,
 `RUNNING -> COMPLETED` is blocked because `VERIFYING` is mandatory.
 
-State transition history stores sequence, source state, destination state,
-reason code, step ID, and timestamp. It excludes goal text, user input, and
-provider payloads. Sprint 18.6 may project these records into the durable
+State transition history stores:
+
+```text
+transition_id
+from_state
+to_state
+transition_reason
+step_id
+occurred_at
+```
+
+`transition_id` is a task-local, monotonically increasing integer and is also
+used as the event revision and idempotency key suffix. `transition_reason` is a
+stable reason code such as `permission_confirmation_required`,
+`user_confirmed`, `network_timeout`, or `retry_started`; it must not contain
+raw user input or provider payloads.
+
+The legacy Python properties `sequence` and `reason` remain read-only aliases
+during migration. Serialized history and EventBus payloads use only the
+normative names. Sprint 18.6 may project these records into the durable
 Execution Journal without changing the state engine.
 
 ### Resume
