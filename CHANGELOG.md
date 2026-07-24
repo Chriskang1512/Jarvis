@@ -27,6 +27,11 @@
   server, and unknown failures.
 - Structured Recovery Decisions for retry backoff, rate-limit delay, OAuth
   reauthentication, network wait, and verification-required states.
+- Retry budgets: three timeout retries, five server-error retries, unlimited
+  rate-limit waiting, and zero automatic authentication retries.
+- Stable `BACKOFF`, `WAIT`, `REAUTH`, `FALLBACK`, and `ABORT` strategies with
+  fallback behavior after retry exhaustion.
+- Checkpoint-friendly serialized Recovery Decision contracts for Sprint 18.3.
 - Health reason propagation into Validator issues and `OPT-005` audit entries.
 - Rule-level Optimization Journal entries with reasons and before/after step
   IDs.
@@ -72,7 +77,7 @@
 
 ### Verified
 
-- Full regression suite: `755 tests OK (skipped=2)`.
+- Full regression suite: `756 tests OK (skipped=2)`.
 
 ## Sprint 18.0 Agent Core Design
 

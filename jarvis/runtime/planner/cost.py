@@ -19,12 +19,56 @@ class HealthReason(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class RecoveryStrategy(str, Enum):
+    NONE = "NONE"
+    BACKOFF = "BACKOFF"
+    WAIT = "WAIT"
+    REAUTH = "REAUTH"
+    FALLBACK = "FALLBACK"
+    ABORT = "ABORT"
+
+
 @dataclass(frozen=True)
 class RecoveryDecision:
     retry_allowed: bool
     action: str
     retry_after_seconds: int | None = None
     requires_reauthentication: bool = False
+    max_retry: int | None = 0
+    recovery_strategy: RecoveryStrategy = RecoveryStrategy.ABORT
+    exhausted_strategy: RecoveryStrategy = RecoveryStrategy.ABORT
+
+    def __post_init__(self):
+        if self.max_retry is not None and int(self.max_retry) < 0:
+            raise ValueError("max_retry must be non-negative or None.")
+
+    def can_retry(self, retries_completed):
+        """Return whether another automatic retry remains."""
+        if not self.retry_allowed:
+            return False
+        if self.max_retry is None:
+            return True
+        return int(retries_completed) < self.max_retry
+
+    def strategy_for(self, retries_completed):
+        """Return the strategy a State Machine should execute now."""
+        if self.recovery_strategy not in {RecoveryStrategy.BACKOFF, RecoveryStrategy.FALLBACK}:
+            return self.recovery_strategy
+        if self.can_retry(retries_completed):
+            return self.recovery_strategy
+        return self.exhausted_strategy
+
+    def to_dict(self):
+        """Return a checkpoint and journal friendly recovery contract."""
+        return {
+            "retry_allowed": self.retry_allowed,
+            "action": self.action,
+            "retry_after_seconds": self.retry_after_seconds,
+            "requires_reauthentication": self.requires_reauthentication,
+            "max_retry": self.max_retry,
+            "recovery_strategy": self.recovery_strategy.value,
+            "exhausted_strategy": self.exhausted_strategy.value,
+        }
 
 
 class HealthRecoveryPolicy:
@@ -33,18 +77,61 @@ class HealthRecoveryPolicy:
     def evaluate(self, reason):
         normalized = normalize_health_reason(reason)
         decisions = {
-            HealthReason.NONE: RecoveryDecision(True, "NONE", 0),
-            HealthReason.TIMEOUT: RecoveryDecision(True, "RETRY_BACKOFF", 30),
-            HealthReason.RATE_LIMIT: RecoveryDecision(True, "RETRY_AFTER", 300),
+            HealthReason.NONE: RecoveryDecision(
+                False,
+                "NONE",
+                0,
+                max_retry=0,
+                recovery_strategy=RecoveryStrategy.NONE,
+                exhausted_strategy=RecoveryStrategy.NONE,
+            ),
+            HealthReason.TIMEOUT: RecoveryDecision(
+                True,
+                "RETRY_BACKOFF",
+                30,
+                max_retry=3,
+                recovery_strategy=RecoveryStrategy.BACKOFF,
+                exhausted_strategy=RecoveryStrategy.FALLBACK,
+            ),
+            HealthReason.RATE_LIMIT: RecoveryDecision(
+                True,
+                "RETRY_AFTER",
+                300,
+                max_retry=None,
+                recovery_strategy=RecoveryStrategy.WAIT,
+                exhausted_strategy=RecoveryStrategy.WAIT,
+            ),
             HealthReason.AUTH_FAILURE: RecoveryDecision(
                 False,
                 "REAUTHENTICATE",
                 None,
                 requires_reauthentication=True,
+                max_retry=0,
+                recovery_strategy=RecoveryStrategy.REAUTH,
+                exhausted_strategy=RecoveryStrategy.ABORT,
             ),
-            HealthReason.NETWORK: RecoveryDecision(False, "WAIT_FOR_NETWORK"),
-            HealthReason.SERVER_ERROR: RecoveryDecision(True, "RETRY_BACKOFF", 60),
-            HealthReason.UNKNOWN: RecoveryDecision(False, "REQUIRE_VERIFICATION"),
+            HealthReason.NETWORK: RecoveryDecision(
+                False,
+                "WAIT_FOR_NETWORK",
+                max_retry=None,
+                recovery_strategy=RecoveryStrategy.WAIT,
+                exhausted_strategy=RecoveryStrategy.WAIT,
+            ),
+            HealthReason.SERVER_ERROR: RecoveryDecision(
+                True,
+                "RETRY_BACKOFF",
+                60,
+                max_retry=5,
+                recovery_strategy=RecoveryStrategy.BACKOFF,
+                exhausted_strategy=RecoveryStrategy.FALLBACK,
+            ),
+            HealthReason.UNKNOWN: RecoveryDecision(
+                False,
+                "REQUIRE_VERIFICATION",
+                max_retry=0,
+                recovery_strategy=RecoveryStrategy.ABORT,
+                exhausted_strategy=RecoveryStrategy.ABORT,
+            ),
         }
         return decisions[normalized]
 

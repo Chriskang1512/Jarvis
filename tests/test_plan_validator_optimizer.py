@@ -10,6 +10,7 @@ from jarvis.runtime.planner import (
     ExecutionSelectionPolicy,
     HealthReason,
     HealthRecoveryPolicy,
+    RecoveryStrategy,
     PlanBinding,
     PlanCompiler,
     PlanStep,
@@ -538,15 +539,42 @@ class TestPlanValidatorOptimizer(unittest.TestCase):
         unknown = policy.evaluate(HealthReason.UNKNOWN)
 
         self.assertEqual((timeout.action, timeout.retry_after_seconds), ("RETRY_BACKOFF", 30))
+        self.assertEqual(timeout.max_retry, 3)
+        self.assertEqual(timeout.recovery_strategy, RecoveryStrategy.BACKOFF)
+        self.assertEqual(timeout.exhausted_strategy, RecoveryStrategy.FALLBACK)
         self.assertEqual((rate_limit.action, rate_limit.retry_after_seconds), ("RETRY_AFTER", 300))
+        self.assertIsNone(rate_limit.max_retry)
+        self.assertEqual(rate_limit.recovery_strategy, RecoveryStrategy.WAIT)
         self.assertFalse(auth.retry_allowed)
         self.assertTrue(auth.requires_reauthentication)
         self.assertEqual(auth.action, "REAUTHENTICATE")
+        self.assertEqual(auth.recovery_strategy, RecoveryStrategy.REAUTH)
         self.assertEqual(network.action, "WAIT_FOR_NETWORK")
         self.assertFalse(network.retry_allowed)
+        self.assertEqual(network.recovery_strategy, RecoveryStrategy.WAIT)
         self.assertEqual((server.action, server.retry_after_seconds), ("RETRY_BACKOFF", 60))
+        self.assertEqual(server.max_retry, 5)
         self.assertEqual(unknown.action, "REQUIRE_VERIFICATION")
         self.assertFalse(unknown.retry_allowed)
+        self.assertEqual(unknown.recovery_strategy, RecoveryStrategy.ABORT)
+
+    def test_retry_budget_switches_to_fallback_when_exhausted(self):
+        policy = HealthRecoveryPolicy()
+        timeout = policy.evaluate(HealthReason.TIMEOUT)
+        server = policy.evaluate(HealthReason.SERVER_ERROR)
+        rate_limit = policy.evaluate(HealthReason.RATE_LIMIT)
+
+        self.assertTrue(timeout.can_retry(2))
+        self.assertFalse(timeout.can_retry(3))
+        self.assertEqual(timeout.strategy_for(2), RecoveryStrategy.BACKOFF)
+        self.assertEqual(timeout.strategy_for(3), RecoveryStrategy.FALLBACK)
+        self.assertTrue(server.can_retry(4))
+        self.assertEqual(server.strategy_for(5), RecoveryStrategy.FALLBACK)
+        self.assertTrue(rate_limit.can_retry(1000000))
+        self.assertEqual(rate_limit.strategy_for(1000000), RecoveryStrategy.WAIT)
+        self.assertEqual(timeout.to_dict()["max_retry"], 3)
+        self.assertEqual(timeout.to_dict()["recovery_strategy"], "BACKOFF")
+        self.assertEqual(timeout.to_dict()["exhausted_strategy"], "FALLBACK")
 
     def test_successful_runtime_observation_clears_health_reason(self):
         primary = self.registry.get_operation("calendar", "list")

@@ -122,14 +122,29 @@ reason. A non-ONLINE state without an explicit reason normalizes to `UNKNOWN`.
 
 `HealthRecoveryPolicy` maps reasons to structured actions:
 
-| Reason | Action | Automatic retry |
-| --- | --- | --- |
-| `TIMEOUT` | 30-second backoff | yes |
-| `RATE_LIMIT` | retry after 300 seconds | yes |
-| `AUTH_FAILURE` | OAuth reauthentication | no |
-| `NETWORK` | wait for network restoration | no |
-| `SERVER_ERROR` | 60-second backoff | yes |
-| `UNKNOWN` | require verification | no |
+| Reason | Strategy | Retry budget | Delay |
+| --- | --- | --- | --- |
+| `TIMEOUT` | `BACKOFF`, then `FALLBACK` | 3 | 30 seconds |
+| `RATE_LIMIT` | `WAIT` | unlimited | 300 seconds |
+| `AUTH_FAILURE` | `REAUTH` | 0 | external completion |
+| `NETWORK` | `WAIT` | event driven | network restoration |
+| `SERVER_ERROR` | `BACKOFF`, then `FALLBACK` | 5 | 60 seconds |
+| `UNKNOWN` | `ABORT` | 0 | verification required |
+
+`max_retry=None` means unlimited. `max_retry=0` means no automatic retry.
+`strategy_for(retries_completed)` returns the normal strategy while budget
+remains and the exhausted strategy afterward.
+
+Recovery decisions serialize these stable fields:
+
+```text
+retry_allowed
+retry_after_seconds
+max_retry
+recovery_strategy
+exhausted_strategy
+requires_reauthentication
+```
 
 Recovery decisions are policy data; Cost Model does not sleep, refresh OAuth,
 or retry by itself. Sprint 18.3 Task State Machine consumes these decisions.
