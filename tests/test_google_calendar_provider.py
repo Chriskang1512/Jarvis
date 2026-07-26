@@ -119,6 +119,27 @@ class TestGoogleCalendarProvider(unittest.TestCase):
         self.assertEqual(result.events[0].time, "15:00")
         self.assertGreaterEqual(result.execution_time_ms, 0)
 
+    def test_list_events_filters_out_a_different_requested_time(self):
+        provider = GoogleCalendarProvider(
+            client=FakeCalendarService(
+                response={
+                    "items": [
+                        {
+                            "id": "event-1",
+                            "summary": "오후 일정",
+                            "start": {"dateTime": "2026-07-18T15:00:00+09:00"},
+                        }
+                    ]
+                }
+            )
+        )
+
+        result = provider.list_events(CalendarQuery(date="2026-07-18", time="14:00"))
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.events, [])
+        self.assertEqual(result.count, 0)
+
     def test_get_event_uses_internal_model(self):
         provider = GoogleCalendarProvider(
             client=FakeCalendarService(

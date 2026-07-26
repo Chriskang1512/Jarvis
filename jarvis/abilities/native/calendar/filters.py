@@ -9,6 +9,14 @@ def apply_calendar_query_filters(events, query):
     if time_scope:
         filtered = [event for event in filtered if event_matches_time_scope(event, time_scope)]
 
+    exact_time = normalize_event_time(getattr(query, "time", ""))
+    if exact_time:
+        filtered = [
+            event
+            for event in filtered
+            if normalize_event_time(getattr(event, "time", "")) == exact_time
+        ]
+
     position = str(getattr(query, "position", "") or "").strip()
 
     if position == "first":
@@ -18,6 +26,17 @@ def apply_calendar_query_filters(events, query):
         return filtered[-1:] if filtered else []
 
     return filtered
+
+
+def normalize_event_time(value):
+    """Return a comparable HH:MM value for exact-time queries."""
+    parts = str(value or "").strip().split(":")
+    if len(parts) < 2:
+        return ""
+    try:
+        return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+    except ValueError:
+        return ""
 
 
 def event_matches_time_scope(event, time_scope):

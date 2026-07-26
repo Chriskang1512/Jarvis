@@ -93,6 +93,17 @@ class TestWorkspaceIntegration(unittest.TestCase):
         self.assertEqual(provider.send_calls, [])
 
 
+    def test_different_time_calendar_event_never_reaches_mail_confirmation(self):
+        event_date = (date.today() + timedelta(days=1)).isoformat()
+        event = CalendarEvent(id="event-1", title="오후 일정", date=event_date, time="15:00")
+        dispatcher, _, provider = create_dispatcher(events=[event])
+
+        result = dispatcher.execute_plan_text("내일 오후 2시 일정을 아야한테 메일로 보내줘")
+
+        self.assertNotEqual(result.error, "confirm_required")
+        self.assertEqual(provider.send_calls, [])
+
+
 class FakeMailProvider:
     provider_name = "fake_mail"
 

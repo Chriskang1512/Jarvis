@@ -125,6 +125,8 @@
 
 ### Fixed
 
+- Exact-time Calendar queries no longer reuse a different event from the same
+  day when composing a Workspace mail draft.
 - Pending confirmations now survive a no-speech follow-up and the next wake
   session instead of consuming confirmation turns and falling through to
   general chat.
