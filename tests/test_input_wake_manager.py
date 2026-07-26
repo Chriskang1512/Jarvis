@@ -161,6 +161,34 @@ class TestClapDetector(unittest.TestCase):
         self.assertFalse(detector.process(impulse, 2.3))
         self.assertTrue(detector.process([0.0] * 100, 2.81))
 
+    def test_detector_explains_gap_rejections(self):
+        detector = ClapDetector()
+        impulse = [0.0] * 99 + [1.0]
+
+        self.assertFalse(detector.process(impulse, 1.0))
+        detector.pop_decision()
+        detector.pop_diagnostic()
+        self.assertFalse(detector.process(impulse, 1.9))
+
+        diagnostic = detector.pop_diagnostic()
+        self.assertEqual(diagnostic["detector_state"], "FIRST_CLAP")
+        self.assertEqual(diagnostic["rejection_reason"], "gap_above_max")
+        self.assertAlmostEqual(diagnostic["gap_seconds"], 0.9)
+
+    def test_detector_explains_refractory_rejections(self):
+        detector = ClapDetector()
+        impulse = [0.0] * 99 + [1.0]
+
+        self.assertFalse(detector.process(impulse, 1.0))
+        detector.pop_decision()
+        detector.pop_diagnostic()
+        self.assertFalse(detector.process(impulse, 1.05))
+
+        diagnostic = detector.pop_diagnostic()
+        self.assertEqual(diagnostic["detector_state"], "REJECTED")
+        self.assertEqual(diagnostic["rejection_reason"], "refractory")
+        self.assertAlmostEqual(diagnostic["gap_seconds"], 0.05)
+
 
 class TestWakeProvidersAndManager(unittest.TestCase):
     def test_profile_priority_selects_clap_before_voice(self):

@@ -35,6 +35,9 @@ Clap cases pass only when their required detector state is observed. This
 prevents a triple-clap test with inaudible claps from being reported as a
 successful rejection. Candidate timestamps and gaps help distinguish a real
 second clap from two adjacent microphone frames produced by one clap.
+Detector output also includes `first_clap_at`, `second_clap_at`, `gap`, and
+`rejection_reason`. Tune the interval only after repeated results identify
+`gap_above_max`; `refractory` usually means adjacent frames from one impulse.
 
 ## Full Runtime Checks
 

@@ -8,6 +8,8 @@
   for clap timing and environmental false-positive validation.
 - Required live Clap probes to observe the expected detector state and exposed
   candidate timing so inaudible gestures cannot produce misleading passes.
+- Added Clap detector timing and rejection diagnostics before changing live
+  gap or settle thresholds.
 - Ignored context-free yes/no transcripts on the first post-Wake command and
   returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard

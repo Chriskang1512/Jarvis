@@ -39,7 +39,12 @@ def format_trace_event(event, payload):
         )
 
     if event == "voice.wake.clap_state":
-        return f"[Clap] state={payload.get('state') or '-'}"
+        gap = payload.get("gap_seconds")
+        return (
+            f"[Clap] state={payload.get('state') or '-'} "
+            f"gap={'-' if gap is None else f'{float(gap):.3f}s'} "
+            f"reason={payload.get('rejection_reason') or '-'}"
+        )
 
     if event == "voice.command.skipped":
         return (

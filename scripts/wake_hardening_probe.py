@@ -103,10 +103,19 @@ def main():
             last_candidate_at = candidate_at
         detected = detector.process(samples, monotonic())
         decision = detector.pop_decision()
-        if decision:
-            observed_states.append(decision)
+        diagnostic = detector.pop_diagnostic()
+        detector_state = decision or diagnostic.get("detector_state")
+        if detector_state:
+            observed_states.append(detector_state)
+            first_at = diagnostic.get("first_clap_at")
+            second_at = diagnostic.get("second_clap_at")
+            gap_seconds = diagnostic.get("gap_seconds")
             print(
-                f"[Probe] state={decision} "
+                f"[Probe] state={detector_state} "
+                f"first_clap_at={format_relative_time(first_at, capture_started_at)} "
+                f"second_clap_at={format_relative_time(second_at, capture_started_at)} "
+                f"gap={'-' if gap_seconds is None else f'{gap_seconds:.3f}s'} "
+                f"rejection_reason={diagnostic.get('rejection_reason') or '-'} "
                 f"peak={peak:.3f} rms={rms:.3f} crest={crest:.2f}"
             )
         if detected:
@@ -136,6 +145,12 @@ def main():
         f"missing_states={','.join(missing_states) or '-'}"
     )
     raise SystemExit(0 if passed else 1)
+
+
+def format_relative_time(timestamp, started_at):
+    if timestamp is None:
+        return "-"
+    return f"{float(timestamp) - float(started_at):.3f}s"
 
 
 if __name__ == "__main__":

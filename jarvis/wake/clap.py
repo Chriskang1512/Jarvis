@@ -22,6 +22,7 @@ class ClapDetector:
         self.first_clap_at = None
         self.second_clap_at = None
         self.last_decision = ""
+        self.last_diagnostic = {}
 
     def process(self, samples, timestamp):
         values = tuple(float(sample) for sample in samples)
@@ -41,8 +42,16 @@ class ClapDetector:
                 self.second_clap_at is not None
                 and now - self.second_clap_at >= self.settings.settle_seconds
             ):
+                first_clap_at = self.first_clap_at
+                second_clap_at = self.second_clap_at
                 self.reset_pattern()
                 self.last_decision = "CONFIRMED"
+                self.set_diagnostic(
+                    "CONFIRMED",
+                    first_clap_at=first_clap_at,
+                    second_clap_at=second_clap_at,
+                    gap_seconds=second_clap_at - first_clap_at,
+                )
                 return True
             if self.first_clap_at is not None and now - self.first_clap_at > self.settings.max_gap_seconds:
                 self.first_clap_at = None
@@ -51,21 +60,63 @@ class ClapDetector:
             self.last_impulse_at is not None
             and now - self.last_impulse_at < self.settings.refractory_seconds
         ):
+            self.set_diagnostic(
+                "REJECTED",
+                rejection_reason="refractory",
+                first_clap_at=self.first_clap_at,
+                second_clap_at=self.second_clap_at,
+                gap_seconds=now - self.last_impulse_at,
+            )
             return False
         self.last_impulse_at = now
         if self.second_clap_at is not None:
+            first_clap_at = self.first_clap_at
+            second_clap_at = self.second_clap_at
             self.reset_pattern()
             self.last_decision = "TRIPLE_CANCELLED"
+            self.set_diagnostic(
+                "TRIPLE_CANCELLED",
+                rejection_reason="third_clap",
+                first_clap_at=first_clap_at,
+                second_clap_at=second_clap_at,
+                gap_seconds=now - second_clap_at,
+            )
             return False
-        if self.first_clap_at is None or now - self.first_clap_at > self.settings.max_gap_seconds:
+        if self.first_clap_at is None:
             self.first_clap_at = now
             self.last_decision = "FIRST_CLAP"
+            self.set_diagnostic("FIRST_CLAP", first_clap_at=now)
             return False
         gap = now - self.first_clap_at
+        if gap > self.settings.max_gap_seconds:
+            previous_first_clap_at = self.first_clap_at
+            self.first_clap_at = now
+            self.last_decision = "FIRST_CLAP"
+            self.set_diagnostic(
+                "FIRST_CLAP",
+                rejection_reason="gap_above_max",
+                first_clap_at=previous_first_clap_at,
+                second_clap_at=now,
+                gap_seconds=gap,
+            )
+            return False
         if gap < self.settings.min_gap_seconds:
+            self.set_diagnostic(
+                "REJECTED",
+                rejection_reason="gap_below_min",
+                first_clap_at=self.first_clap_at,
+                second_clap_at=now,
+                gap_seconds=gap,
+            )
             return False
         self.second_clap_at = now
         self.last_decision = "DOUBLE_PENDING"
+        self.set_diagnostic(
+            "DOUBLE_PENDING",
+            first_clap_at=self.first_clap_at,
+            second_clap_at=now,
+            gap_seconds=gap,
+        )
         return False
 
     def reset_pattern(self):
@@ -76,6 +127,28 @@ class ClapDetector:
         decision = self.last_decision
         self.last_decision = ""
         return decision
+
+    def set_diagnostic(
+        self,
+        detector_state,
+        *,
+        rejection_reason="",
+        first_clap_at=None,
+        second_clap_at=None,
+        gap_seconds=None,
+    ):
+        self.last_diagnostic = {
+            "detector_state": detector_state,
+            "rejection_reason": rejection_reason,
+            "first_clap_at": first_clap_at,
+            "second_clap_at": second_clap_at,
+            "gap_seconds": gap_seconds,
+        }
+
+    def pop_diagnostic(self):
+        diagnostic = dict(self.last_diagnostic)
+        self.last_diagnostic = {}
+        return diagnostic
 
 
 class SoundDeviceClapMonitor:

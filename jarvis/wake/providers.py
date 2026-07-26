@@ -127,11 +127,16 @@ class ClapWakeProvider(QueueWakeProvider):
     def feed_audio(self, samples, timestamp):
         detected = self.detector.process(samples, timestamp)
         decision = self.detector.pop_decision()
-        if decision:
+        diagnostic = self.detector.pop_diagnostic()
+        if decision or diagnostic:
             trace_event(
                 "voice.wake.clap_state",
-                state=decision,
+                state=decision or diagnostic.get("detector_state"),
                 timestamp=round(float(timestamp), 3),
+                rejection_reason=diagnostic.get("rejection_reason") or "",
+                first_clap_at=diagnostic.get("first_clap_at"),
+                second_clap_at=diagnostic.get("second_clap_at"),
+                gap_seconds=diagnostic.get("gap_seconds"),
             )
         if detected:
             self.trigger({"pattern": "double_clap"})
