@@ -4,6 +4,7 @@ from jarvis.debug_trace import trace_event
 from jarvis.core.events import InMemoryEventBus
 from jarvis.permissions import PermissionLayer, PermissionStatus
 from jarvis.runtime.conversation_resolver import ConversationResolver
+from jarvis.runtime.execution_journal import ExecutionJournal
 from jarvis.runtime.planner import PlanResult, PlanStepResult, RuntimePlanner
 from jarvis.runtime.task import RuntimeTask, TaskHistory, TaskRunner, TaskStateMachine
 from jarvis.runtime.tool_dispatcher.context import DispatchContext
@@ -37,6 +38,8 @@ class RuntimeToolDispatcher:
         self.conversation_task = RuntimeTask(id="", goal="dispatcher conversation")
         self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
         self.event_bus = event_bus or InMemoryEventBus()
+        self.execution_journal = ExecutionJournal()
+        self.event_bus.subscribe("*", self.execution_journal.handle, priority=10)
         self.task_history = TaskHistory()
         self.task_runner = TaskRunner(
             execute_step=self.execute_task_step,
@@ -46,6 +49,7 @@ class RuntimeToolDispatcher:
             merge_responses=merge_plan_responses,
             history=self.task_history,
             state_machine=TaskStateMachine(event_bus=self.event_bus),
+            execution_journal=self.execution_journal,
         )
 
     def set_intent_parser(self, intent_parser):

@@ -179,9 +179,31 @@ effects. It must never claim success from an API request alone.
 
 ## Migration
 
-1. Define journal interfaces and in-memory implementation.
-2. Mirror current TaskRunner lifecycle into journal events.
-3. Build TaskHistory from journal projection and compare with existing history.
-4. Add durable local storage and checkpoint ordering.
-5. Switch resume and history reads to journal projections.
-6. Retire console trace parsing as a source of execution truth.
+### Sprint 18.6 Implemented
+
+1. `ExecutionJournal`, `JournalEntry`, phase contracts, artifact references, and
+   the in-memory append-only store are implemented.
+2. TaskRunner records Goal, Plan, Registry selection, step execution,
+   permission, recovery, verification, and final-result decisions.
+3. StateMachine events flow through EventBus into the same task sequence.
+4. Every entry is chained to the previous entry with a deterministic SHA-256
+   fingerprint.
+5. `replay()` validates ordering and chain integrity without re-invoking an
+   Ability or external side effect.
+6. `explain()` returns recorded decision reasons and selected implementations.
+7. JSON serialization/restoration and phase/event/status queries are
+   implemented.
+8. Metadata is allowlisted; sensitive keys and email-shaped values are dropped
+   before append.
+
+### Remaining Durable Migration
+
+1. Build TaskHistory from the Journal projection and compare it with the
+   existing in-memory compatibility history.
+2. Add a durable local store with atomic append and retention controls.
+3. Make checkpoint/journal persistence atomic for pause and external writes.
+4. Switch resume and history reads to durable Journal projections.
+5. Retire console trace parsing as a source of execution truth.
+
+`Replay` in Sprint 18.6 is an audit replay. It reconstructs and validates the
+decision history but never repeats provider calls or side effects.

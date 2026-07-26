@@ -13,6 +13,7 @@ from jarvis.runtime.planner import (
     PlanStepResult,
     RecoveryStrategy,
 )
+from jarvis.runtime.execution_journal import JournalPhase
 from jarvis.runtime.task.history import TaskHistory
 from jarvis.runtime.task.models import RuntimeTask, TaskState, TaskStepRecord, now_iso
 from jarvis.runtime.task.state_machine import TaskStateMachine
@@ -39,6 +40,7 @@ class TaskRunner:
         merge_responses,
         history=None,
         state_machine=None,
+        execution_journal=None,
     ):
         """Create a task runner from dispatcher callbacks."""
         self.execute_step = execute_step
@@ -48,6 +50,7 @@ class TaskRunner:
         self.merge_responses = merge_responses
         self.history = history or TaskHistory()
         self.state_machine = state_machine or TaskStateMachine()
+        self.execution_journal = execution_journal
         self.recovery_policy = HealthRecoveryPolicy()
         self._cancelled_task_ids = set()
         self._active_task_id = ""
@@ -75,6 +78,38 @@ class TaskRunner:
         task = runtime_task
         if task is None:
             task = RuntimeTask(id="", goal=getattr(plan, "raw_text", "") or getattr(plan, "id", ""))
+            self.record_journal(
+                task,
+                JournalPhase.GOAL,
+                "GOAL_ACCEPTED",
+                "ACCEPTED",
+                {"plan_id": getattr(plan, "id", ""), "step_count": getattr(plan, "step_count", 0)},
+            )
+            self.record_journal(
+                task,
+                JournalPhase.PLAN,
+                "PLAN_CREATED",
+                "CREATED",
+                {
+                    "plan_id": getattr(plan, "id", ""),
+                    "plan_version": getattr(plan, "plan_version", 1),
+                    "step_count": getattr(plan, "step_count", 0),
+                },
+            )
+            for planned_step in tuple(getattr(plan, "steps", ()) or ()):
+                self.record_journal(
+                    task,
+                    JournalPhase.DISCOVERY,
+                    "CAPABILITY_SELECTED",
+                    "SELECTED",
+                    {
+                        "step_id": str(planned_step.index),
+                        "capability": planned_step.tool_name,
+                        "operation": planned_step.action,
+                        "selected_implementation": planned_step.tool_name,
+                        "reason": "REGISTRY_PLAN_SELECTED",
+                    },
+                )
             task = self.reflect_compiled_plan(task)
             task = self.state_machine.transition(task, TaskState.RUNNING, reason="execution_started")
         elif task.status != TaskState.RUNNING:
@@ -119,6 +154,17 @@ class TaskRunner:
                     reason="step_started",
                     current_step=step.index,
                 )
+                self.record_journal(
+                    task,
+                    JournalPhase.EXECUTION,
+                    "STEP_STARTED",
+                    "RUNNING",
+                    {
+                        "step_id": str(step.index),
+                        "capability": step.tool_name,
+                        "operation": step.action,
+                    },
+                )
                 trace_event(
                     "task.step.started",
                     task_id=task.id,
@@ -129,6 +175,19 @@ class TaskRunner:
                 )
                 def begin_retry(retry_number, decision):
                     nonlocal task
+                    self.record_journal(
+                        task,
+                        JournalPhase.RECOVERY,
+                        "RECOVERY_DECIDED",
+                        "RETRYING",
+                        {
+                            "step_id": str(step.index),
+                            "retry_count": retry_number,
+                            "recovery_strategy": decision.recovery_strategy.value,
+                            "resume_mode": decision.resume_mode.value,
+                            "reason": decision.action,
+                        },
+                    )
                     task = self.state_machine.begin_recovery(
                         task,
                         decision,
@@ -180,11 +239,36 @@ class TaskRunner:
                         permission_snapshot="confirm_required",
                         duration_ms=elapsed_ms(started),
                     )
+                    self.record_journal(
+                        task,
+                        JournalPhase.PERMISSION,
+                        "CONFIRMATION_REQUESTED",
+                        "PENDING",
+                        {
+                            "step_id": str(step.index),
+                            "capability": step.tool_name,
+                            "operation": step.action,
+                            "permission": "confirm_required",
+                        },
+                    )
                     return self.finish(task, plan, step_results, context, "confirm_required")
 
                 step_records.append(record)
 
                 if step_result.success:
+                    self.record_journal(
+                        task,
+                        JournalPhase.EXECUTION,
+                        "STEP_COMPLETED",
+                        "SUCCESS",
+                        {
+                            "step_id": str(step.index),
+                            "capability": step.tool_name,
+                            "operation": step.action,
+                            "duration_ms": record.duration_ms,
+                            "retry_count": retry_count,
+                        },
+                    )
                     completed_steps.append(step.index)
                     self.update_context(context, step, getattr(step_result, "tool_result", None))
                     task = self.state_machine.transition(
@@ -195,6 +279,16 @@ class TaskRunner:
                         completed_steps=tuple(completed_steps),
                         retry_count=total_retry_count,
                         step_records=tuple(step_records),
+                    )
+                    self.record_journal(
+                        task,
+                        JournalPhase.VERIFICATION,
+                        "VERIFICATION_SUCCESS",
+                        "SUCCESS",
+                        {
+                            "step_id": str(step.index),
+                            "validator": record.validator or "provider_result",
+                        },
                     )
                     continue
 
@@ -209,6 +303,19 @@ class TaskRunner:
                     retry_count=total_retry_count,
                     step_records=tuple(step_records),
                     duration_ms=elapsed_ms(started),
+                )
+                self.record_journal(
+                    task,
+                    JournalPhase.EXECUTION,
+                    "STEP_FAILED",
+                    "FAILED",
+                    {
+                        "step_id": str(step.index),
+                        "capability": step.tool_name,
+                        "operation": step.action,
+                        "reason": step_result.failure_reason or "execution_failed",
+                        "validator": step_result.validator,
+                    },
                 )
                 return self.finish(task, plan, step_results, context, step_result.error)
 
@@ -398,6 +505,18 @@ class TaskRunner:
             task=task,
         )
         self.history.add(task)
+        self.record_journal(
+            task,
+            JournalPhase.RESULT,
+            "TASK_RESULT",
+            task.status.value,
+            {
+                "status": task.status.value,
+                "duration_ms": task.duration_ms,
+                "retry_count": task.retry_count,
+                "step_count": len(step_results),
+            },
+        )
         trace_event(
             "task.completed",
             task_id=task.id,
@@ -415,6 +534,18 @@ class TaskRunner:
             retry_count=task.retry_count,
         )
         return TaskRunnerResult(task=task, plan_result=plan_result, context=context)
+
+    def record_journal(self, task, phase, event, status="", metadata=None):
+        """Append one operational decision when a Journal is attached."""
+        if self.execution_journal is None:
+            return None
+        return self.execution_journal.record(
+            task.id,
+            phase,
+            event,
+            status=status,
+            metadata=metadata,
+        )
 
 
 def validate_step_result(step_result):

@@ -13,6 +13,17 @@
 
 ### Added
 
+- Sprint 18.6 append-only Execution Journal with standardized Goal through
+  Result phases, task-scoped sequence numbers, and fingerprint chaining.
+- EventBus and TaskRunner Journal integration across planning, Registry
+  selection, permission, execution, recovery, verification, conversation, and
+  final-result decisions.
+- Privacy-safe artifact references, metadata allowlisting, JSON
+  serialization/restoration, audit replay, structured queries, and
+  `explain(task_id)`.
+- ADR 0026 establishing the Execution Journal as authoritative Runtime history
+  while keeping logs, transition history, and user-facing TaskHistory as
+  separate concerns.
 - Sprint 18.5 Registry-driven Capability Discovery from goal matching through
   contract, permission, lifecycle, and availability policy filters.
 - Reliability-first adaptive cost selection across equivalent operation

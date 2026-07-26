@@ -74,6 +74,25 @@ Sprint 18.5 introduces Registry-driven Capability Discovery:
 See
 [`docs/architecture/capability-discovery.md`](docs/architecture/capability-discovery.md).
 
+Sprint 18.6 adds the Runtime Execution Journal:
+
+- append-only, task-scoped entries cover Goal, Plan, Discovery, Validation,
+  Optimization, Permission, Execution, Verification, Recovery, Conversation,
+  and Result phases;
+- StateMachine events are projected through EventBus while TaskRunner records
+  the decisions around steps and policy boundaries;
+- monotonic sequence numbers and SHA-256 fingerprint chains make restored task
+  histories replay-verifiable;
+- `replay()`, `explain()`, and structured queries support debugging and audit
+  without parsing console logs;
+- serialization stores operational allowlisted metadata and protected artifact
+  references, never raw requests, prompts, mail content, addresses, or tokens.
+
+See
+[`docs/architecture/execution-journal.md`](docs/architecture/execution-journal.md)
+and
+[`ADR 0026 - Execution Journal Authority`](docs/adr/0026-execution-journal-authority.md).
+
 ## Current Version
 
 v0.6.0 - Sprint 17.6 Google Workspace Integration Polish
