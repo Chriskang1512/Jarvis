@@ -2,6 +2,11 @@
 
 ## [Unreleased] - Sprint 18.1 Agent Core Planner Contract
 
+### Fixed
+
+- Normalized the observed Korean STT phrase `오천일정` to `오전 일정` so
+  morning Calendar-to-Mail requests remain Workspace composition plans.
+
 ### Added
 
 - Sprint 18.5 Registry-driven Capability Discovery from goal matching through

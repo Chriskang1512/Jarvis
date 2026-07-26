@@ -26,6 +26,9 @@ DEFAULT_USER_VOCABULARY = {
 }
 
 DEFAULT_USER_VOCABULARY_PATH = Path("config") / "user_vocabulary.json"
+CALENDAR_STT_PHRASE_ALIASES = {
+    "\uc624\ucc9c\uc77c\uc815": "\uc624\uc804 \uc77c\uc815",
+}
 N8N_STT_ALIASES = ["맨발은", "엔에잇엔", "엔팔엔", "nam", "NAM"]
 
 
@@ -52,6 +55,15 @@ def normalize_stt_text(text, vocabulary=None):
     raw_text = "" if text is None else str(text)
     normalized_text = normalize_spacing(raw_text)
     corrections = []
+
+    for alias, canonical in CALENDAR_STT_PHRASE_ALIASES.items():
+        count = normalized_text.count(alias)
+
+        if count <= 0:
+            continue
+
+        normalized_text = normalized_text.replace(alias, canonical)
+        corrections.append(VocabularyCorrection(source=alias, target=canonical, count=count))
 
     for alias in N8N_STT_ALIASES:
         if alias.lower() == "n8":

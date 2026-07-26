@@ -122,6 +122,23 @@ class TestVoiceIntegration(unittest.TestCase):
         self.assertEqual(result.normalized_text, "아야 처음 만난 날은 2026년 3월 26일이야. 기억해.")
         self.assertEqual(format_corrections(result.corrections), ["아이와->아야"])
 
+    def test_stt_normalizes_joined_morning_calendar_phrase(self):
+        """Check the observed morning-calendar STT variant before planning."""
+        result = normalize_stt_text(
+            "\ub0b4\uc77c \uc624\ucc9c\uc77c\uc815 \uc544\uc57c\ud55c\ud14c "
+            "\uba54\uc77c\ub85c \ubcf4\ub0b4\uc918"
+        )
+
+        self.assertEqual(
+            result.normalized_text,
+            "\ub0b4\uc77c \uc624\uc804 \uc77c\uc815 \uc544\uc57c\ud55c\ud14c "
+            "\uba54\uc77c\ub85c \ubcf4\ub0b4\uc918",
+        )
+        self.assertEqual(
+            format_corrections(result.corrections),
+            ["\uc624\ucc9c\uc77c\uc815->\uc624\uc804 \uc77c\uc815"],
+        )
+
     def test_stt_user_vocabulary_uses_longest_alias_first(self):
         """Check particle aliases become canonical names without partial replacement."""
         result = normalize_stt_text("아야랑 처음 만난 게 언제였지?")

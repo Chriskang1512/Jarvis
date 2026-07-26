@@ -10,6 +10,7 @@ from jarvis.abilities.native.mail.result import MailResult, MailSendResult
 from jarvis.core.contacts import ContactRepository, InMemoryContactStorage
 from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
 from jarvis.tools import ToolRegistry
+from jarvis.voice.user_vocabulary import normalize_stt_text
 
 
 class TestWorkspaceIntegration(unittest.TestCase):
@@ -49,6 +50,19 @@ class TestWorkspaceIntegration(unittest.TestCase):
 
         self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "mail"])
         self.assertEqual(plan.steps[1].input_data["recipient_name"], "아야")
+        self.assertEqual(plan.steps[1].depends_on, (1,))
+
+    def test_observed_morning_stt_variant_builds_calendar_mail_plan(self):
+        dispatcher, _, _ = create_dispatcher()
+        transcript = normalize_stt_text(
+            "\ub0b4\uc77c \uc624\ucc9c\uc77c\uc815 \uc544\uc57c\ud55c\ud14c "
+            "\uba54\uc77c\ub85c \ubcf4\ub0b4\uc918"
+        ).normalized_text
+
+        plan = dispatcher.create_plan(transcript)
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "mail"])
+        self.assertEqual(plan.steps[1].input_data["recipient_name"], "\uc544\uc57c")
         self.assertEqual(plan.steps[1].depends_on, (1,))
 
     def test_calendar_mail_without_recipient_requests_clarification(self):
