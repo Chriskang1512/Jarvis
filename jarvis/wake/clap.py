@@ -10,7 +10,7 @@ class ClapDetectorSettings:
     min_gap_seconds: float = 0.12
     max_gap_seconds: float = 0.8
     refractory_seconds: float = 0.08
-    settle_seconds: float = 0.22
+    settle_seconds: float = 0.8
 
 
 class ClapDetector:

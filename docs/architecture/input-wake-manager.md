@@ -55,14 +55,16 @@ separate adapters; they call `trigger()` and do not bypass Wake policy.
 - a high crest factor to reject sustained speech or music;
 - a refractory interval to avoid counting one impulse twice;
 - a minimum and maximum interval between the two impulses.
-- a short settle window after the second impulse; a fast third impulse cancels
-  the pending double-clap activation.
+- a settle window covering the full valid clap interval after the second
+  impulse; any third impulse in that window cancels the pending activation.
 
 One clap never activates Jarvis. Three rapid claps are rejected instead of
 activating on the first two. Real-room calibration remains a device-level task.
 The Wake profile supports `clap_peak_threshold`, `clap_rms_threshold`,
 `clap_crest_factor_threshold`, `clap_min_gap_seconds`,
 `clap_max_gap_seconds`, and `clap_settle_seconds`.
+The default settle window is 0.8 seconds, trading a small Wake delay for
+reliable rejection of naturally paced triple claps.
 
 ## Runtime Hardening
 

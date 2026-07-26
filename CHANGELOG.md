@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Extended double-clap confirmation through the full valid clap interval so a
+  naturally paced third clap cannot arrive after Wake was already emitted.
 - Added a post-pattern settle window so one clap is ignored and a rapid third
   clap cancels rather than activating on the first two.
 - Cleared simultaneous Wake Provider events after priority selection to prevent
