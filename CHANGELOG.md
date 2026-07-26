@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Aligned GitHub Actions with the Jarvis `Asia/Seoul` runtime timezone so
+  date-relative Calendar tests remain deterministic around Korean midnight.
+- Updated GitHub checkout and Python setup actions to their Node.js 24
+  generations.
 - Normalized the observed Korean STT phrase `오천일정` to `오전 일정` so
   morning Calendar-to-Mail requests remain Workspace composition plans.
 
