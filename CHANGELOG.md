@@ -134,6 +134,8 @@
 - Preserved the confirming Mail step when adapting multi-step Runtime results
   for Voice, so `Calendar -> Mail -> WAIT_CONFIRM -> 응` resumes the same task.
 - Accepted the common Korean STT `보내러` variant in Calendar-to-Mail routing.
+- Kept recipient clarification state for Calendar-to-Mail goals so a short
+  answer such as `아야` is resolved instead of discarded as follow-up noise.
 
 ### Compatibility
 

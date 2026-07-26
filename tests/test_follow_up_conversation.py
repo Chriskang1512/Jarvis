@@ -36,6 +36,7 @@ from jarvis.voice.pipeline import (
     build_calendar_update_input,
     confirmation_decision,
     extract_pending_action,
+    extract_pending_clarification,
     is_unprompted_short_follow_up_noise,
     mail_reply_offer_decision,
     runtime_result_from_plan_result,
@@ -645,6 +646,24 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertEqual(runtime_result.tool_name, "mail")
         self.assertEqual(pending_action["ability"], "mail")
         self.assertEqual(pending_action["action"], "send")
+
+    def test_calendar_mail_recipient_clarification_is_preserved(self):
+        plan = SimpleNamespace(
+            requires_clarification=True,
+            clarification_question="일정을 누구에게 메일로 보낼까요?",
+        )
+        runtime_result = SimpleNamespace(plan=plan)
+
+        pending = extract_pending_clarification(
+            runtime_result,
+            "내일 오후 세시 일정을 메일로 보내줘",
+        )
+
+        self.assertEqual(pending["kind"], "mail_calendar_recipient")
+        self.assertEqual(
+            pending["raw_text"],
+            "내일 오후 세시 일정을 메일로 보내줘",
+        )
 
     def test_google_calendar_embedded_reminder_skips_local_continuation(self):
         """Check Google Calendar reminder override does not run a duplicate local reminder."""

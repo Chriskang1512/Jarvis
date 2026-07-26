@@ -877,6 +877,25 @@ class VoicePipeline:
             self.remember_pending_action(result)
             return result.response
 
+        if pending.get("kind", "") == "mail_calendar_recipient":
+            recipient = str(user_message or "").strip().rstrip(".")
+            if rejection_decision(recipient) == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "취소했습니다."
+            if not is_mail_recipient_answer(recipient):
+                self.conversation_session.advance_pending_clarification_turn()
+                return "일정을 누구에게 메일로 보낼까요?"
+
+            original_text = str(pending.get("raw_text", "") or "").strip()
+            self.conversation_session.clear_pending_clarification()
+            result = self.try_intent_runtime(f"{recipient}에게 {original_text}")
+            if result is None or not getattr(result, "handled", False):
+                return "수신자를 확인하지 못했습니다."
+            self.remember_runtime_task(result)
+            self.remember_pending_action(result)
+            self.remember_mail_context(result)
+            return result.response
+
         if pending.get("kind", "") != "reminder_time":
             return None
 
@@ -2447,6 +2466,13 @@ def extract_pending_clarification(intent_result, user_message):
     question = str(getattr(plan, "clarification_question", "") or getattr(intent_result, "response", "") or "")
     raw_text = str(user_message or "")
 
+    if question == "일정을 누구에게 메일로 보낼까요?":
+        return {
+            "kind": "mail_calendar_recipient",
+            "raw_text": raw_text,
+            "question": question,
+        }
+
     if not is_reminder_time_clarification(question, raw_text):
         return None
 
@@ -2523,6 +2549,16 @@ def contact_candidate_ordinal(text):
             return value
     matched = re.search(r"([1-9])(?:번|번째)?", normalized)
     return int(matched.group(1)) if matched else 0
+
+
+def is_mail_recipient_answer(value):
+    """Return whether a short clarification can safely identify a recipient."""
+    text = str(value or "").strip()
+    if not text or len(text) > 120:
+        return False
+    if "@" in text:
+        return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", text))
+    return bool(re.fullmatch(r"[0-9A-Za-z가-힣._ -]{1,40}", text))
 
 
 def format_confirmed_contact_candidate(contact_data, attribute):
