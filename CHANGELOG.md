@@ -21,6 +21,11 @@
 - Privacy-safe artifact references, metadata allowlisting, JSON
   serialization/restoration, audit replay, structured queries, and
   `explain(task_id)`.
+- Operator Timeline, phase Tree, and causal Explain Why projections for CLI
+  diagnostics.
+- Semantic searches for recent failures, retries, Calendar, Gmail, OAuth, and
+  paused tasks.
+- Redacted JSON, Markdown, and standalone HTML Journal exports for bug reports.
 - ADR 0026 establishing the Execution Journal as authoritative Runtime history
   while keeping logs, transition history, and user-facing TaskHistory as
   separate concerns.

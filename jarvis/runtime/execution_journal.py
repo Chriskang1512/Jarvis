@@ -4,7 +4,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 import hashlib
+import html
 import json
+from pathlib import Path
 import re
 from uuid import uuid4
 
@@ -140,6 +142,16 @@ class ExplainResult:
     summary: str
     reasons: tuple[str, ...]
     status: str = ""
+
+
+@dataclass(frozen=True)
+class JournalSearchResult:
+    query: str
+    entries: tuple[JournalEntry, ...]
+
+    @property
+    def task_ids(self):
+        return tuple(dict.fromkeys(entry.task_id for entry in self.entries))
 
 
 class InMemoryJournalStore:
@@ -313,6 +325,92 @@ class ExecutionJournal:
         )
         return ExplainResult(str(task_id or ""), summary, tuple(reasons), terminal.status)
 
+    def explain_why(self, task_id):
+        """Render the recorded causal path for terminal and waiting outcomes."""
+        entries = self.store.entries(task_id)
+        if not entries:
+            return f"Task {task_id}\n  Journal not found"
+        lines = [f"Task {task_id}"]
+        selected = [
+            entry
+            for entry in entries
+            if entry.event
+            in {
+                "CAPABILITY_SELECTED",
+                "CONFIRMATION_REQUESTED",
+                "RECOVERY_DECIDED",
+                "VERIFICATION_SUCCESS",
+                "STEP_FAILED",
+                "TASK_RESULT",
+                "TaskConfirmationRequired",
+                "TaskResumed",
+                "TaskFailed",
+                "TaskCompleted",
+                "TaskCancelled",
+            }
+        ]
+        for entry in selected:
+            operation = ".".join(
+                part
+                for part in (
+                    str(entry.metadata.get("capability", "")),
+                    str(entry.metadata.get("operation", "")),
+                )
+                if part
+            )
+            reason = entry.metadata.get("reason") or entry.metadata.get("transition_reason")
+            detail = operation or str(reason or entry.status or "")
+            suffix = f" ({detail})" if detail else ""
+            lines.append(f"  -> {entry.event}{suffix}")
+        return "\n".join(lines)
+
+    def timeline(self, task_id):
+        """Render a compact chronological task view for CLI diagnostics."""
+        entries = self.store.entries(task_id)
+        lines = [f"Task {task_id} Timeline"]
+        for entry in entries:
+            time_text = timeline_time(entry.timestamp)
+            status = f" [{entry.status}]" if entry.status else ""
+            lines.append(
+                f"{time_text}  {entry.phase.value:<12}  {entry.event}{status}"
+            )
+        if not entries:
+            lines.append("(no entries)")
+        return "\n".join(lines)
+
+    def tree(self, task_id):
+        """Render phases and decisions as an ASCII tree."""
+        entries = self.store.entries(task_id)
+        lines = [f"Task {task_id}"]
+        grouped = []
+        phase_order = tuple(dict.fromkeys(entry.phase for entry in entries))
+        for phase in phase_order:
+            phase_entries = [entry for entry in entries if entry.phase == phase]
+            if phase_entries:
+                grouped.append((phase, phase_entries))
+        for phase_index, (phase, phase_entries) in enumerate(grouped):
+            phase_last = phase_index == len(grouped) - 1
+            phase_branch = "`--" if phase_last else "|--"
+            lines.append(f"{phase_branch} {phase.value}")
+            child_prefix = "    " if phase_last else "|   "
+            for entry_index, entry in enumerate(phase_entries):
+                entry_last = entry_index == len(phase_entries) - 1
+                entry_branch = "`--" if entry_last else "|--"
+                operation = ".".join(
+                    part
+                    for part in (
+                        str(entry.metadata.get("capability", "")),
+                        str(entry.metadata.get("operation", "")),
+                    )
+                    if part
+                )
+                label = operation or entry.event
+                status = f" [{entry.status}]" if entry.status else ""
+                lines.append(f"{child_prefix}{entry_branch} {label}{status}")
+        if not entries:
+            lines.append("`-- (no entries)")
+        return "\n".join(lines)
+
     def query(self, phase=None, event="", status="", task_id=""):
         task_ids = (str(task_id),) if task_id else self.store.task_ids()
         expected_phase = phase if isinstance(phase, JournalPhase) else (
@@ -326,6 +424,19 @@ class ExecutionJournal:
             and (not event or entry.event == event)
             and (not status or entry.status == status)
         )
+
+    def search(self, query, limit=20):
+        """Search recent operational categories without inspecting raw content."""
+        normalized = str(query or "").strip().lower()
+        matcher = search_matcher(normalized)
+        entries = [
+            entry
+            for task_id in self.store.task_ids()
+            for entry in self.store.entries(task_id)
+            if matcher(entry)
+        ]
+        entries.sort(key=lambda entry: (entry.timestamp, entry.task_id, entry.sequence), reverse=True)
+        return JournalSearchResult(normalized, tuple(entries[: max(0, int(limit or 0))]))
 
     def to_json(self, task_id=""):
         task_ids = (str(task_id),) if task_id else self.store.task_ids()
@@ -341,6 +452,63 @@ class ExecutionJournal:
             },
         }
         return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    def to_markdown(self, task_id=""):
+        task_ids = (str(task_id),) if task_id else self.store.task_ids()
+        lines = ["# Jarvis Execution Journal", ""]
+        for current in task_ids:
+            lines.extend([f"## Task `{current}`", "", "### Timeline", "", "```text"])
+            lines.extend(self.timeline(current).splitlines())
+            lines.extend(["```", "", "### Decision Tree", "", "```text"])
+            lines.extend(self.tree(current).splitlines())
+            lines.extend(["```", "", "### Explain Why", "", "```text"])
+            lines.extend(self.explain_why(current).splitlines())
+            lines.extend(["```", ""])
+        return "\n".join(lines)
+
+    def to_html(self, task_id=""):
+        task_ids = (str(task_id),) if task_id else self.store.task_ids()
+        sections = []
+        for current in task_ids:
+            sections.append(
+                "<section>"
+                f"<h2>Task <code>{html.escape(current)}</code></h2>"
+                "<h3>Timeline</h3>"
+                f"<pre>{html.escape(self.timeline(current))}</pre>"
+                "<h3>Decision Tree</h3>"
+                f"<pre>{html.escape(self.tree(current))}</pre>"
+                "<h3>Explain Why</h3>"
+                f"<pre>{html.escape(self.explain_why(current))}</pre>"
+                "</section>"
+            )
+        return (
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<title>Jarvis Execution Journal</title>"
+            "<style>body{font:14px system-ui;margin:32px;max-width:1100px}"
+            "section{border-top:1px solid #ccc;padding:16px 0}"
+            "pre{background:#f5f5f5;padding:12px;overflow:auto}"
+            "code{font-family:ui-monospace,monospace}</style></head><body>"
+            "<h1>Jarvis Execution Journal</h1>"
+            + "".join(sections)
+            + "</body></html>"
+        )
+
+    def export(self, path, task_id=""):
+        """Export a redacted journal view selected by file extension."""
+        target = Path(path)
+        suffix = target.suffix.lower()
+        if suffix == ".json":
+            content = self.to_json(task_id)
+        elif suffix in {".md", ".markdown"}:
+            content = self.to_markdown(task_id)
+        elif suffix in {".html", ".htm"}:
+            content = self.to_html(task_id)
+        else:
+            raise ValueError("JOURNAL_EXPORT_FORMAT_UNSUPPORTED")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return target
 
     @classmethod
     def from_json(cls, text):
@@ -424,6 +592,59 @@ def event_status(event_type):
     if event_type.endswith("Cancelled"):
         return "CANCELLED"
     return ""
+
+
+def timeline_time(timestamp):
+    try:
+        return datetime.fromisoformat(str(timestamp or "")).strftime("%H:%M:%S.%f")[:-3]
+    except (TypeError, ValueError):
+        return str(timestamp or "-")
+
+
+def search_matcher(query):
+    categories = {
+        "failed": ("실패", "failed", "failure"),
+        "retry": ("retry", "재시도"),
+        "calendar": ("calendar", "캘린더", "일정"),
+        "mail": ("gmail", "mail", "메일"),
+        "oauth": ("oauth", "인증", "reauth", "auth"),
+        "pause": ("pause", "paused", "중단", "일시정지"),
+    }
+    category = next(
+        (
+            name
+            for name, aliases in categories.items()
+            if any(alias in query for alias in aliases)
+        ),
+        "",
+    )
+
+    def matches(entry):
+        searchable = " ".join(
+            [
+                entry.phase.value,
+                entry.event,
+                entry.status,
+                *(str(value) for value in entry.metadata.values()),
+            ]
+        ).lower()
+        if category == "failed":
+            return entry.status == "FAILED" or "failed" in entry.event.lower()
+        if category == "retry":
+            return entry.phase == JournalPhase.RECOVERY and (
+                "retry" in searchable or "backoff" in searchable
+            )
+        if category == "calendar":
+            return entry.metadata.get("capability") == "calendar"
+        if category == "mail":
+            return entry.metadata.get("capability") == "mail"
+        if category == "oauth":
+            return any(token in searchable for token in ("oauth", "reauth", "auth"))
+        if category == "pause":
+            return entry.status == "PAUSED" or "paused" in searchable
+        return bool(query) and query in searchable
+
+    return matches
 
 
 def entry_fingerprint(task_id, sequence, phase, event, status, metadata, previous):

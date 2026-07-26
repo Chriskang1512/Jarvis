@@ -7,6 +7,7 @@ from jarvis.runtime.execution_journal import (
     JournalArtifact,
     JournalEntry,
     JournalPhase,
+    JournalSearchResult,
     ReplayResult,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "JournalArtifact",
     "JournalEntry",
     "JournalPhase",
+    "JournalSearchResult",
     "ReplayResult",
 ]

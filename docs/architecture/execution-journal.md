@@ -207,3 +207,35 @@ effects. It must never claim success from an API request alone.
 
 `Replay` in Sprint 18.6 is an audit replay. It reconstructs and validates the
 decision history but never repeats provider calls or side effects.
+
+## Operator Views
+
+All views are projections over sanitized Journal entries:
+
+```python
+journal.timeline(task_id)
+journal.tree(task_id)
+journal.explain_why(task_id)
+journal.search("최근 실패")
+journal.export("journal.html", task_id=task_id)
+```
+
+`timeline()` renders millisecond timestamps, phases, events, and statuses in
+append order. `tree()` groups entries by the order in which phases first
+occurred. `explain_why()` shows selected capabilities, permission boundaries,
+recovery decisions, verification, and terminal outcomes as a causal path.
+
+Search recognizes operational categories including failures, retries,
+Calendar, Gmail/Mail, OAuth/reauthentication, and paused tasks. It searches only
+phase, event, status, and allowlisted metadata; it never searches raw user
+content.
+
+Export supports:
+
+- `.json` for machine replay and comparison;
+- `.md` for issue and pull-request reports;
+- `.html` for a standalone human-readable report.
+
+Markdown and HTML exports contain Timeline, Tree, and Explain Why views.
+Every format inherits the Journal metadata allowlist and cannot restore data
+that was discarded by the privacy boundary.

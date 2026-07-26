@@ -2,6 +2,8 @@ import json
 import unittest
 from dataclasses import replace
 from datetime import date, timedelta
+from pathlib import Path
+from unittest.mock import patch
 
 from jarvis.abilities.native.calendar import CalendarEvent
 from jarvis.core.events import BaseEvent, InMemoryEventBus
@@ -231,6 +233,150 @@ class TestExecutionJournalSprint186(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "JOURNAL_TASK_ID_MISMATCH"):
             ExecutionJournal.from_json(json.dumps(payload))
+
+    def test_timeline_is_compact_and_chronological(self):
+        journal = ExecutionJournal()
+        journal.record(
+            "RT-VIEW",
+            JournalPhase.PLAN,
+            "PLAN_CREATED",
+            "CREATED",
+            timestamp="2026-07-27T14:00:12.100",
+        )
+        journal.record(
+            "RT-VIEW",
+            JournalPhase.VALIDATION,
+            "PLAN_VALIDATED",
+            "VALID",
+            timestamp="2026-07-27T14:00:13.200",
+        )
+
+        timeline = journal.timeline("RT-VIEW")
+
+        self.assertIn("14:00:12.100  PLAN", timeline)
+        self.assertIn("14:00:13.200  VALIDATION", timeline)
+        self.assertLess(timeline.index("PLAN_CREATED"), timeline.index("PLAN_VALIDATED"))
+
+    def test_tree_groups_operations_under_phases(self):
+        journal = ExecutionJournal()
+        journal.record(
+            "RT-TREE",
+            JournalPhase.EXECUTION,
+            "STEP_COMPLETED",
+            "SUCCESS",
+            {"capability": "calendar", "operation": "create"},
+        )
+        journal.record(
+            "RT-TREE",
+            JournalPhase.PERMISSION,
+            "CONFIRMATION_REQUESTED",
+            "PENDING",
+            {"capability": "mail", "operation": "send"},
+        )
+
+        tree = journal.tree("RT-TREE")
+
+        self.assertIn("|-- EXECUTION", tree)
+        self.assertIn("calendar.create [SUCCESS]", tree)
+        self.assertIn("`-- PERMISSION", tree)
+        self.assertIn("mail.send [PENDING]", tree)
+
+    def test_explain_why_renders_permission_causal_path(self):
+        journal = ExecutionJournal()
+        journal.record(
+            "RT-WHY-VIEW",
+            JournalPhase.DISCOVERY,
+            "CAPABILITY_SELECTED",
+            "SELECTED",
+            {"capability": "mail", "operation": "send", "reason": "BEST_POLICY_SCORE"},
+        )
+        journal.record(
+            "RT-WHY-VIEW",
+            JournalPhase.PERMISSION,
+            "CONFIRMATION_REQUESTED",
+            "PENDING",
+            {"capability": "mail", "operation": "send"},
+        )
+
+        rendered = journal.explain_why("RT-WHY-VIEW")
+
+        self.assertIn("CAPABILITY_SELECTED (mail.send)", rendered)
+        self.assertIn("CONFIRMATION_REQUESTED (mail.send)", rendered)
+
+    def test_semantic_search_finds_recent_operational_categories(self):
+        journal = ExecutionJournal()
+        journal.record(
+            "RT-CALENDAR",
+            JournalPhase.EXECUTION,
+            "STEP_COMPLETED",
+            "SUCCESS",
+            {"capability": "calendar", "operation": "create"},
+            timestamp="2026-07-27T10:00:00",
+        )
+        journal.record(
+            "RT-MAIL",
+            JournalPhase.EXECUTION,
+            "STEP_FAILED",
+            "FAILED",
+            {"capability": "mail", "operation": "send"},
+            timestamp="2026-07-27T11:00:00",
+        )
+        journal.record(
+            "RT-RETRY",
+            JournalPhase.RECOVERY,
+            "RECOVERY_DECIDED",
+            "RETRYING",
+            {"recovery_strategy": "BACKOFF", "retry_count": 1},
+            timestamp="2026-07-27T12:00:00",
+        )
+        journal.record(
+            "RT-AUTH",
+            JournalPhase.RECOVERY,
+            "TaskPaused",
+            "PAUSED",
+            {"reason": "recovery_reauth"},
+            timestamp="2026-07-27T13:00:00",
+        )
+
+        self.assertEqual(journal.search("최근 실패").task_ids, ("RT-MAIL",))
+        self.assertEqual(journal.search("최근 Retry").task_ids, ("RT-RETRY",))
+        self.assertEqual(journal.search("최근 Calendar").task_ids, ("RT-CALENDAR",))
+        self.assertEqual(journal.search("최근 Gmail").task_ids, ("RT-MAIL",))
+        self.assertEqual(journal.search("최근 OAuth").task_ids, ("RT-AUTH",))
+        self.assertEqual(journal.search("최근 Pause").task_ids, ("RT-AUTH",))
+
+    def test_export_writes_json_markdown_and_html_without_sensitive_data(self):
+        journal = ExecutionJournal()
+        journal.record(
+            "RT-EXPORT",
+            JournalPhase.EXECUTION,
+            "MAIL_SENT",
+            "SUCCESS",
+            {
+                "capability": "mail",
+                "operation": "send",
+                "recipient": "private@example.com",
+                "body": "private body",
+            },
+        )
+
+        contents = []
+        with patch.object(Path, "mkdir"), patch.object(Path, "write_text") as write_text:
+            for name in ("journal.json", "journal.md", "journal.html"):
+                journal.export(Path("output") / name)
+                contents.append(write_text.call_args.args[0])
+
+        self.assertTrue(all("RT-EXPORT" in content for content in contents))
+        self.assertTrue(all("private@example.com" not in content for content in contents))
+        self.assertTrue(all("private body" not in content for content in contents))
+        self.assertIn("# Jarvis Execution Journal", contents[1])
+        self.assertIn("<!doctype html>", contents[2])
+
+    def test_export_rejects_unknown_format(self):
+        journal = ExecutionJournal()
+
+        with self.assertRaisesRegex(ValueError, "JOURNAL_EXPORT_FORMAT_UNSUPPORTED"):
+            journal.export("journal.txt")
 
 
 if __name__ == "__main__":

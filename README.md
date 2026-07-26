@@ -85,6 +85,11 @@ Sprint 18.6 adds the Runtime Execution Journal:
   histories replay-verifiable;
 - `replay()`, `explain()`, and structured queries support debugging and audit
   without parsing console logs;
+- `timeline()`, `tree()`, and `explain_why()` provide compact CLI projections;
+- semantic searches cover recent failures, retries, Calendar, Gmail, OAuth,
+  and paused tasks;
+- `export()` produces redacted `.json`, `.md`, or standalone `.html` bug
+  reports;
 - serialization stores operational allowlisted metadata and protected artifact
   references, never raw requests, prompts, mail content, addresses, or tokens.
 
