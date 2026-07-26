@@ -38,6 +38,9 @@ second clap from two adjacent microphone frames produced by one clap.
 Detector output also includes `first_clap_at`, `second_clap_at`, `gap`, and
 `rejection_reason`. Tune the interval only after repeated results identify
 `gap_above_max`; `refractory` usually means adjacent frames from one impulse.
+Room measurements on the reference microphone use peak `0.40`, RMS `0.06`,
+and crest factor `3.0`. Desk and door impacts remained below the peak threshold
+while natural second claps frequently measured RMS `0.06` to `0.08`.
 
 ## Full Runtime Checks
 

@@ -114,8 +114,8 @@ def create_wake_config(wake_data):
         methods=methods,
         voice_phrases=phrases,
         keyboard_hotkey=str(wake_data.get("keyboard_hotkey", "ctrl+space")),
-        clap_peak_threshold=float(wake_data.get("clap_peak_threshold", 0.55)),
-        clap_rms_threshold=float(wake_data.get("clap_rms_threshold", 0.08)),
+        clap_peak_threshold=float(wake_data.get("clap_peak_threshold", 0.40)),
+        clap_rms_threshold=float(wake_data.get("clap_rms_threshold", 0.06)),
         clap_crest_factor_threshold=float(
             wake_data.get("clap_crest_factor_threshold", 3.0)
         ),

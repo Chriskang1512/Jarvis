@@ -4,8 +4,8 @@ from math import sqrt
 
 @dataclass(frozen=True)
 class ClapDetectorSettings:
-    peak_threshold: float = 0.55
-    rms_threshold: float = 0.08
+    peak_threshold: float = 0.40
+    rms_threshold: float = 0.06
     crest_factor_threshold: float = 3.0
     min_gap_seconds: float = 0.12
     max_gap_seconds: float = 0.8
@@ -53,7 +53,11 @@ class ClapDetector:
                     gap_seconds=second_clap_at - first_clap_at,
                 )
                 return True
-            if self.first_clap_at is not None and now - self.first_clap_at > self.settings.max_gap_seconds:
+            if (
+                self.second_clap_at is None
+                and self.first_clap_at is not None
+                and now - self.first_clap_at > self.settings.max_gap_seconds
+            ):
                 self.first_clap_at = None
             return False
         if (

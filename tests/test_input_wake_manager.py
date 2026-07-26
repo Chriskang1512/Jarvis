@@ -189,6 +189,20 @@ class TestClapDetector(unittest.TestCase):
         self.assertEqual(diagnostic["rejection_reason"], "refractory")
         self.assertAlmostEqual(diagnostic["gap_seconds"], 0.05)
 
+    def test_pending_double_preserves_first_clap_until_settle_confirmation(self):
+        detector = ClapDetector()
+        impulse = [0.0] * 99 + [1.0]
+        silence = [0.0] * 100
+
+        self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(impulse, 1.45))
+        self.assertFalse(detector.process(silence, 1.85))
+        self.assertTrue(detector.process(silence, 1.96))
+
+        diagnostic = detector.pop_diagnostic()
+        self.assertEqual(diagnostic["detector_state"], "CONFIRMED")
+        self.assertAlmostEqual(diagnostic["gap_seconds"], 0.45)
+
 
 class TestWakeProvidersAndManager(unittest.TestCase):
     def test_profile_priority_selects_clap_before_voice(self):
