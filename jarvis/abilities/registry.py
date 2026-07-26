@@ -113,6 +113,7 @@ class AbilityRegistry:
 
     def register_tools(self, tool_registry):
         """Register all abilities into the shared ToolRegistry as adapters."""
+        tool_registry.ability_registry = self
         for ability in self.list():
             tool_registry.register(AbilityToolAdapter(ability))
 

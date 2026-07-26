@@ -21,6 +21,7 @@ The approved migration design is documented in:
 - [`Task state machine`](docs/architecture/task-state-machine.md)
 - [`Checkpoint and resume contract`](docs/architecture/checkpoint-resume-contract.md)
 - [`Execution Journal`](docs/architecture/execution-journal.md)
+- [`Capability Discovery`](docs/architecture/capability-discovery.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
 Sprint 18.1 now provides the first executable contract layer alongside the
@@ -57,6 +58,21 @@ Sprint 18.4 moves conversation ownership into RuntimeTask:
 
 See
 [`docs/architecture/conversation-resolver.md`](docs/architecture/conversation-resolver.md).
+
+Sprint 18.5 introduces Registry-driven Capability Discovery:
+
+- goals are matched to Registry-declared operation candidates;
+- contract, permission, lifecycle, and availability policy filters run before
+  planning;
+- reliability, cost, latency, and network metadata determine the selected
+  implementation;
+- new Abilities can declare operations and become plannable without adding
+  integration-specific Planner branches;
+- existing Workspace language rules remain behind an operation-level Registry
+  gate during migration.
+
+See
+[`docs/architecture/capability-discovery.md`](docs/architecture/capability-discovery.md).
 
 ## Current Version
 

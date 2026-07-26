@@ -12,6 +12,7 @@ class ToolRegistry:
     def __init__(self):
         """Create an empty tool registry."""
         self.tools = {}
+        self.ability_registry = None
 
     def register(self, tool):
         """Register one tool by metadata name."""

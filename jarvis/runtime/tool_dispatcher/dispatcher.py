@@ -51,7 +51,11 @@ class RuntimeToolDispatcher:
     def set_intent_parser(self, intent_parser):
         """Attach a structured intent parser to the runtime planner."""
         self.intent_parser = intent_parser
-        self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
+        self.planner = RuntimePlanner(
+            min_confidence=self.min_confidence,
+            intent_parser=intent_parser,
+            capability_discovery=self.planner.capability_discovery,
+        )
 
     def set_conversation_context_provider(self, provider):
         """Attach a read-only RuntimeTask conversation context supplier."""

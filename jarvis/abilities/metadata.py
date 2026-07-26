@@ -31,4 +31,5 @@ class AbilityMetadata:
     supported_intents: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
     input_prefixes: list[str] = field(default_factory=list)
+    operations: object = field(default_factory=tuple)
     route_confidence: float = 0.75

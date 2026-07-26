@@ -4,6 +4,16 @@
 
 ### Added
 
+- Sprint 18.5 Registry-driven Capability Discovery from goal matching through
+  contract, permission, lifecycle, and availability policy filters.
+- Reliability-first adaptive cost selection across equivalent operation
+  implementations, with deterministic ranking and privacy-safe discovery
+  journal entries.
+- Declarative `AbilityMetadata.operations` so future integrations become
+  plannable through Registry registration without Planner-specific branches.
+- Operation-level Registry gates for existing Workspace composition and a
+  compatibility boundary that preserves proven Calendar, Contacts, Gmail,
+  Reminder, Memory, Todo, and Weather language behavior.
 - Sprint 18.4 RuntimeTask-owned ConversationContext, PendingQuestion, and
   PendingArtifact contracts.
 - ConversationResolver for clarification, selection, confirmation, expiry,

@@ -94,6 +94,12 @@ class CapabilityOperationMetadata:
 def derive_operation_metadata(ability):
     """Create compatibility operation contracts for existing Abilities."""
     metadata = ability.metadata
+    declared = getattr(metadata, "operations", ()) or ()
+    if declared:
+        return tuple(
+            operation_metadata_from_declaration(metadata, declaration)
+            for declaration in declared
+        )
     operations = DEFAULT_ABILITY_OPERATIONS.get(metadata.id, ())
     network_required = bool(getattr(metadata, "provider", ""))
     return tuple(
@@ -113,3 +119,31 @@ def derive_operation_metadata(ability):
         )
         for operation in operations
     )
+
+
+def operation_metadata_from_declaration(metadata, declaration):
+    """Normalize one Registry-declared operation without Planner changes."""
+    if isinstance(declaration, CapabilityOperationMetadata):
+        return declaration
+    if isinstance(declaration, str):
+        values = {"operation": declaration}
+    else:
+        values = dict(declaration)
+    operation = str(values.pop("operation"))
+    network_required = bool(getattr(metadata, "provider", ""))
+    defaults = {
+        "capability": metadata.id,
+        "operation": operation,
+        "input_schema": dict(metadata.input_schema) if isinstance(metadata.input_schema, dict) else {},
+        "output_schema": metadata.output_schema,
+        "permission": "confirm_required" if operation in WRITE_OPERATIONS else "safe",
+        "side_effect": "external_write" if operation in WRITE_OPERATIONS else "none",
+        "parallel_safe": operation in READ_OPERATIONS,
+        "deduplicatable": operation in READ_OPERATIONS,
+        "implementation_id": f"ability:{metadata.id}",
+        "estimated_cost": 1.0 if network_required else 0.0,
+        "estimated_latency_ms": 500 if network_required else 5,
+        "network_required": network_required,
+    }
+    defaults.update(values)
+    return CapabilityOperationMetadata(**defaults)

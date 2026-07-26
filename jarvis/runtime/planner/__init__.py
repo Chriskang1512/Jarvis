@@ -12,6 +12,12 @@ from jarvis.runtime.planner.contracts import (
     agent_plan_to_dict,
 )
 from jarvis.runtime.planner.compiler import PlanCompilationResult, PlanCompiler
+from jarvis.runtime.planner.discovery import (
+    CapabilityCandidate,
+    CapabilityDiscovery,
+    CapabilityDiscoveryResult,
+    DiscoveryJournalEntry,
+)
 from jarvis.runtime.planner.cost import (
     AdaptiveExecutionCostModel,
     Availability,
@@ -86,6 +92,10 @@ __all__ = [
     "PlanBinding",
     "PlanCompiler",
     "PlanCompilationResult",
+    "CapabilityCandidate",
+    "CapabilityDiscovery",
+    "CapabilityDiscoveryResult",
+    "DiscoveryJournalEntry",
     "PlanStep",
     "SUPPORTED_CONTRACT_VERSIONS",
     "PlanValidationResult",

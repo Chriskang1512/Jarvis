@@ -4,8 +4,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from jarvis.debug_trace import trace_event
+from jarvis.abilities.operations import DEFAULT_ABILITY_OPERATIONS
 from jarvis.runtime.intent import IntentContext
 from jarvis.runtime.planner.plan import ExecutionPlan
+from jarvis.runtime.planner.discovery import CapabilityDiscovery
 from jarvis.runtime.planner.step import ExecutionStep
 from jarvis.tools.router import select_candidate
 
@@ -13,10 +15,11 @@ from jarvis.tools.router import select_candidate
 class RuntimePlanner:
     """Rule-based multi-tool planner for runtime text."""
 
-    def __init__(self, min_confidence=0.75, intent_parser=None):
+    def __init__(self, min_confidence=0.75, intent_parser=None, capability_discovery=None):
         """Create planner."""
         self.min_confidence = float(min_confidence)
         self.intent_parser = intent_parser
+        self.capability_discovery = capability_discovery or CapabilityDiscovery()
 
     def plan(self, text, registry):
         """Return an ExecutionPlan without executing it."""
@@ -52,6 +55,11 @@ class RuntimePlanner:
         workspace_plan = create_workspace_integration_plan(raw_text, registry)
 
         if workspace_plan is not None:
+            workspace_plan = apply_discovery_gate(
+                workspace_plan,
+                registry,
+                self.capability_discovery,
+            )
             trace_intent_resolve(workspace_plan, "workspace_rule")
             trace_plan(workspace_plan)
             return workspace_plan
@@ -157,6 +165,33 @@ class RuntimePlanner:
 
         if normalized == "":
             return None
+
+        discovery = self.capability_discovery.search(normalized, registry)
+        discovered = next(
+            (
+                candidate
+                for candidate in discovery.candidates
+                if candidate.capability not in DEFAULT_ABILITY_OPERATIONS
+            ),
+            None,
+        )
+        if discovered is not None and discovered.confidence >= self.min_confidence:
+            trace_event(
+                "planner.capability_discovered",
+                operation_id=discovered.operation_id,
+                implementation_id=discovered.implementation_id,
+                confidence=round(discovered.confidence, 3),
+                permission=discovered.permission,
+                availability=discovered.availability,
+                reliability=round(discovered.reliability_score, 4),
+            )
+            return ExecutionStep(
+                index=len(previous_steps) + 1,
+                tool_name=discovered.tool_name,
+                action=discovered.operation,
+                input_data=dict(discovered.input_data),
+                raw_text=normalized,
+            )
 
         if is_calendar_list_command(normalized):
             selection = select_best_tool(registry, normalized, self.min_confidence, preferred_tool="calendar")
@@ -470,6 +505,34 @@ def trace_intent_resolve(plan, reason):
         step_count=plan.step_count,
         requires_clarification=plan.requires_clarification,
     )
+
+
+def apply_discovery_gate(plan, registry, capability_discovery):
+    """Keep legacy compositions only when Registry discovery exposes each step."""
+    steps = []
+    for step in plan.steps:
+        operation_goal = f"{step.tool_name} {step.action} {step.raw_text or plan.raw_text}"
+        discovery = capability_discovery.search(operation_goal, registry)
+        candidate = next(
+            (
+                item
+                for item in discovery.candidates
+                if item.capability == step.tool_name and item.operation == step.action
+            ),
+            None,
+        )
+        if candidate is None:
+            return ExecutionPlan(
+                raw_text=plan.raw_text,
+                intent_error="CAPABILITY_DISCOVERY_BLOCKED",
+            )
+        steps.append(
+            replace(
+                step,
+                tool_name=candidate.tool_name,
+            )
+        )
+    return replace(plan, steps=tuple(steps))
 
 
 def trace_plan(plan):

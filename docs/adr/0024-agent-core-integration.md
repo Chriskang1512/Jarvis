@@ -44,6 +44,12 @@ Architecture principle:
 ## Planner and Registry
 
 - Planner operates on Registry capability operations and schemas.
+- Planner discovers candidate operations from Registry metadata before
+  composing new integrations; integration names are not hardcoded into the
+  Planner.
+- Discovery applies contract, permission, lifecycle, and availability gates
+  before the adaptive cost/reliability policy selects an implementation.
+- Discovery decisions produce privacy-safe audit entries.
 - AI may propose a plan but cannot validate, optimize, authorize, or execute it.
 - Ability Registry becomes the source of capability, input/output schema,
   permission, side-effect, retry, idempotency, validator, and verifier metadata.
@@ -145,3 +151,4 @@ The migration is incremental:
 - `docs/architecture/checkpoint-resume-contract.md`
 - `docs/architecture/execution-journal.md`
 - `docs/architecture/conversation-resolver.md`
+- `docs/architecture/capability-discovery.md`
