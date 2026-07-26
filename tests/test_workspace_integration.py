@@ -42,6 +42,15 @@ class TestWorkspaceIntegration(unittest.TestCase):
         self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "mail"])
         self.assertEqual(plan.steps[1].depends_on, (1,))
 
+    def test_planner_accepts_schedule_first_calendar_mail_word_order(self):
+        dispatcher, _, _ = create_dispatcher()
+
+        plan = dispatcher.create_plan("내일 오후 3시 일정을 아야한테 메일로 보내줘")
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "mail"])
+        self.assertEqual(plan.steps[1].input_data["recipient_name"], "아야")
+        self.assertEqual(plan.steps[1].depends_on, (1,))
+
     def test_calendar_mail_without_recipient_requests_clarification(self):
         dispatcher, _, provider = create_dispatcher()
 

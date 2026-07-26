@@ -624,6 +624,12 @@ def create_workspace_integration_plan(text, registry):
         r"(?P<name>.+?)(?:에게|한테)\s+(?P<schedule>.+?\s+일정)\s*(?:을|를)?\s*(?:메일|이메일)?로?\s*(?:보내줘|보내\s*줘|보내러|보내|전송해줘|전송해)",
         normalized,
     )
+    if calendar_match is None:
+        calendar_match = re.fullmatch(
+            r"(?P<schedule>.+?\s+일정)\s*(?:을|를)?\s*(?P<name>.+?)(?:에게|한테)\s*"
+            r"(?:메일|이메일)?로?\s*(?:보내줘|보내\s*줘|보내러|보내|전송해줘|전송해)",
+            normalized,
+        )
     if calendar_match and registry.get("calendar") is not None:
         name = calendar_match.group("name").strip()
         schedule = calendar_match.group("schedule").strip()

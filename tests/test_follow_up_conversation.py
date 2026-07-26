@@ -665,6 +665,17 @@ class TestFollowUpConversationMode(unittest.TestCase):
             "내일 오후 세시 일정을 메일로 보내줘",
         )
 
+    def test_calendar_mail_recipient_reply_is_normalized(self):
+        from jarvis.voice.pipeline import normalize_mail_recipient_answer
+
+        self.assertEqual(normalize_mail_recipient_answer("아야한테 보내줘"), "아야")
+        self.assertEqual(normalize_mail_recipient_answer("강릉에 보내줘"), "강릉")
+        self.assertEqual(normalize_mail_recipient_answer("아야."), "아야")
+        self.assertEqual(
+            normalize_mail_recipient_answer("test@example.com"),
+            "test@example.com",
+        )
+
     def test_google_calendar_embedded_reminder_skips_local_continuation(self):
         """Check Google Calendar reminder override does not run a duplicate local reminder."""
         pending_action = {

@@ -878,10 +878,11 @@ class VoicePipeline:
             return result.response
 
         if pending.get("kind", "") == "mail_calendar_recipient":
-            recipient = str(user_message or "").strip().rstrip(".")
-            if rejection_decision(recipient) == "no":
+            raw_recipient = str(user_message or "").strip()
+            if rejection_decision(raw_recipient) == "no":
                 self.conversation_session.clear_pending_clarification()
                 return "취소했습니다."
+            recipient = normalize_mail_recipient_answer(raw_recipient)
             if not is_mail_recipient_answer(recipient):
                 self.conversation_session.advance_pending_clarification_turn()
                 return "일정을 누구에게 메일로 보낼까요?"
@@ -2559,6 +2560,22 @@ def is_mail_recipient_answer(value):
     if "@" in text:
         return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", text))
     return bool(re.fullmatch(r"[0-9A-Za-z가-힣._ -]{1,40}", text))
+
+
+def normalize_mail_recipient_answer(value):
+    """Extract a recipient from a natural clarification reply."""
+    text = str(value or "").strip().rstrip(".?!")
+    if "@" in text:
+        return text
+
+    send_suffix = re.search(
+        r"\s*(?:메일(?:로)?\s*)?(?:보내\s*줘|보내줘|보내러|보내|전송해\s*줘|전송해줘|전송해)\s*$",
+        text,
+    )
+    if send_suffix:
+        text = text[: send_suffix.start()].strip()
+        text = re.sub(r"(?:에게|한테|으로|로|에)$", "", text).strip()
+    return text
 
 
 def format_confirmed_contact_candidate(contact_data, attribute):

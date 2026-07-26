@@ -125,6 +125,8 @@
 
 ### Fixed
 
+- Workspace mail planning now accepts schedule-first recipient phrasing and
+  normalizes natural recipient clarification replies before contact resolution.
 - Restored compact Gmail voice UX by announcing the total count while reading
   only the two newest sender/subject/time rows.
 - Bounded opened-mail summaries to 120 spoken characters and removed image,
