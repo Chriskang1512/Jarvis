@@ -1,0 +1,101 @@
+from collections import deque
+
+from jarvis.wake.clap import ClapDetector, SoundDeviceClapMonitor
+from jarvis.wake.models import WakeEvent, WakeMethod, normalize_phrase
+
+
+class QueueWakeProvider:
+    """Thread-safe integration boundary for externally produced wake events."""
+
+    method = WakeMethod.API
+
+    def __init__(self, provider_id):
+        self.provider_id = str(provider_id)
+        self._events = deque()
+
+    def trigger(self, metadata=None, confidence=1.0):
+        self._events.append(
+            WakeEvent(
+                self.method,
+                self.provider_id,
+                confidence=float(confidence),
+                metadata=dict(metadata or {}),
+            )
+        )
+
+    def poll(self):
+        return self._events.popleft() if self._events else None
+
+
+class KeyboardWakeProvider(QueueWakeProvider):
+    method = WakeMethod.KEYBOARD
+
+    def __init__(self, hotkey="ctrl+space"):
+        super().__init__("keyboard")
+        self.hotkey = str(hotkey)
+
+    def press(self, hotkey):
+        if normalize_phrase(hotkey) == normalize_phrase(self.hotkey):
+            self.trigger({"hotkey": self.hotkey})
+            return True
+        return False
+
+
+class TouchPortalWakeProvider(QueueWakeProvider):
+    method = WakeMethod.TOUCH_PORTAL
+
+    def __init__(self):
+        super().__init__("touch_portal")
+
+
+class MobileWakeProvider(QueueWakeProvider):
+    method = WakeMethod.MOBILE
+
+    def __init__(self):
+        super().__init__("mobile_stub")
+
+
+class ApiWakeProvider(QueueWakeProvider):
+    method = WakeMethod.API
+
+    def __init__(self):
+        super().__init__("api")
+
+
+class WakeWordProvider(QueueWakeProvider):
+    method = WakeMethod.VOICE
+
+    def __init__(self, phrases=("hey jarvis", "헤이 자비스", "자비스")):
+        super().__init__("wake_word")
+        self.phrases = tuple(normalize_phrase(item) for item in phrases)
+
+    def feed_text(self, text):
+        normalized = normalize_phrase(text)
+        if normalized in self.phrases:
+            self.trigger({"phrase": normalized})
+            return True
+        return False
+
+
+class ClapWakeProvider(QueueWakeProvider):
+    method = WakeMethod.CLAP
+
+    def __init__(self, detector=None, monitor=None, microphone=False, device=None):
+        super().__init__("double_clap")
+        self.detector = detector or ClapDetector()
+        self.monitor = monitor
+        if self.monitor is None and microphone:
+            self.monitor = SoundDeviceClapMonitor(self.feed_audio, device=device)
+
+    def feed_audio(self, samples, timestamp):
+        if self.detector.process(samples, timestamp):
+            self.trigger({"pattern": "double_clap"})
+            return True
+        return False
+
+    def start(self):
+        return self.monitor.start() if self.monitor is not None else True
+
+    def stop(self):
+        if self.monitor is not None:
+            self.monitor.stop()

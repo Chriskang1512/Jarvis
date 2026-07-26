@@ -23,6 +23,7 @@ from jarvis.voice.service import VoiceService
 from jarvis.voice.session import VoiceSession, create_voice_session
 from jarvis.voice.text_normalizer import normalize_tts_text
 from jarvis.voice.wake_word import WakeWordListener
+from jarvis.wake import WakeManager
 
 __all__ = [
     "ConsoleSpeechToTextProvider",
@@ -46,6 +47,7 @@ __all__ = [
     "VoiceService",
     "VoiceSession",
     "WakeWordListener",
+    "WakeManager",
     "create_stt_provider",
     "create_tts_provider",
     "create_conversation_session",

@@ -28,6 +28,18 @@ from jarvis.voice import (
 from jarvis.voice.playback import read_playback_backend_name
 from jarvis.voice.providers import read_stt_provider_name, should_keep_tts_audio
 from jarvis.voice.stt import is_stt_metrics_enabled
+from jarvis.wake import (
+    ApiWakeProvider,
+    ClapWakeProvider,
+    KeyboardWakeProvider,
+    MobileWakeProvider,
+    TouchPortalWakeProvider,
+    WakeManager,
+    WakeMethod,
+    WakeProfile,
+    WakeSettings,
+    WakeWordProvider,
+)
 
 
 def main():
@@ -79,8 +91,9 @@ def main():
     )
 
     wake_word = os.environ.get("JARVIS_WAKE_WORD", "hey jarvis")
+    wake_manager = create_wake_manager(config, wake_word)
     pipeline = VoicePipeline(
-        wake_listener=WakeWordListener(wake_word=wake_word),
+        wake_listener=wake_manager,
         stt_provider=stt_provider,
         chat_service=chat_service,
         tts_provider=tts_provider,
@@ -92,6 +105,7 @@ def main():
     )
 
     print("Jarvis Voice Pipeline")
+    print(f"Wake methods: {', '.join(config.wake.methods)}")
     print(f"Wake word: {wake_word}")
     print(f"Voice session: {voice_session.session_id}")
     print("Press Ctrl+C to stop.")
@@ -108,6 +122,49 @@ def main():
             pipeline.run_once()
     finally:
         reminder_scheduler.stop()
+
+
+def create_wake_manager(config, wake_word):
+    """Create enabled Wake Providers while preserving console wake compatibility."""
+    method_map = {method.value: method for method in WakeMethod}
+    enabled = tuple(
+        method_map[name]
+        for name in config.wake.methods
+        if name in method_map
+    )
+    primary = method_map.get(config.wake.primary)
+    priority = tuple(
+        dict.fromkeys(
+            ([primary] if primary is not None else [])
+            + list(enabled)
+        )
+    )
+    phrases = tuple(dict.fromkeys((wake_word,) + tuple(config.wake.voice_phrases)))
+    settings = WakeSettings(
+        profile=WakeProfile(
+            name=config.wake.profile,
+            priority=priority,
+            enabled=enabled,
+        ),
+        voice_phrases=phrases,
+        keyboard_hotkey=config.wake.keyboard_hotkey,
+    )
+    providers = (
+        ClapWakeProvider(
+            microphone=WakeMethod.CLAP in enabled,
+            device=None if config.stt.device == "default" else config.stt.device,
+        ),
+        WakeWordProvider(phrases),
+        KeyboardWakeProvider(config.wake.keyboard_hotkey),
+        TouchPortalWakeProvider(),
+        MobileWakeProvider(),
+        ApiWakeProvider(),
+    )
+    return WakeManager(
+        providers,
+        settings=settings,
+        legacy_listener=WakeWordListener(wake_word=wake_word, aliases=phrases),
+    )
 
 
 def configure_logging():

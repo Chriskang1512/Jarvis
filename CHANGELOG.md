@@ -13,6 +13,14 @@
 
 ### Added
 
+- Sprint 19 Input and Wake foundation with provider-driven Clap, Voice,
+  Keyboard, Touch Portal, Mobile, and API wake methods.
+- PCM double-clap detection before STT with transient/noise rejection,
+  refractory timing, and microphone lifecycle integration.
+- Wake profiles, configurable method priority, Korean/English wake phrases,
+  and a common privacy-safe `WakeEvent` contract.
+- Provider-neutral `InputEnvelope` and `InputManager` contracts for Voice,
+  Keyboard, Clipboard, OCR, Image, File, Drag and Drop, Mobile, and API inputs.
 - Sprint 18.7 Calendar -> Reminder -> Mail multi-step vertical slice under one
   RuntimeTask.
 - Runtime-owned pending execution snapshots and confirm, cancel, and resume

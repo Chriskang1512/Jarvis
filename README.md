@@ -22,6 +22,7 @@ The approved migration design is documented in:
 - [`Checkpoint and resume contract`](docs/architecture/checkpoint-resume-contract.md)
 - [`Execution Journal`](docs/architecture/execution-journal.md)
 - [`Multi-step Vertical Slice`](docs/architecture/multi-step-vertical-slice.md)
+- [`Input and Wake Manager`](docs/architecture/input-wake-manager.md)
 - [`Capability Discovery`](docs/architecture/capability-discovery.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
@@ -112,6 +113,22 @@ See
 [`docs/architecture/multi-step-vertical-slice.md`](docs/architecture/multi-step-vertical-slice.md)
 and
 [`ADR 0027 - Multi-step Runtime Continuation`](docs/adr/0027-multi-step-runtime-continuation.md).
+
+Sprint 19 starts the product-facing Input Layer:
+
+- `WakeManager` selects enabled Clap, Voice, Keyboard, Touch Portal, Mobile, or
+  API providers by profile priority;
+- double clap is detected from PCM signal features before STT and releases the
+  microphone before command recording;
+- English and Korean Wake phrases remain available;
+- every future input surface normalizes into a privacy-safe `InputEnvelope`;
+- queue-based trigger contracts isolate OS hotkey and remote transport adapters
+  from Planner and Voice Runtime.
+
+See
+[`docs/architecture/input-wake-manager.md`](docs/architecture/input-wake-manager.md)
+and
+[`ADR 0028 - Wake Manager Before Input`](docs/adr/0028-wake-manager-before-input.md).
 
 ## Current Version
 

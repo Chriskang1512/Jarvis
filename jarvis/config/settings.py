@@ -34,6 +34,18 @@ class STTConfig:
 
 
 @dataclass
+class WakeConfig:
+    """Store enabled wake methods and user ordering."""
+
+    enabled: bool = True
+    profile: str = "default"
+    primary: str = "clap"
+    methods: tuple[str, ...] = ("clap", "voice", "keyboard", "touch_portal")
+    voice_phrases: tuple[str, ...] = ("hey jarvis", "헤이 자비스", "자비스")
+    keyboard_hotkey: str = "ctrl+space"
+
+
+@dataclass
 class ConversationConfig:
     """Store short-term conversation memory settings."""
 
@@ -115,6 +127,7 @@ class JarvisConfig:
     version: str = "v0.4.0"
     tts: TTSConfig = field(default_factory=TTSConfig)
     stt: STTConfig = field(default_factory=STTConfig)
+    wake: WakeConfig = field(default_factory=WakeConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
     memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)

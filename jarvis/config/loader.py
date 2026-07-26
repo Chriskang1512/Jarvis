@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, MailConfig, MemoryStoreConfig, STTConfig
+from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, MailConfig, MemoryStoreConfig, STTConfig, WakeConfig
 from jarvis.config.settings import TTSConfig
 from jarvis.config.settings import WeatherConfig
 
@@ -36,6 +36,7 @@ def create_config_from_dict(config_data):
     """Create JarvisConfig using known keys from a dictionary."""
     tts_data = config_data.get("tts", {})
     stt_data = config_data.get("stt", {})
+    wake_data = config_data.get("wake", {})
     conversation_data = config_data.get("conversation", {})
     memory_store_data = config_data.get("memory_store", {})
     weather_data = config_data.get("weather", {})
@@ -56,6 +57,7 @@ def create_config_from_dict(config_data):
         version=config_data.get("version", "v0.4.0"),
         tts=create_tts_config(config_data, tts_data),
         stt=create_stt_config(stt_data),
+        wake=create_wake_config(wake_data),
         conversation=create_conversation_config(conversation_data),
         memory_store=create_memory_store_config(memory_store_data),
         weather=create_weather_config(weather_data),
@@ -98,6 +100,20 @@ def create_stt_config(stt_data):
         min_record_seconds=stt_data.get("min_record_seconds", 4.0),
         max_record_seconds=stt_data.get("max_record_seconds", 20.0),
         silence_timeout=stt_data.get("silence_timeout", 3.0),
+    )
+
+
+def create_wake_config(wake_data):
+    """Create WakeConfig without enabling undeclared remote listeners."""
+    methods = tuple(wake_data.get("methods", ("clap", "voice", "keyboard", "touch_portal")))
+    phrases = tuple(wake_data.get("voice_phrases", ("hey jarvis", "헤이 자비스", "자비스")))
+    return WakeConfig(
+        enabled=bool(wake_data.get("enabled", True)),
+        profile=str(wake_data.get("profile", "default")),
+        primary=str(wake_data.get("primary", "clap")),
+        methods=methods,
+        voice_phrases=phrases,
+        keyboard_hotkey=str(wake_data.get("keyboard_hotkey", "ctrl+space")),
     )
 
 

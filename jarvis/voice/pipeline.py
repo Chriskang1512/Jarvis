@@ -37,6 +37,7 @@ from jarvis.voice.semantic import SemanticTranscriptContext, SemanticTranscriptN
 from jarvis.voice.text_normalizer import normalize_tts_text
 from jarvis.voice.user_vocabulary import format_corrections, normalize_stt_text
 from jarvis.privacy import redact_sensitive_text
+from jarvis.input import InputManager, InputModality, InputSource
 
 
 class VoicePipeline:
@@ -56,6 +57,7 @@ class VoicePipeline:
         follow_up_timeout=0.0,
         conversation_session=None,
         semantic_normalizer=None,
+        input_manager=None,
     ):
         """Create a voice pipeline with replaceable modules."""
         self.wake_listener = wake_listener
@@ -70,6 +72,9 @@ class VoicePipeline:
         self.follow_up_timeout = float(follow_up_timeout)
         self.conversation_session = conversation_session
         self.semantic_normalizer = semantic_normalizer or SemanticTranscriptNormalizer()
+        self.input_manager = input_manager or InputManager()
+        self.last_input_envelope = None
+        self.last_wake_event = None
         self.runtime_last_calendar_result = None
         self.runtime_last_calendar_event = None
         self.configure_conversation_context_provider()
@@ -93,8 +98,15 @@ class VoicePipeline:
         self.set_session_stage("wake")
         self.publish_pipeline(wake="waiting", current_stage="wake")
         self.log_event("Wake waiting")
-        self.wake_listener.wait_for_wake_word()
+        wake_event = self.wake_listener.wait_for_wake_word()
+        self.last_wake_event = wake_event
         self.logger.info("wake_word.detected")
+        wake_method = getattr(wake_event, "method", "voice")
+        trace_event(
+            "voice.wake.detected",
+            wake_method=str(getattr(wake_method, "value", wake_method)),
+            wake_provider=str(getattr(wake_event, "provider_id", "legacy_wake_word")),
+        )
         self.publish_pipeline(wake="detected", current_stage="stt")
         self.log_event("Wake detected")
         self.start_conversation_session()
@@ -116,6 +128,15 @@ class VoicePipeline:
         self.publish_pipeline(stt="started", current_stage="stt")
         self.log_event("STT started")
         user_message = self.listen_and_normalize_stt()
+        self.last_input_envelope = self.input_manager.create(
+            InputSource.VOICE,
+            InputModality.TEXT,
+            content=user_message,
+            wake_event=self.last_wake_event,
+            correlation_id=str(getattr(self.voice_session, "session_id", "") or ""),
+            metadata={"stage": "stt"},
+        )
+        user_message = str(self.last_input_envelope.content or "")
         stt_latency = perf_counter() - stt_start
         trace_event(
             "voice.stt.completed",
