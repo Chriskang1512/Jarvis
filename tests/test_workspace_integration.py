@@ -89,7 +89,7 @@ class TestWorkspaceIntegration(unittest.TestCase):
         result = dispatcher.execute_plan_text("아야에게 내일 오후 3시 일정 메일로 보내줘")
 
         self.assertNotEqual(result.error, "confirm_required")
-        self.assertIn("메일 본문이 필요합니다", result.response)
+        self.assertIn("해당 시간의 일정이 없습니다.", result.response)
         self.assertEqual(provider.send_calls, [])
 
 
@@ -101,6 +101,7 @@ class TestWorkspaceIntegration(unittest.TestCase):
         result = dispatcher.execute_plan_text("내일 오후 2시 일정을 아야한테 메일로 보내줘")
 
         self.assertNotEqual(result.error, "confirm_required")
+        self.assertIn("해당 시간의 일정이 없습니다.", result.response)
         self.assertEqual(provider.send_calls, [])
 
 

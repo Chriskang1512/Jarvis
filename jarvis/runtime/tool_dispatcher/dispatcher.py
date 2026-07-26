@@ -219,7 +219,7 @@ class RuntimeToolDispatcher:
                 input_data["subject"] = f"{title} 일정 안내"
                 input_data["body"] = f"{when} {title} 일정입니다.".strip()
             elif calendar_mail:
-                input_data["subject"] = "일정 안내"
+                input_data["_workspace_calendar_event_missing"] = True
 
             return input_data
 

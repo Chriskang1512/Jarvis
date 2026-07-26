@@ -62,6 +62,9 @@ class MailAbility:
         trace_event("mail.query", action=query.action, query=query.query, ordinal=query.ordinal)
 
         try:
+            if isinstance(input_data, dict) and input_data.get("_workspace_calendar_event_missing"):
+                return self.ability_result(mail_error(query.action, "CALENDAR_EVENT_NOT_FOUND"), query)
+
             if query.action in {"send", "reply"}:
                 query, preparation_error = self.prepare_outgoing_query(query, selected_message=selected_message)
                 if preparation_error is not None:

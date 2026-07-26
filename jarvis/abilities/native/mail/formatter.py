@@ -61,6 +61,7 @@ def send_error_message(result):
         "INVALID_EMAIL_ADDRESS": "이메일 주소 형식이 올바르지 않습니다.",
         "MAIL_BODY_REQUIRED": "메일 본문이 필요합니다.",
         "MAIL_SUBJECT_REQUIRED": "메일 제목이 필요합니다.",
+        "CALENDAR_EVENT_NOT_FOUND": "해당 시간의 일정이 없습니다.",
         "SEND_CONFIRMATION_REQUIRED": "메일 전송 전에 확인이 필요합니다.",
         "SEND_FAILED": "메일 전송에 실패했습니다.",
         "REPLY_TARGET_NOT_FOUND": "어떤 메일에 답장할지 먼저 선택해 주세요.",
