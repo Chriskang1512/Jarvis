@@ -32,3 +32,6 @@ before command transcription begins.
 - Wake Word remains a fallback while device-specific Clap thresholds mature.
 - Keyboard and Clipboard input can evolve independently from Keyboard and
   external Wake triggers.
+- Wake monitoring is inactive during STT, TTS, and Follow-up execution.
+- A short post-pattern settle window rejects rapid triple claps, and all
+  losing-provider events are discarded after one provider activates Runtime.

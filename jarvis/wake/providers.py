@@ -28,6 +28,9 @@ class QueueWakeProvider:
     def poll(self):
         return self._events.popleft() if self._events else None
 
+    def clear_pending(self):
+        self._events.clear()
+
 
 class KeyboardWakeProvider(QueueWakeProvider):
     method = WakeMethod.KEYBOARD

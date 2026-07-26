@@ -35,6 +35,7 @@ class WakeManager:
                     event = provider.poll() if provider is not None else None
                     if event is not None:
                         self.last_event = event
+                        self.clear_pending_events()
                         return event
                 if deadline is not None and monotonic() >= deadline:
                     return None
@@ -59,6 +60,13 @@ class WakeManager:
             stop = getattr(provider, "stop", None)
             if callable(stop):
                 stop()
+
+    def clear_pending_events(self):
+        """Prevent simultaneous providers from waking the next session."""
+        for provider in self.providers.values():
+            clear_pending = getattr(provider, "clear_pending", None)
+            if callable(clear_pending):
+                clear_pending()
 
     def start_legacy_listener(self):
         if self.legacy_listener is None:

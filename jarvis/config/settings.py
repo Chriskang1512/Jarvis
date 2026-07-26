@@ -43,6 +43,12 @@ class WakeConfig:
     methods: tuple[str, ...] = ("clap", "voice", "keyboard", "touch_portal")
     voice_phrases: tuple[str, ...] = ("hey jarvis", "헤이 자비스", "자비스")
     keyboard_hotkey: str = "ctrl+space"
+    clap_peak_threshold: float = 0.55
+    clap_rms_threshold: float = 0.08
+    clap_crest_factor_threshold: float = 3.0
+    clap_min_gap_seconds: float = 0.12
+    clap_max_gap_seconds: float = 0.8
+    clap_settle_seconds: float = 0.22
 
 
 @dataclass

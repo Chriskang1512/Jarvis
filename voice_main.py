@@ -34,6 +34,8 @@ from jarvis.voice.stt import is_stt_metrics_enabled
 from jarvis.wake import (
     ApiWakeProvider,
     ClapWakeProvider,
+    ClapDetector,
+    ClapDetectorSettings,
     KeyboardWakeProvider,
     MicrophoneWakeWordProvider,
     MobileWakeProvider,
@@ -153,7 +155,18 @@ def create_wake_manager(config, wake_word):
         voice_phrases=phrases,
         keyboard_hotkey=config.wake.keyboard_hotkey,
     )
-    clap_provider = ClapWakeProvider()
+    clap_provider = ClapWakeProvider(
+        detector=ClapDetector(
+            ClapDetectorSettings(
+                peak_threshold=config.wake.clap_peak_threshold,
+                rms_threshold=config.wake.clap_rms_threshold,
+                crest_factor_threshold=config.wake.clap_crest_factor_threshold,
+                min_gap_seconds=config.wake.clap_min_gap_seconds,
+                max_gap_seconds=config.wake.clap_max_gap_seconds,
+                settle_seconds=config.wake.clap_settle_seconds,
+            )
+        )
+    )
     microphone_monitor = SoundDeviceClapMonitor(
         clap_provider.feed_audio,
         device=None if config.stt.device == "default" else config.stt.device,

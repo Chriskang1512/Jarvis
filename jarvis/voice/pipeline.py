@@ -294,7 +294,7 @@ class VoicePipeline:
 
     def create_voice_input_envelope(self, content, input_type, stage):
         """Normalize every voice turn through the shared Input Manager."""
-        return self.input_manager.create(
+        envelope = self.input_manager.create(
             InputSource.VOICE,
             InputModality.TEXT,
             content=content,
@@ -303,6 +303,20 @@ class VoicePipeline:
             metadata={"stage": str(stage)},
             input_type=input_type,
         )
+        activation = envelope.context.activation
+        trace_event(
+            "voice.input.envelope",
+            input_id=envelope.input_id,
+            source=envelope.source.value,
+            modality=envelope.modality.value,
+            turn_type=envelope.context.turn_type.value,
+            stage=str(stage),
+            activation_type=activation.activation_type.value,
+            activation_provider=activation.activation_provider,
+            content_fingerprint=envelope.content_fingerprint,
+            content_length=len(str(content or "")),
+        )
+        return envelope
 
     def process_follow_up_text(self, user_message):
         """Process one follow-up text without wake-word detection."""

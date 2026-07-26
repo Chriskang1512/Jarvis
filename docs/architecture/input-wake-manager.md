@@ -55,9 +55,26 @@ separate adapters; they call `trigger()` and do not bypass Wake policy.
 - a high crest factor to reject sustained speech or music;
 - a refractory interval to avoid counting one impulse twice;
 - a minimum and maximum interval between the two impulses.
+- a short settle window after the second impulse; a fast third impulse cancels
+  the pending double-clap activation.
 
-Real-room calibration remains a device-level task. Double clap is enabled by
-profile but Wake Word remains available as a fallback.
+One clap never activates Jarvis. Three rapid claps are rejected instead of
+activating on the first two. Real-room calibration remains a device-level task.
+The Wake profile supports `clap_peak_threshold`, `clap_rms_threshold`,
+`clap_crest_factor_threshold`, `clap_min_gap_seconds`,
+`clap_max_gap_seconds`, and `clap_settle_seconds`.
+
+## Runtime Hardening
+
+- Wake capture stops immediately after one provider wins. It remains stopped
+  during command STT, TTS playback, and Follow-up Listening, preventing TTS
+  self-activation.
+- Pending events from simultaneous providers are cleared before the next Wake
+  session, so Clap and Voice cannot cause a duplicate activation.
+- Follow-up speech belongs to the active conversation and does not require or
+  consume a new Wake event.
+- `voice.input.envelope` Trace contains only source, modality, activation
+  provenance, content length, and fingerprint. It never contains raw input.
 
 ## Input Envelope
 

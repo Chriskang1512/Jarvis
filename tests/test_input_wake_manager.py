@@ -105,9 +105,29 @@ class TestClapDetector(unittest.TestCase):
     def test_two_impulses_wake_without_stt(self):
         detector = ClapDetector()
         impulse = [0.0] * 99 + [1.0]
+        silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
-        self.assertTrue(detector.process(impulse, 1.35))
+        self.assertFalse(detector.process(impulse, 1.35))
+        self.assertTrue(detector.process(silence, 1.58))
+
+    def test_single_clap_never_wakes(self):
+        detector = ClapDetector()
+        impulse = [0.0] * 99 + [1.0]
+        silence = [0.0] * 100
+
+        self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(silence, 2.0))
+
+    def test_fast_third_clap_cancels_pending_double_clap(self):
+        detector = ClapDetector()
+        impulse = [0.0] * 99 + [1.0]
+        silence = [0.0] * 100
+
+        self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(impulse, 1.3))
+        self.assertFalse(detector.process(impulse, 1.45))
+        self.assertFalse(detector.process(silence, 1.8))
 
     def test_sustained_loud_audio_is_not_a_clap(self):
         detector = ClapDetector()
@@ -122,7 +142,8 @@ class TestClapDetector(unittest.TestCase):
 
         self.assertFalse(detector.process(impulse, 1.0))
         self.assertFalse(detector.process(impulse, 2.0))
-        self.assertTrue(detector.process(impulse, 2.3))
+        self.assertFalse(detector.process(impulse, 2.3))
+        self.assertTrue(detector.process([0.0] * 100, 2.55))
 
 
 class TestWakeProvidersAndManager(unittest.TestCase):
@@ -136,6 +157,16 @@ class TestWakeProvidersAndManager(unittest.TestCase):
         event = manager.wait(timeout=0.01)
 
         self.assertEqual(event.method, WakeMethod.CLAP)
+
+    def test_selected_wake_clears_simultaneous_provider_events(self):
+        clap = ClapWakeProvider()
+        voice = WakeWordProvider()
+        clap.trigger()
+        voice.feed_text("자비스")
+        manager = WakeManager((voice, clap))
+
+        self.assertEqual(manager.wait(timeout=0.01).method, WakeMethod.CLAP)
+        self.assertIsNone(manager.wait(timeout=0.01))
 
     def test_disabled_method_is_ignored(self):
         clap = ClapWakeProvider()
@@ -242,6 +273,8 @@ class TestWakeConfiguration(unittest.TestCase):
                     "methods": ["voice", "keyboard"],
                     "voice_phrases": ["jarvis", "자비스"],
                     "keyboard_hotkey": "alt+j",
+                    "clap_peak_threshold": 0.7,
+                    "clap_settle_seconds": 0.3,
                 }
             }
         )
@@ -250,6 +283,8 @@ class TestWakeConfiguration(unittest.TestCase):
         self.assertEqual(config.wake.methods, ("voice", "keyboard"))
         self.assertEqual(config.wake.voice_phrases, ("jarvis", "자비스"))
         self.assertEqual(config.wake.keyboard_hotkey, "alt+j")
+        self.assertEqual(config.wake.clap_peak_threshold, 0.7)
+        self.assertEqual(config.wake.clap_settle_seconds, 0.3)
 
     def test_legacy_listener_accepts_korean_alias(self):
         listener = WakeWordListener("hey jarvis", aliases=("헤이 자비스", "자비스"))
@@ -269,6 +304,7 @@ class FakeClapMonitor:
         impulse = [0.0] * 99 + [1.0]
         self.provider.feed_audio(impulse, 1.0)
         self.provider.feed_audio(impulse, 1.3)
+        self.provider.feed_audio([0.0] * 100, 1.55)
         return True
 
     def stop(self):

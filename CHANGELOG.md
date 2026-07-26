@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Added a post-pattern settle window so one clap is ignored and a rapid third
+  clap cancels rather than activating on the first two.
+- Cleared simultaneous Wake Provider events after priority selection to prevent
+  a stale event from waking the next session.
 - Prevented primary Wake phrase transcription (`openai_wake`) from being
   misreported as STT fallback usage in runtime metrics.
 - Replaced the misleading console-backed Voice Wake path with real microphone
@@ -20,6 +24,9 @@
 
 ### Added
 
+- Configurable per-profile Clap peak, RMS, crest, gap, and settle thresholds.
+- Privacy-safe `voice.input.envelope` diagnostics for command, Follow-up, and
+  confirmation turns.
 - Typed `ActivationContext`, `InputContext`, `InputMetadata`, and `InputType`
   contracts that preserve Wake provenance without coupling Planner to Wake.
 - Common `InputProvider.read() -> InputManager.ingest() -> InputEnvelope`

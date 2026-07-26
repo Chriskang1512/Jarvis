@@ -10,6 +10,7 @@ class ClapDetectorSettings:
     min_gap_seconds: float = 0.12
     max_gap_seconds: float = 0.8
     refractory_seconds: float = 0.08
+    settle_seconds: float = 0.22
 
 
 class ClapDetector:
@@ -19,6 +20,7 @@ class ClapDetector:
         self.settings = settings or ClapDetectorSettings()
         self.last_impulse_at = None
         self.first_clap_at = None
+        self.second_clap_at = None
 
     def process(self, samples, timestamp):
         values = tuple(float(sample) for sample in samples)
@@ -34,6 +36,12 @@ class ClapDetector:
         )
         now = float(timestamp)
         if not is_impulse:
+            if (
+                self.second_clap_at is not None
+                and now - self.second_clap_at >= self.settings.settle_seconds
+            ):
+                self.reset_pattern()
+                return True
             if self.first_clap_at is not None and now - self.first_clap_at > self.settings.max_gap_seconds:
                 self.first_clap_at = None
             return False
@@ -43,14 +51,21 @@ class ClapDetector:
         ):
             return False
         self.last_impulse_at = now
+        if self.second_clap_at is not None:
+            self.reset_pattern()
+            return False
         if self.first_clap_at is None or now - self.first_clap_at > self.settings.max_gap_seconds:
             self.first_clap_at = now
             return False
         gap = now - self.first_clap_at
         if gap < self.settings.min_gap_seconds:
             return False
+        self.second_clap_at = now
+        return False
+
+    def reset_pattern(self):
         self.first_clap_at = None
-        return True
+        self.second_clap_at = None
 
 
 class SoundDeviceClapMonitor:
