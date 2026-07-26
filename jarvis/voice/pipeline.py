@@ -95,6 +95,11 @@ class VoicePipeline:
             self.voice_session.start_turn()
 
         self.logger.info("wake_word.waiting")
+        trace_event(
+            "voice.wake.state",
+            state="WAKE_LISTENING",
+            wake_monitor="ON",
+        )
         self.set_session_stage("wake")
         self.publish_pipeline(wake="waiting", current_stage="wake")
         self.log_event("Wake waiting")
@@ -102,6 +107,11 @@ class VoicePipeline:
         self.last_wake_event = wake_event
         self.logger.info("wake_word.detected")
         wake_method = getattr(wake_event, "method", "voice")
+        trace_event(
+            "voice.wake.state",
+            state="ACTIVATED",
+            wake_monitor="OFF",
+        )
         trace_event(
             "voice.wake.detected",
             wake_method=str(getattr(wake_method, "value", wake_method)),
@@ -738,6 +748,11 @@ class VoicePipeline:
 
     def enter_follow_up_state(self):
         """Enter follow-up listening state."""
+        trace_event(
+            "voice.wake.state",
+            state="FOLLOW_UP",
+            wake_monitor="OFF",
+        )
         self.conversation_session.enter_follow_up()
         self.set_session_stage("follow_up")
         self.publish_pipeline(current_stage="follow_up")
@@ -749,6 +764,11 @@ class VoicePipeline:
             return
 
         self.conversation_session.close(preserve_context=self.has_pending_action())
+        trace_event(
+            "voice.wake.state",
+            state="IDLE",
+            wake_monitor="OFF",
+        )
         self.set_session_stage("idle")
         self.publish_pipeline(current_stage="idle")
         self.publish_conversation_event("conversation.closed")

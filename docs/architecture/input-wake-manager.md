@@ -63,8 +63,19 @@ activating on the first two. Real-room calibration remains a device-level task.
 The Wake profile supports `clap_peak_threshold`, `clap_rms_threshold`,
 `clap_crest_factor_threshold`, `clap_min_gap_seconds`,
 `clap_max_gap_seconds`, and `clap_settle_seconds`.
-The default settle window is 0.8 seconds, trading a small Wake delay for
+The default settle window is 0.5 seconds, trading a small Wake delay for
 reliable rejection of naturally paced triple claps.
+
+Debug Trace exposes the live state without microphone content:
+
+```text
+[Wake] state=WAKE_LISTENING monitor=ON
+[Clap] state=FIRST_CLAP
+[Clap] state=DOUBLE_PENDING
+[Clap] state=TRIPLE_CANCELLED
+[Clap] state=CONFIRMED
+[Wake] state=ACTIVATED monitor=OFF
+```
 
 ## Runtime Hardening
 

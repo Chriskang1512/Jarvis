@@ -108,9 +108,12 @@ class TestClapDetector(unittest.TestCase):
         silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
+        self.assertEqual(detector.pop_decision(), "FIRST_CLAP")
         self.assertFalse(detector.process(impulse, 1.35))
+        self.assertEqual(detector.pop_decision(), "DOUBLE_PENDING")
         self.assertFalse(detector.process(silence, 1.58))
-        self.assertTrue(detector.process(silence, 2.16))
+        self.assertTrue(detector.process(silence, 1.86))
+        self.assertEqual(detector.pop_decision(), "CONFIRMED")
 
     def test_single_clap_never_wakes(self):
         detector = ClapDetector()
@@ -128,6 +131,7 @@ class TestClapDetector(unittest.TestCase):
         self.assertFalse(detector.process(impulse, 1.0))
         self.assertFalse(detector.process(impulse, 1.3))
         self.assertFalse(detector.process(impulse, 1.45))
+        self.assertEqual(detector.pop_decision(), "TRIPLE_CANCELLED")
         self.assertFalse(detector.process(silence, 1.8))
 
     def test_slow_third_clap_within_valid_gap_cancels_double_clap(self):
@@ -155,7 +159,7 @@ class TestClapDetector(unittest.TestCase):
         self.assertFalse(detector.process(impulse, 1.0))
         self.assertFalse(detector.process(impulse, 2.0))
         self.assertFalse(detector.process(impulse, 2.3))
-        self.assertTrue(detector.process([0.0] * 100, 3.15))
+        self.assertTrue(detector.process([0.0] * 100, 2.81))
 
 
 class TestWakeProvidersAndManager(unittest.TestCase):
@@ -316,7 +320,7 @@ class FakeClapMonitor:
         impulse = [0.0] * 99 + [1.0]
         self.provider.feed_audio(impulse, 1.0)
         self.provider.feed_audio(impulse, 1.3)
-        self.provider.feed_audio([0.0] * 100, 2.15)
+        self.provider.feed_audio([0.0] * 100, 1.85)
         return True
 
     def stop(self):

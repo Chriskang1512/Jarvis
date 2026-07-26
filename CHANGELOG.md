@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Reduced the double-clap confirmation window from 0.8 to 0.5 seconds while
+  retaining naturally paced triple-clap cancellation.
 - Extended double-clap confirmation through the full valid clap interval so a
   naturally paced third clap cannot arrive after Wake was already emitted.
 - Added a post-pattern settle window so one clap is ignored and a rapid third
@@ -26,6 +28,8 @@
 
 ### Added
 
+- Live privacy-safe Wake and Clap console states for listening, pending,
+  cancellation, activation, Follow-up, and idle transitions.
 - Configurable per-profile Clap peak, RMS, crest, gap, and settle thresholds.
 - Privacy-safe `voice.input.envelope` diagnostics for command, Follow-up, and
   confirmation turns.

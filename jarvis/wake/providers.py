@@ -1,6 +1,7 @@
 from collections import deque
 import re
 
+from jarvis.debug_trace import trace_event
 from jarvis.wake.clap import ClapDetector, SoundDeviceClapMonitor
 from jarvis.wake.models import WakeEvent, WakeMethod, normalize_phrase
 from jarvis.wake.voice import SpeechSegmenter, WakePhraseTranscriber
@@ -124,7 +125,15 @@ class ClapWakeProvider(QueueWakeProvider):
             self.monitor = SoundDeviceClapMonitor(self.feed_audio, device=device)
 
     def feed_audio(self, samples, timestamp):
-        if self.detector.process(samples, timestamp):
+        detected = self.detector.process(samples, timestamp)
+        decision = self.detector.pop_decision()
+        if decision:
+            trace_event(
+                "voice.wake.clap_state",
+                state=decision,
+                timestamp=round(float(timestamp), 3),
+            )
+        if detected:
             self.trigger({"pattern": "double_clap"})
             return True
         return False

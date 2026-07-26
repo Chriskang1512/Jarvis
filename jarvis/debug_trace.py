@@ -31,6 +31,16 @@ def trace_event(event, **payload):
 
 def format_trace_event(event, payload):
     """Return a human-readable trace line."""
+    if event == "voice.wake.state":
+        return (
+            "[Wake] "
+            f"state={payload.get('state') or '-'} "
+            f"monitor={payload.get('wake_monitor') or '-'}"
+        )
+
+    if event == "voice.wake.clap_state":
+        return f"[Clap] state={payload.get('state') or '-'}"
+
     if event == "weather.query":
         return (
             "[Weather] query "
