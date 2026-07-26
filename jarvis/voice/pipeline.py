@@ -2140,10 +2140,25 @@ def extract_recalled_memory_entry(intent_result):
 def runtime_result_from_plan_result(plan_result, plan):
     """Adapt Runtime Dispatcher PlanResult to the legacy Voice RuntimeResult shape."""
     step_results = list(getattr(plan_result, "step_results", []) or [])
-    first_step = step_results[0] if step_results else None
-    first_tool_result = getattr(first_step, "tool_result", None) if first_step is not None else None
-    tool_name = getattr(first_step, "tool_name", "") if first_step is not None else ""
-    tool_output = unwrap_tool_output(first_tool_result)
+    selected_step = next(
+        (
+            step
+            for step in reversed(step_results)
+            if step_requires_confirmation(step)
+        ),
+        step_results[0] if step_results else None,
+    )
+    selected_tool_result = (
+        getattr(selected_step, "tool_result", None)
+        if selected_step is not None
+        else None
+    )
+    tool_name = (
+        getattr(selected_step, "tool_name", "")
+        if selected_step is not None
+        else ""
+    )
+    tool_output = unwrap_tool_output(selected_tool_result)
 
     return RuntimeResult(
         handled=True,
@@ -2157,6 +2172,14 @@ def runtime_result_from_plan_result(plan_result, plan):
         tool_output=tool_output,
         task=getattr(plan_result, "task", None),
     )
+
+
+def step_requires_confirmation(step):
+    """Return whether a plan step produced a frozen confirmation request."""
+    tool_result = getattr(step, "tool_result", None)
+    output = unwrap_tool_output(tool_result)
+    metadata = getattr(output, "metadata", {}) or {}
+    return metadata.get("permission") == "confirm_required"
 
 
 def unwrap_tool_output(tool_result):

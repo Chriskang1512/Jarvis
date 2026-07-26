@@ -607,6 +607,45 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertEqual(pending_action["input_data"]["remind_before_minutes"], 60)
         self.assertTrue(pending_action["input_data"]["_suppress_auto_reminder"])
 
+    def test_multi_step_runtime_exposes_confirming_step_to_voice(self):
+        """Check Voice stores the Mail confirmation from Calendar -> Mail."""
+        calendar_step = SimpleNamespace(
+            tool_name="calendar",
+            tool_result=SimpleNamespace(
+                output=AbilityResult(success=True, data=SimpleNamespace(action="list")),
+            ),
+        )
+        query = SimpleNamespace(action="send", to=("aya@example.com",))
+        mail_step = SimpleNamespace(
+            tool_name="mail",
+            tool_result=SimpleNamespace(
+                output=AbilityResult(
+                    success=True,
+                    data=SimpleNamespace(action="send"),
+                    metadata={
+                        "permission": "confirm_required",
+                        "ability_id": "mail",
+                        "query": query,
+                    },
+                ),
+            ),
+        )
+        plan = SimpleNamespace(steps=())
+        plan_result = SimpleNamespace(
+            step_results=(calendar_step, mail_step),
+            response="메일을 보낼까요?",
+            success=True,
+            error="confirm_required",
+            task=None,
+        )
+
+        runtime_result = runtime_result_from_plan_result(plan_result, plan)
+        pending_action = extract_pending_action(runtime_result)
+
+        self.assertEqual(runtime_result.tool_name, "mail")
+        self.assertEqual(pending_action["ability"], "mail")
+        self.assertEqual(pending_action["action"], "send")
+
     def test_google_calendar_embedded_reminder_skips_local_continuation(self):
         """Check Google Calendar reminder override does not run a duplicate local reminder."""
         pending_action = {

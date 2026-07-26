@@ -131,6 +131,9 @@
   URL, and HTML noise before TTS.
 - Changed recipient-less Calendar-to-Mail requests to ask who should receive
   the message instead of treating schedule text as a contact name.
+- Preserved the confirming Mail step when adapting multi-step Runtime results
+  for Voice, so `Calendar -> Mail -> WAIT_CONFIRM -> 응` resumes the same task.
+- Accepted the common Korean STT `보내러` variant in Calendar-to-Mail routing.
 
 ### Compatibility
 

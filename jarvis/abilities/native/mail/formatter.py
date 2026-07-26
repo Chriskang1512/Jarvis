@@ -112,7 +112,7 @@ def get_message(message, include_body=False):
 
     sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
     subject = message.subject or "제목 없음"
-    snippet = compact_spoken_summary(message.body_summary or message.snippet, 120)
+    snippet = compact_spoken_summary(message.body_summary or message.snippet, 80)
     received = format_received_at(message.received_at)
     received_sentence = f" 받은 시각은 {received}입니다." if received else ""
 
