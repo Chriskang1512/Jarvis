@@ -540,6 +540,36 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertIsNotNone(session.get_pending_action())
         self.assertEqual(session.pending_action_turns_remaining, 2)
 
+    def test_repeated_stt_failures_return_to_wake_without_dropping_confirmation(self):
+        session = create_conversation_session(follow_up_timeout=8)
+        session.start()
+        session.set_pending_action(
+            {
+                "ability": "mail",
+                "action": "send",
+                "input_data": {"action": "send", "recipient_name": "아야"},
+            }
+        )
+        pipeline = VoicePipeline(
+            wake_listener=None,
+            stt_provider=FollowUpSTTProvider(
+                first="",
+                follow_ups=[
+                    "Speech recognition failed: no speech detected",
+                    "Speech recognition failed: no speech detected",
+                ],
+            ),
+            chat_service=None,
+            tts_provider=CapturingTTSProvider(),
+            follow_up_timeout=8,
+            conversation_session=session,
+        )
+
+        pipeline.run_follow_up_loop()
+
+        self.assertIsNotNone(session.get_pending_action())
+        self.assertEqual(session.pending_action_turns_remaining, 2)
+
     def test_runtime_plan_calendar_confirmation_is_saved_and_confirmed(self):
         """Check planner results keep confirm metadata for the follow-up yes turn."""
         provider = MockCalendarProvider(events=[])

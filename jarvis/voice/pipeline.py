@@ -232,6 +232,7 @@ class VoicePipeline:
             self.close_conversation_session()
             return
 
+        pending_stt_failures = 0
         while True:
             self.enter_follow_up_state()
             follow_up_text = self.listen_for_follow_up()
@@ -245,11 +246,11 @@ class VoicePipeline:
                     if str(follow_up_text or "").strip() == "":
                         self.close_conversation_session()
                         return
-                    self.speak_pending_action_retry()
-                    self.advance_pending_action_turn()
-                    if not self.has_pending_action():
+                    pending_stt_failures += 1
+                    if pending_stt_failures > 1:
                         self.close_conversation_session()
                         return
+                    self.speak_pending_action_retry()
                     continue
 
                 self.close_conversation_session()
