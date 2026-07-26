@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Added a no-STT live Wake hardening probe and a repeatable room-test matrix
+  for clap timing and environmental false-positive validation.
 - Ignored context-free yes/no transcripts on the first post-Wake command and
   returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard
