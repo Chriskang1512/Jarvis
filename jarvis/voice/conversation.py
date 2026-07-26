@@ -15,7 +15,7 @@ CONVERSATION_FOLLOW_UP = "FOLLOW_UP"
 CONVERSATION_CLOSED = "CLOSED"
 DEFAULT_LAST_MEMORY_RESULT_TURNS = 2
 DEFAULT_PENDING_ACTION_TURNS = 2
-DEFAULT_PENDING_ACTION_SECONDS = 30.0
+DEFAULT_PENDING_ACTION_SECONDS = 120.0
 DEFAULT_PENDING_CLARIFICATION_TURNS = 2
 DEFAULT_PENDING_CLARIFICATION_SECONDS = 45.0
 
@@ -47,8 +47,11 @@ class ConversationSession:
         """Move to follow-up listening state."""
         self.transition(CONVERSATION_FOLLOW_UP)
 
-    def close(self):
+    def close(self, preserve_context=False):
         """Close the conversation session."""
+        if preserve_context:
+            self.transition(CONVERSATION_CLOSED)
+            return
         self.clear_last_memory_result()
         self.clear_last_calendar_result()
         self.clear_last_reminder()

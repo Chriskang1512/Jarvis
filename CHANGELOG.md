@@ -125,6 +125,8 @@
 
 ### Fixed
 
+- Pending confirmations now survive a no-speech follow-up and the next wake
+  session instead of falling through to general chat.
 - Workspace mail planning now accepts schedule-first recipient phrasing and
   normalizes natural recipient clarification replies before contact resolution.
 - Restored compact Gmail voice UX by announcing the total count while reading

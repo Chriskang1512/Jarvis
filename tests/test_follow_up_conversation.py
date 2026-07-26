@@ -489,6 +489,57 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertEqual(len(provider.events), 1)
         self.assertIsNone(session.get_pending_action())
 
+    def test_pending_confirmation_survives_no_speech_and_next_wake_session(self):
+        session = create_conversation_session(follow_up_timeout=8)
+        session.start()
+        session.set_pending_action(
+            {
+                "ability": "mail",
+                "action": "send",
+                "input_data": {"action": "send", "recipient_name": "아야"},
+            }
+        )
+        pipeline = VoicePipeline(
+            wake_listener=None,
+            stt_provider=None,
+            chat_service=None,
+            tts_provider=None,
+            follow_up_timeout=8,
+            conversation_session=session,
+        )
+
+        pipeline.close_conversation_session()
+        self.assertIsNotNone(session.get_pending_action())
+
+        pipeline.start_conversation_session()
+        self.assertIsNotNone(pipeline.conversation_session.get_pending_action())
+        self.assertEqual(pipeline.try_pending_action_confirmation_reply("아니"), "취소했습니다.")
+        self.assertIsNone(pipeline.conversation_session.get_pending_action())
+
+    def test_empty_follow_up_timeout_does_not_consume_pending_confirmation(self):
+        session = create_conversation_session(follow_up_timeout=8)
+        session.start()
+        session.set_pending_action(
+            {
+                "ability": "mail",
+                "action": "send",
+                "input_data": {"action": "send", "recipient_name": "아야"},
+            }
+        )
+        pipeline = VoicePipeline(
+            wake_listener=None,
+            stt_provider=FollowUpSTTProvider(first="", follow_ups=[]),
+            chat_service=None,
+            tts_provider=None,
+            follow_up_timeout=8,
+            conversation_session=session,
+        )
+
+        pipeline.run_follow_up_loop()
+
+        self.assertIsNotNone(session.get_pending_action())
+        self.assertEqual(session.pending_action_turns_remaining, 2)
+
     def test_runtime_plan_calendar_confirmation_is_saved_and_confirmed(self):
         """Check planner results keep confirm metadata for the follow-up yes turn."""
         provider = MockCalendarProvider(events=[])

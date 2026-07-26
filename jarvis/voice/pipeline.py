@@ -242,9 +242,11 @@ class VoicePipeline:
                     continue
 
                 if self.has_pending_action():
-                    self.speak_pending_action_retry()
                     if str(follow_up_text or "").strip() == "":
-                        self.advance_pending_action_turn()
+                        self.close_conversation_session()
+                        return
+                    self.speak_pending_action_retry()
+                    self.advance_pending_action_turn()
                     if not self.has_pending_action():
                         self.close_conversation_session()
                         return
@@ -655,9 +657,14 @@ class VoicePipeline:
 
     def start_conversation_session(self):
         """Start a wake-word conversation session."""
+        pending_runtime_task = None
+        if self.conversation_session is not None and self.conversation_session.get_pending_action() is not None:
+            pending_runtime_task = self.conversation_session.runtime_task
         self.conversation_session = create_conversation_session(
             follow_up_timeout=self.follow_up_timeout,
         )
+        if pending_runtime_task is not None:
+            self.conversation_session.runtime_task = pending_runtime_task
         self.conversation_session.start()
         self.seed_conversation_runtime_memory()
         self.publish_conversation_event("conversation.started")
@@ -685,7 +692,7 @@ class VoicePipeline:
         if self.conversation_session is None:
             return
 
-        self.conversation_session.close()
+        self.conversation_session.close(preserve_context=self.has_pending_action())
         self.set_session_stage("idle")
         self.publish_pipeline(current_stage="idle")
         self.publish_conversation_event("conversation.closed")
