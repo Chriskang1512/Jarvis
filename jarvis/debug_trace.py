@@ -43,7 +43,10 @@ def format_trace_event(event, payload):
         return (
             f"[Clap] state={payload.get('state') or '-'} "
             f"gap={'-' if gap is None else f'{float(gap):.3f}s'} "
-            f"reason={payload.get('rejection_reason') or '-'}"
+            f"reason={payload.get('rejection_reason') or '-'} "
+            f"released={payload.get('signal_released')} "
+            f"candidate={payload.get('second_candidate_reason') or '-'} "
+            f"activations={payload.get('activation_count', 0)}"
         )
 
     if event == "voice.command.skipped":

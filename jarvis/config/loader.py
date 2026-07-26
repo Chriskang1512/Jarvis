@@ -125,6 +125,12 @@ def create_wake_config(wake_data):
         clap_second_threshold_ratio=float(
             wake_data.get("clap_second_threshold_ratio", 0.65)
         ),
+        clap_release_threshold_ratio=float(
+            wake_data.get("clap_release_threshold_ratio", 0.35)
+        ),
+        clap_noise_floor_multiplier=float(
+            wake_data.get("clap_noise_floor_multiplier", 4.0)
+        ),
     )
 
 

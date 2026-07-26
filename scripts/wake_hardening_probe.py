@@ -42,6 +42,8 @@ def main():
         max_gap_seconds=config.wake.clap_max_gap_seconds,
         settle_seconds=config.wake.clap_settle_seconds,
         second_clap_threshold_ratio=config.wake.clap_second_threshold_ratio,
+        release_threshold_ratio=config.wake.clap_release_threshold_ratio,
+        noise_floor_multiplier=config.wake.clap_noise_floor_multiplier,
     )
     detector = ClapDetector(settings)
     activations = 0
@@ -66,7 +68,9 @@ def main():
         f"crest={settings.crest_factor_threshold:.2f} "
         f"gap={settings.min_gap_seconds:.2f}-{settings.max_gap_seconds:.2f}s "
         f"settle={settings.settle_seconds:.2f}s "
-        f"second_ratio={settings.second_clap_threshold_ratio:.2f}"
+        f"second_ratio={settings.second_clap_threshold_ratio:.2f} "
+        f"release_ratio={settings.release_threshold_ratio:.2f} "
+        f"noise_multiplier={settings.noise_floor_multiplier:.1f}"
     )
     print("[Probe] READY - perform the sound now")
 
@@ -85,14 +89,10 @@ def main():
         max_peak = max(max_peak, peak)
         max_rms = max(max_rms, rms)
         max_crest = max(max_crest, crest)
-        threshold_ratio = (
-            settings.second_clap_threshold_ratio
-            if detector.first_clap_at is not None and detector.second_clap_at is None
-            else 1.0
-        )
+        peak_threshold, rms_threshold = detector.current_thresholds()
         if (
-            peak >= settings.peak_threshold * threshold_ratio
-            and rms >= settings.rms_threshold * threshold_ratio
+            peak >= peak_threshold
+            and rms >= rms_threshold
             and crest >= settings.crest_factor_threshold
         ):
             candidate_count += 1
@@ -123,6 +123,12 @@ def main():
                 f"second_clap_at={format_relative_time(second_at, capture_started_at)} "
                 f"gap={'-' if gap_seconds is None else f'{gap_seconds:.3f}s'} "
                 f"rejection_reason={diagnostic.get('rejection_reason') or '-'} "
+                f"first_threshold={format_threshold(diagnostic.get('first_threshold'))} "
+                f"second_threshold={format_threshold(diagnostic.get('second_threshold'))} "
+                f"refractory_elapsed={format_seconds(diagnostic.get('refractory_elapsed'))} "
+                f"signal_released={diagnostic.get('signal_released')} "
+                f"second_candidate_reason={diagnostic.get('second_candidate_reason') or '-'} "
+                f"activation_count={diagnostic.get('activation_count', activations)} "
                 f"peak={peak:.3f} rms={rms:.3f} crest={crest:.2f}"
             )
         if detected:
@@ -158,6 +164,18 @@ def format_relative_time(timestamp, started_at):
     if timestamp is None:
         return "-"
     return f"{float(timestamp) - float(started_at):.3f}s"
+
+
+def format_threshold(threshold):
+    if not threshold:
+        return "-"
+    return f"peak:{float(threshold[0]):.3f}/rms:{float(threshold[1]):.3f}"
+
+
+def format_seconds(value):
+    if value is None:
+        return "-"
+    return f"{float(value):.3f}s"
 
 
 if __name__ == "__main__":

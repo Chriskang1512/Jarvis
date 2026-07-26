@@ -137,6 +137,12 @@ class ClapWakeProvider(QueueWakeProvider):
                 first_clap_at=diagnostic.get("first_clap_at"),
                 second_clap_at=diagnostic.get("second_clap_at"),
                 gap_seconds=diagnostic.get("gap_seconds"),
+                first_threshold=diagnostic.get("first_threshold"),
+                second_threshold=diagnostic.get("second_threshold"),
+                refractory_elapsed=diagnostic.get("refractory_elapsed"),
+                signal_released=diagnostic.get("signal_released"),
+                second_candidate_reason=diagnostic.get("second_candidate_reason"),
+                activation_count=diagnostic.get("activation_count"),
             )
         if detected:
             self.trigger({"pattern": "double_clap"})

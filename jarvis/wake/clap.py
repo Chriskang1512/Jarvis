@@ -16,6 +16,8 @@ class ClapDetectorSettings:
     refractory_seconds: float = 0.08
     settle_seconds: float = 0.5
     second_clap_threshold_ratio: float = 0.65
+    release_threshold_ratio: float = 0.35
+    noise_floor_multiplier: float = 4.0
 
 
 class ClapDetector:
@@ -26,6 +28,9 @@ class ClapDetector:
         self.last_impulse_at = None
         self.first_clap_at = None
         self.second_clap_at = None
+        self.signal_released = False
+        self.noise_floor_rms = 0.0
+        self.activation_count = 0
         self.last_decision = ""
         self.last_diagnostic = {}
 
@@ -36,18 +41,42 @@ class ClapDetector:
         peak = max(abs(sample) for sample in values)
         rms = sqrt(sum(sample * sample for sample in values) / len(values))
         crest = peak / max(rms, 1e-9)
-        threshold_ratio = (
-            self.settings.second_clap_threshold_ratio
-            if self.first_clap_at is not None and self.second_clap_at is None
-            else 1.0
+        now = float(timestamp)
+        pending_second = self.first_clap_at is not None and self.second_clap_at is None
+        refractory_elapsed = (
+            now - self.first_clap_at if pending_second else None
         )
+        if (
+            pending_second
+            and not self.signal_released
+            and refractory_elapsed >= self.settings.refractory_seconds
+            and peak
+            <= self.settings.peak_threshold * self.settings.release_threshold_ratio
+            and rms
+            <= self.settings.rms_threshold * self.settings.release_threshold_ratio
+        ):
+            self.signal_released = True
+            self.set_diagnostic(
+                "SECOND_CLAP_ARMED",
+                first_clap_at=self.first_clap_at,
+                gap_seconds=refractory_elapsed,
+                refractory_elapsed=refractory_elapsed,
+                signal_released=True,
+                second_candidate_reason="signal_released",
+            )
+        peak_threshold, rms_threshold = self.current_thresholds()
         is_impulse = (
-            peak >= self.settings.peak_threshold * threshold_ratio
-            and rms >= self.settings.rms_threshold * threshold_ratio
+            peak >= peak_threshold
+            and rms >= rms_threshold
             and crest >= self.settings.crest_factor_threshold
         )
-        now = float(timestamp)
         if not is_impulse:
+            if not pending_second or self.signal_released:
+                self.noise_floor_rms = (
+                    rms
+                    if self.noise_floor_rms <= 0.0
+                    else self.noise_floor_rms * 0.95 + rms * 0.05
+                )
             if (
                 self.second_clap_at is not None
                 and now - self.second_clap_at >= self.settings.settle_seconds
@@ -70,7 +99,10 @@ class ClapDetector:
                     first_clap_at=first_clap_at,
                     second_clap_at=second_clap_at,
                     gap_seconds=second_clap_at - first_clap_at,
+                    signal_released=True,
+                    activation_count=self.activation_count + 1,
                 )
+                self.activation_count += 1
                 return True
             if (
                 self.second_clap_at is None
@@ -78,6 +110,21 @@ class ClapDetector:
                 and now - self.first_clap_at > self.settings.max_gap_seconds
             ):
                 self.first_clap_at = None
+            return False
+        if pending_second and not self.signal_released:
+            self.set_diagnostic(
+                "REJECTED",
+                rejection_reason=(
+                    "refractory"
+                    if refractory_elapsed < self.settings.refractory_seconds
+                    else "signal_not_released"
+                ),
+                first_clap_at=self.first_clap_at,
+                gap_seconds=refractory_elapsed,
+                refractory_elapsed=refractory_elapsed,
+                signal_released=False,
+                second_candidate_reason="release_required",
+            )
             return False
         if (
             self.last_impulse_at is not None
@@ -107,13 +154,20 @@ class ClapDetector:
             return False
         if self.first_clap_at is None:
             self.first_clap_at = now
+            self.signal_released = False
             self.last_decision = "FIRST_CLAP"
-            self.set_diagnostic("FIRST_CLAP", first_clap_at=now)
+            self.set_diagnostic(
+                "FIRST_CLAP",
+                first_clap_at=now,
+                signal_released=False,
+                first_threshold=(self.settings.peak_threshold, self.settings.rms_threshold),
+            )
             return False
         gap = now - self.first_clap_at
         if gap > self.settings.max_gap_seconds:
             previous_first_clap_at = self.first_clap_at
             self.first_clap_at = now
+            self.signal_released = False
             self.last_decision = "FIRST_CLAP"
             self.set_diagnostic(
                 "FIRST_CLAP",
@@ -139,12 +193,32 @@ class ClapDetector:
             first_clap_at=self.first_clap_at,
             second_clap_at=now,
             gap_seconds=gap,
+            refractory_elapsed=gap,
+            signal_released=self.signal_released,
+            second_threshold=(peak_threshold, rms_threshold),
+            second_candidate_reason="adaptive_threshold",
         )
         return False
 
     def reset_pattern(self):
         self.first_clap_at = None
         self.second_clap_at = None
+        self.signal_released = False
+
+    def current_thresholds(self):
+        pending_second = self.first_clap_at is not None and self.second_clap_at is None
+        threshold_ratio = (
+            self.settings.second_clap_threshold_ratio
+            if pending_second and self.signal_released
+            else 1.0
+        )
+        return (
+            self.settings.peak_threshold * threshold_ratio,
+            max(
+                self.settings.rms_threshold * threshold_ratio,
+                self.noise_floor_rms * self.settings.noise_floor_multiplier,
+            ),
+        )
 
     def pop_decision(self):
         decision = self.last_decision
@@ -159,6 +233,12 @@ class ClapDetector:
         first_clap_at=None,
         second_clap_at=None,
         gap_seconds=None,
+        first_threshold=None,
+        second_threshold=None,
+        refractory_elapsed=None,
+        signal_released=None,
+        second_candidate_reason="",
+        activation_count=None,
     ):
         self.last_diagnostic = {
             "detector_state": detector_state,
@@ -166,6 +246,14 @@ class ClapDetector:
             "first_clap_at": first_clap_at,
             "second_clap_at": second_clap_at,
             "gap_seconds": gap_seconds,
+            "first_threshold": first_threshold,
+            "second_threshold": second_threshold,
+            "refractory_elapsed": refractory_elapsed,
+            "signal_released": signal_released,
+            "second_candidate_reason": second_candidate_reason,
+            "activation_count": (
+                self.activation_count if activation_count is None else activation_count
+            ),
         }
 
     def pop_diagnostic(self):

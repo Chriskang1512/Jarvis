@@ -165,6 +165,8 @@ def create_wake_manager(config, wake_word):
                 max_gap_seconds=config.wake.clap_max_gap_seconds,
                 settle_seconds=config.wake.clap_settle_seconds,
                 second_clap_threshold_ratio=config.wake.clap_second_threshold_ratio,
+                release_threshold_ratio=config.wake.clap_release_threshold_ratio,
+                noise_floor_multiplier=config.wake.clap_noise_floor_multiplier,
             )
         )
     )

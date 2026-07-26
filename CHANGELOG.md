@@ -16,6 +16,9 @@
   one detector failure cannot silently stop the shared microphone callback.
 - Added a bounded adaptive threshold for only the second clap after a strict
   first-clap match; the post-fix room baseline was 2/11 confirmations.
+- Required signal release and noise-floor-relative strength before arming the
+  experimental second-clap threshold, preventing one clap's echo from counting
+  as a second candidate.
 - Ignored context-free yes/no transcripts on the first post-Wake command and
   returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard

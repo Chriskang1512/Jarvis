@@ -110,6 +110,7 @@ class TestClapDetector(unittest.TestCase):
 
         self.assertFalse(detector.process(impulse, 1.0))
         self.assertEqual(detector.pop_decision(), "FIRST_CLAP")
+        self.assertFalse(detector.process(silence, 1.10))
         self.assertFalse(detector.process(impulse, 1.35))
         self.assertEqual(detector.pop_decision(), "DOUBLE_PENDING")
         self.assertFalse(detector.process(silence, 1.58))
@@ -130,6 +131,7 @@ class TestClapDetector(unittest.TestCase):
         silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(silence, 1.10))
         self.assertFalse(detector.process(impulse, 1.3))
         self.assertFalse(detector.process(impulse, 1.45))
         self.assertEqual(detector.pop_decision(), "TRIPLE_CANCELLED")
@@ -141,6 +143,7 @@ class TestClapDetector(unittest.TestCase):
         silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(silence, 1.10))
         self.assertFalse(detector.process(impulse, 1.3))
         self.assertFalse(detector.process(silence, 1.75))
         self.assertFalse(detector.process(impulse, 1.9))
@@ -156,9 +159,12 @@ class TestClapDetector(unittest.TestCase):
     def test_late_second_clap_starts_a_new_pair(self):
         detector = ClapDetector()
         impulse = [0.0] * 99 + [1.0]
+        silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(silence, 1.10))
         self.assertFalse(detector.process(impulse, 2.0))
+        self.assertFalse(detector.process(silence, 2.10))
         self.assertFalse(detector.process(impulse, 2.3))
         self.assertTrue(detector.process([0.0] * 100, 2.81))
 
@@ -168,6 +174,8 @@ class TestClapDetector(unittest.TestCase):
 
         self.assertFalse(detector.process(impulse, 1.0))
         detector.pop_decision()
+        detector.pop_diagnostic()
+        self.assertFalse(detector.process([0.0] * 100, 1.10))
         detector.pop_diagnostic()
         self.assertFalse(detector.process(impulse, 1.9))
 
@@ -196,6 +204,7 @@ class TestClapDetector(unittest.TestCase):
         silence = [0.0] * 100
 
         self.assertFalse(detector.process(impulse, 1.0))
+        self.assertFalse(detector.process(silence, 1.10))
         self.assertFalse(detector.process(impulse, 1.45))
         self.assertFalse(detector.process(silence, 1.85))
         self.assertTrue(detector.process(silence, 1.96))
@@ -212,10 +221,30 @@ class TestClapDetector(unittest.TestCase):
         weaker_second = [0.0] * 97 + [0.4, 0.4, 0.4]
 
         self.assertFalse(detector.process(strict_first, 1.0))
+        self.assertFalse(detector.process([0.0] * 100, 1.10))
+        self.assertEqual(
+            detector.pop_diagnostic()["detector_state"],
+            "SECOND_CLAP_ARMED",
+        )
         self.assertFalse(detector.process(weaker_second, 1.45))
 
         self.assertEqual(detector.pop_decision(), "DOUBLE_PENDING")
         self.assertAlmostEqual(detector.second_clap_at, 1.45)
+
+    def test_first_clap_echo_cannot_arm_or_become_second_clap(self):
+        detector = ClapDetector()
+        strict_impulse = [0.0] * 99 + [1.0]
+
+        self.assertFalse(detector.process(strict_impulse, 1.0))
+        detector.pop_decision()
+        detector.pop_diagnostic()
+        self.assertFalse(detector.process(strict_impulse, 1.15))
+
+        diagnostic = detector.pop_diagnostic()
+        self.assertEqual(diagnostic["detector_state"], "REJECTED")
+        self.assertEqual(diagnostic["rejection_reason"], "signal_not_released")
+        self.assertFalse(diagnostic["signal_released"])
+        self.assertIsNone(detector.second_clap_at)
 
     def test_missing_first_clap_is_rejected_without_callback_exception(self):
         detector = ClapDetector()
@@ -374,6 +403,8 @@ class TestWakeConfiguration(unittest.TestCase):
                     "clap_peak_threshold": 0.7,
                     "clap_settle_seconds": 0.3,
                     "clap_second_threshold_ratio": 0.6,
+                    "clap_release_threshold_ratio": 0.3,
+                    "clap_noise_floor_multiplier": 5.0,
                 }
             }
         )
@@ -385,6 +416,8 @@ class TestWakeConfiguration(unittest.TestCase):
         self.assertEqual(config.wake.clap_peak_threshold, 0.7)
         self.assertEqual(config.wake.clap_settle_seconds, 0.3)
         self.assertEqual(config.wake.clap_second_threshold_ratio, 0.6)
+        self.assertEqual(config.wake.clap_release_threshold_ratio, 0.3)
+        self.assertEqual(config.wake.clap_noise_floor_multiplier, 5.0)
 
     def test_legacy_listener_accepts_korean_alias(self):
         listener = WakeWordListener("hey jarvis", aliases=("헤이 자비스", "자비스"))
@@ -403,6 +436,7 @@ class FakeClapMonitor:
         self.started = True
         impulse = [0.0] * 99 + [1.0]
         self.provider.feed_audio(impulse, 1.0)
+        self.provider.feed_audio([0.0] * 100, 1.1)
         self.provider.feed_audio(impulse, 1.3)
         self.provider.feed_audio([0.0] * 100, 1.85)
         return True

@@ -48,6 +48,20 @@ clap retains the strict baseline. During its bounded 0.8-second pending window,
 the second clap uses `clap_second_threshold_ratio=0.65` to tolerate microphone
 AGC attenuation without allowing a weak sound to start a clap sequence.
 
+The adaptive threshold is experimental and is armed only after all of these
+conditions hold:
+
+- the strict first clap was accepted;
+- the refractory interval elapsed;
+- peak and RMS returned below the release threshold;
+- the second candidate still passes the original crest-factor requirement;
+- its RMS exceeds both the adaptive threshold and four times recent noise.
+
+Trace exposes first/second thresholds, refractory elapsed time, release state,
+second-candidate reason, and cumulative activation count. Final approval
+requires 9/10 Double Clap success plus zero activation across repeated Single
+Clap, Triple Clap, keyboard, desk, door, and media tests.
+
 ## Full Runtime Checks
 
 1. Start `start_jarvis.ps1` and confirm `WAKE_LISTENING monitor=ON`.
