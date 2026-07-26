@@ -7,6 +7,7 @@ from jarvis.config import ConfigurationLoader
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
+from jarvis.input import InputManager, KeyboardInputProvider
 from jarvis.memory import ConversationContext, MemoryService, MockMemoryProvider
 from jarvis.memory_store import JsonMemoryStore, MemoryManager
 from jarvis.permissions import PermissionLayer
@@ -69,6 +70,8 @@ def main():
         tool_dispatcher=tool_dispatcher,
         config=config,
     )
+    input_manager = InputManager()
+    keyboard_provider = KeyboardInputProvider()
 
     print("================================")
     print(f"Jarvis {config.version}")
@@ -80,8 +83,9 @@ def main():
         print("--------------------------")
 
     while True:
-        user_command = input("Jarvis > ").strip()
-        response = dispatcher.dispatch(user_command)
+        keyboard_provider.submit(input("Jarvis > ").strip())
+        input_envelope = input_manager.ingest(keyboard_provider)
+        response = dispatcher.dispatch(str(input_envelope.content or ""))
 
         print(response)
         print("--------------------------")

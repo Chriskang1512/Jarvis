@@ -15,6 +15,7 @@ from jarvis.abilities.result import AbilityResult
 from jarvis.brain import IntentRuntime
 from jarvis.diagnostics import DiagnosticsCollector
 from jarvis.diagnostics.runtime_console import RuntimeDevConsole
+from jarvis.input import InputType
 from jarvis.native.reminder import ReminderEngine, ReminderQueue
 from jarvis.runtime.intent import IntentParseResult
 from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
@@ -539,6 +540,11 @@ class TestFollowUpConversationMode(unittest.TestCase):
 
         self.assertIsNotNone(session.get_pending_action())
         self.assertEqual(session.pending_action_turns_remaining, 2)
+        self.assertEqual(
+            pipeline.last_input_envelope.context.turn_type,
+            InputType.CONFIRMATION,
+        )
+        self.assertEqual(pipeline.last_input_envelope.metadata["stage"], "follow_up")
 
     def test_repeated_stt_failures_return_to_wake_without_dropping_confirmation(self):
         session = create_conversation_session(follow_up_timeout=8)

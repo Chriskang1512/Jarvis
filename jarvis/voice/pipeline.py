@@ -37,7 +37,7 @@ from jarvis.voice.semantic import SemanticTranscriptContext, SemanticTranscriptN
 from jarvis.voice.text_normalizer import normalize_tts_text
 from jarvis.voice.user_vocabulary import format_corrections, normalize_stt_text
 from jarvis.privacy import redact_sensitive_text
-from jarvis.input import InputManager, InputModality, InputSource
+from jarvis.input import InputManager, InputModality, InputSource, InputType
 
 
 class VoicePipeline:
@@ -128,13 +128,10 @@ class VoicePipeline:
         self.publish_pipeline(stt="started", current_stage="stt")
         self.log_event("STT started")
         user_message = self.listen_and_normalize_stt()
-        self.last_input_envelope = self.input_manager.create(
-            InputSource.VOICE,
-            InputModality.TEXT,
-            content=user_message,
-            wake_event=self.last_wake_event,
-            correlation_id=str(getattr(self.voice_session, "session_id", "") or ""),
-            metadata={"stage": "stt"},
+        self.last_input_envelope = self.create_voice_input_envelope(
+            user_message,
+            InputType.COMMAND,
+            stage="stt",
         )
         user_message = str(self.last_input_envelope.content or "")
         stt_latency = perf_counter() - stt_start
@@ -256,7 +253,18 @@ class VoicePipeline:
         pending_stt_failures = 0
         while True:
             self.enter_follow_up_state()
+            follow_up_type = (
+                InputType.CONFIRMATION
+                if self.should_listen_for_confirmation()
+                else InputType.FOLLOW_UP
+            )
             follow_up_text = self.listen_for_follow_up()
+            self.last_input_envelope = self.create_voice_input_envelope(
+                follow_up_text,
+                follow_up_type,
+                stage="follow_up",
+            )
+            follow_up_text = str(self.last_input_envelope.content or "")
 
             if should_skip_voice_message(follow_up_text):
                 if self.has_calendar_conversation_task():
@@ -283,6 +291,18 @@ class VoicePipeline:
                 return
 
             self.process_follow_up_text(follow_up_text)
+
+    def create_voice_input_envelope(self, content, input_type, stage):
+        """Normalize every voice turn through the shared Input Manager."""
+        return self.input_manager.create(
+            InputSource.VOICE,
+            InputModality.TEXT,
+            content=content,
+            wake_event=self.last_wake_event,
+            correlation_id=str(getattr(self.voice_session, "session_id", "") or ""),
+            metadata={"stage": str(stage)},
+            input_type=input_type,
+        )
 
     def process_follow_up_text(self, user_message):
         """Process one follow-up text without wake-word detection."""

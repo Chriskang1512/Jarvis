@@ -1,7 +1,15 @@
 import unittest
 
 from jarvis.config.loader import create_config_from_dict
-from jarvis.input import InputManager, InputModality, InputSource
+from jarvis.input import (
+    ActivationType,
+    ClipboardInputProvider,
+    InputManager,
+    InputModality,
+    InputSource,
+    InputType,
+    KeyboardInputProvider,
+)
 from jarvis.wake import (
     ApiWakeProvider,
     ClapDetector,
@@ -52,6 +60,45 @@ class TestInputManager(unittest.TestCase):
         self.assertEqual(envelope.wake_method, WakeMethod.API.value)
         self.assertEqual(envelope.metadata["wake_provider"], "api")
         self.assertNotIn("remote_request_id", envelope.metadata)
+
+    def test_envelope_preserves_typed_activation_context(self):
+        provider = WakeWordProvider()
+        provider.feed_text("헤이 자비스")
+        wake_event = provider.poll()
+
+        envelope = InputManager().create(
+            InputSource.VOICE,
+            InputModality.TEXT,
+            content="오늘 날씨",
+            wake_event=wake_event,
+            correlation_id="session-1",
+        )
+
+        activation = envelope.context.activation
+        self.assertEqual(activation.activation_type, ActivationType.WAKE_WORD)
+        self.assertEqual(activation.activation_provider, "wake_word")
+        self.assertEqual(activation.activation_phrase, "헤이 자비스")
+        self.assertEqual(activation.activation_id, wake_event.event_id)
+        self.assertEqual(envelope.context.session_id, "session-1")
+
+    def test_keyboard_and_clipboard_use_common_ingest_gate(self):
+        manager = InputManager()
+        keyboard = KeyboardInputProvider()
+        clipboard = ClipboardInputProvider()
+        keyboard.submit("status")
+        clipboard.submit("private clipboard")
+
+        keyboard_envelope = manager.ingest(keyboard)
+        clipboard_envelope = manager.ingest(
+            clipboard,
+            input_type=InputType.CONTENT,
+        )
+
+        self.assertEqual(keyboard_envelope.source, InputSource.KEYBOARD)
+        self.assertEqual(keyboard_envelope.metadata["input_provider"], "keyboard_text")
+        self.assertEqual(clipboard_envelope.source, InputSource.CLIPBOARD)
+        self.assertEqual(clipboard_envelope.context.turn_type, InputType.CONTENT)
+        self.assertNotIn("content", clipboard_envelope.to_dict())
 
 
 class TestClapDetector(unittest.TestCase):

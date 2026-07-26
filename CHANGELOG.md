@@ -18,6 +18,12 @@
 
 ### Added
 
+- Typed `ActivationContext`, `InputContext`, `InputMetadata`, and `InputType`
+  contracts that preserve Wake provenance without coupling Planner to Wake.
+- Common `InputProvider.read() -> InputManager.ingest() -> InputEnvelope`
+  adapters for Keyboard and Clipboard plus OCR, Image, File, and Mobile stubs.
+- Input Manager normalization for the console keyboard path and every Voice
+  command, follow-up, and confirmation turn.
 - Sprint 19 Input and Wake foundation with provider-driven Clap, Voice,
   Keyboard, Touch Portal, Mobile, and API wake methods.
 - PCM double-clap detection before STT with transient/noise rejection,

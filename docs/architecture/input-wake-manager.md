@@ -3,15 +3,19 @@
 Sprint 19 places a provider-driven Wake layer before normalized input.
 
 ```text
-Microphone
-  -> Wake audio capture
-     -> Double Clap Detector
-     -> Short Speech Segmenter
-        -> Wake Phrase Transcriber
-  -> Wake Manager
-     -> Input Manager
-     -> InputEnvelope
-     -> Planner
+Voice / Keyboard / Clipboard / Future Inputs
+  -> InputProvider
+  -> InputManager
+  -> InputEnvelope
+     -> InputContext
+        -> ActivationContext
+  -> Intent Parser
+  -> Planner
+
+Microphone / Hotkey / External Trigger
+  -> WakeManager
+  -> ActivationContext
+  -> InputManager
 ```
 
 ## Wake Providers
@@ -57,12 +61,37 @@ profile but Wake Word remains available as a fallback.
 
 ## Input Envelope
 
-All future Voice, Keyboard, Clipboard, OCR, Image, File, Drag and Drop, Mobile,
-and API inputs normalize to `InputEnvelope`.
+Voice, Keyboard, and Clipboard inputs plus OCR, Image, File, Mobile, and API
+provider boundaries normalize through `InputManager.ingest()` into an immutable
+`InputEnvelope`. The console keyboard path and every Voice turn, including
+follow-up and confirmation speech, use this same gate.
 
-The envelope contains source, modality, wake method, correlation metadata, and
-a content fingerprint. `to_dict()` excludes raw content unless a caller
-explicitly requests it. Raw input must not be written to operational logs.
+The envelope contains source, modality, input type, correlation context,
+typed metadata, and a content fingerprint. `to_dict()` excludes raw content
+unless a caller explicitly requests it. Raw input must not be written to
+operational logs.
+
+`ActivationContext` generalizes how Jarvis was activated:
+
+```text
+activation_type
+activation_provider
+activation_phrase
+activated_at
+confidence
+activation_id
+```
+
+Wake Word, double clap, hotkey, and external triggers therefore share one
+Planner-independent contract. The legacy `wake_method` and `wake_provider`
+fields remain readable during migration but are derived compatibility data.
+
+## Input Providers
+
+`InputProvider.read()` returns provider-neutral `ProviderInput`. Keyboard and
+Clipboard use queue adapters today; platform callbacks submit content without
+calling Planner directly. OCR, Image, File, and Mobile adapters are explicit
+stubs with stable source and modality declarations.
 
 ## Runtime Contract
 
