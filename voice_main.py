@@ -20,25 +20,29 @@ from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
 from jarvis.tools import create_default_tool_registry
 from jarvis.voice import (
     VoicePipeline,
-    WakeWordListener,
     create_stt_provider,
     create_tts_provider,
     create_voice_session,
 )
 from jarvis.voice.playback import read_playback_backend_name
-from jarvis.voice.providers import read_stt_provider_name, should_keep_tts_audio
+from jarvis.voice.providers import (
+    read_stt_provider_name,
+    should_keep_tts_audio,
+    transcribe_stt_audio,
+)
 from jarvis.voice.stt import is_stt_metrics_enabled
 from jarvis.wake import (
     ApiWakeProvider,
     ClapWakeProvider,
     KeyboardWakeProvider,
+    MicrophoneWakeWordProvider,
     MobileWakeProvider,
     TouchPortalWakeProvider,
     WakeManager,
     WakeMethod,
     WakeProfile,
     WakeSettings,
-    WakeWordProvider,
+    SoundDeviceClapMonitor,
 )
 
 
@@ -125,7 +129,7 @@ def main():
 
 
 def create_wake_manager(config, wake_word):
-    """Create enabled Wake Providers while preserving console wake compatibility."""
+    """Create enabled Wake Providers backed by one shared microphone stream."""
     method_map = {method.value: method for method in WakeMethod}
     enabled = tuple(
         method_map[name]
@@ -149,12 +153,27 @@ def create_wake_manager(config, wake_word):
         voice_phrases=phrases,
         keyboard_hotkey=config.wake.keyboard_hotkey,
     )
-    providers = (
-        ClapWakeProvider(
-            microphone=WakeMethod.CLAP in enabled,
-            device=None if config.stt.device == "default" else config.stt.device,
+    clap_provider = ClapWakeProvider()
+    microphone_monitor = SoundDeviceClapMonitor(
+        clap_provider.feed_audio,
+        device=None if config.stt.device == "default" else config.stt.device,
+    )
+    voice_provider = MicrophoneWakeWordProvider(
+        phrases,
+        transcribe=lambda audio_data: transcribe_stt_audio(
+            audio_data,
+            model=config.stt.openai_model,
+            language=config.stt.openai_language,
+            provider="openai_wake",
+            reason="wake_phrase",
+            prompt_context="호출어: 자비스, 헤이 자비스, hey jarvis",
         ),
-        WakeWordProvider(phrases),
+        monitor=microphone_monitor,
+    )
+    clap_provider.monitor = microphone_monitor
+    providers = (
+        clap_provider,
+        voice_provider,
         KeyboardWakeProvider(config.wake.keyboard_hotkey),
         TouchPortalWakeProvider(),
         MobileWakeProvider(),
@@ -163,7 +182,6 @@ def create_wake_manager(config, wake_word):
     return WakeManager(
         providers,
         settings=settings,
-        legacy_listener=WakeWordListener(wake_word=wake_word, aliases=phrases),
     )
 
 

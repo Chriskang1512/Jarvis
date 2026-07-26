@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- Replaced the misleading console-backed Voice Wake path with real microphone
+  recognition for `자비스`, `헤이 자비스`, and `hey jarvis`, sharing one audio
+  stream with double-clap detection.
+- Removed the live `Wake word >` keyboard prompt and normalized punctuation and
+  spacing in wake phrase transcriptions.
 - Aligned GitHub Actions with the Jarvis `Asia/Seoul` runtime timezone so
   date-relative Calendar tests remain deterministic around Korean midnight.
 - Updated GitHub checkout and Python setup actions to their Node.js 24

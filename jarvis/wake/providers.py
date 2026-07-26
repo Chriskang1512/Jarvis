@@ -1,7 +1,9 @@
 from collections import deque
+import re
 
 from jarvis.wake.clap import ClapDetector, SoundDeviceClapMonitor
 from jarvis.wake.models import WakeEvent, WakeMethod, normalize_phrase
+from jarvis.wake.voice import SpeechSegmenter, WakePhraseTranscriber
 
 
 class QueueWakeProvider:
@@ -71,10 +73,41 @@ class WakeWordProvider(QueueWakeProvider):
 
     def feed_text(self, text):
         normalized = normalize_phrase(text)
-        if normalized in self.phrases:
+        compact = canonical_wake_phrase(normalized)
+        if any(
+            compact == canonical_wake_phrase(phrase)
+            for phrase in self.phrases
+        ):
             self.trigger({"phrase": normalized})
             return True
         return False
+
+
+def canonical_wake_phrase(value):
+    return re.sub(r"[\W_]+", "", normalize_phrase(value), flags=re.UNICODE)
+
+
+class MicrophoneWakeWordProvider(WakeWordProvider):
+    """Recognize configured wake phrases from a shared microphone stream."""
+
+    def __init__(self, phrases, transcribe, monitor, sample_rate=16000):
+        super().__init__(phrases)
+        self.provider_id = "microphone_wake_word"
+        self.monitor = monitor
+        self.transcriber = WakePhraseTranscriber(transcribe, self.feed_text)
+        self.segmenter = SpeechSegmenter(
+            self.transcriber.submit,
+            sample_rate=sample_rate,
+        )
+        self.monitor.add_listener(self.segmenter.process)
+
+    def start(self):
+        self.transcriber.start()
+        return self.monitor.start()
+
+    def stop(self):
+        self.monitor.stop()
+        self.transcriber.stop()
 
 
 class ClapWakeProvider(QueueWakeProvider):

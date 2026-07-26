@@ -6,7 +6,8 @@ Sprint 19 places a provider-driven Wake layer before normalized input.
 Microphone
   -> Wake audio capture
      -> Double Clap Detector
-     -> Wake Word compatibility listener
+     -> Short Speech Segmenter
+        -> Wake Phrase Transcriber
   -> Wake Manager
      -> Input Manager
      -> InputEnvelope
@@ -28,10 +29,15 @@ first event allowed by `WakeProfile` priority:
 Methods are independently enabled. BLE can be added without changing Planner
 or Voice Pipeline.
 
-The live Voice entry point starts `SoundDeviceClapMonitor` only while waiting
-for wake. The monitor consumes normalized PCM frames, detects two short
-high-crest impulses, and stops before STT opens the microphone. Clap audio is
-never sent to STT or stored.
+The live Voice entry point opens one shared `sounddevice` stream only while
+waiting for wake. The stream feeds both the double-clap detector and a short
+speech segmenter, then closes before command STT opens the microphone.
+
+Voice wake accepts spoken `자비스`, `헤이 자비스`, and `hey jarvis`.
+Only a short speech candidate is transcribed, and only an exact configured
+phrase creates a Wake event. There is no `Wake word >` console listener in the
+live runtime. Clap audio is rejected by minimum speech duration and is never
+sent to STT or stored.
 
 The current keyboard, Touch Portal, Mobile, and API providers are trigger
 boundaries. Platform-specific global hotkey and network listeners remain
@@ -58,8 +64,8 @@ The envelope contains source, modality, wake method, correlation metadata, and
 a content fingerprint. `to_dict()` excludes raw content unless a caller
 explicitly requests it. Raw input must not be written to operational logs.
 
-## Compatibility
+## Runtime Contract
 
 `WakeManager.wait_for_wake_word()` preserves the existing Voice Pipeline
-interface. The legacy console Wake Word listener runs in a daemon thread so it
-does not block Clap detection.
+interface. Tests may still use `WakeWordProvider.feed_text()` directly, but the
+live provider receives text only from microphone wake transcription.

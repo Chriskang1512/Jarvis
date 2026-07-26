@@ -7,6 +7,7 @@ from jarvis.wake import (
     ClapDetector,
     ClapWakeProvider,
     KeyboardWakeProvider,
+    MicrophoneWakeWordProvider,
     MobileWakeProvider,
     TouchPortalWakeProvider,
     WakeManager,
@@ -15,6 +16,7 @@ from jarvis.wake import (
     WakeSettings,
     WakeWordProvider,
 )
+from jarvis.wake.voice import SpeechSegmenter
 from jarvis.voice.wake_word import WakeWordListener
 from unittest.mock import patch
 
@@ -109,6 +111,46 @@ class TestWakeProvidersAndManager(unittest.TestCase):
             self.assertTrue(provider.feed_text(phrase))
             self.assertEqual(provider.poll().method, WakeMethod.VOICE)
 
+    def test_voice_provider_ignores_transcription_punctuation_and_spacing(self):
+        provider = WakeWordProvider()
+
+        self.assertTrue(provider.feed_text("헤이, 자비스."))
+        self.assertEqual(provider.poll().metadata["phrase"], "헤이, 자비스.")
+
+    def test_microphone_voice_provider_transcribes_segment_and_wakes(self):
+        monitor = FakeSharedMonitor()
+        provider = MicrophoneWakeWordProvider(
+            ("hey jarvis", "헤이 자비스", "자비스"),
+            transcribe=lambda audio: "자비스." if audio else "",
+            monitor=monitor,
+        )
+
+        provider.start()
+        provider.segmenter.on_segment(b"wav")
+        for _ in range(50):
+            event = provider.poll()
+            if event is not None:
+                break
+            __import__("time").sleep(0.01)
+        provider.stop()
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.method, WakeMethod.VOICE)
+
+    def test_speech_segmenter_emits_short_wav_after_silence(self):
+        segments = []
+        segmenter = SpeechSegmenter(segments.append)
+        speech = [0.02] * 800
+        silence = [0.0] * 800
+
+        segmenter.process(speech, 1.00)
+        segmenter.process(speech, 1.05)
+        for index in range(12):
+            segmenter.process(silence, 1.10 + index * 0.05)
+
+        self.assertEqual(len(segments), 1)
+        self.assertTrue(segments[0].startswith(b"RIFF"))
+
     def test_keyboard_hotkey_only_triggers_on_exact_binding(self):
         provider = KeyboardWakeProvider("ctrl+space")
 
@@ -184,6 +226,20 @@ class FakeClapMonitor:
 
     def stop(self):
         self.stopped = True
+
+
+class FakeSharedMonitor:
+    def __init__(self):
+        self.listeners = []
+
+    def add_listener(self, listener):
+        self.listeners.append(listener)
+
+    def start(self):
+        return True
+
+    def stop(self):
+        return None
 
 
 if __name__ == "__main__":

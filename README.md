@@ -120,7 +120,8 @@ Sprint 19 starts the product-facing Input Layer:
   API providers by profile priority;
 - double clap is detected from PCM signal features before STT and releases the
   microphone before command recording;
-- English and Korean Wake phrases remain available;
+- the same microphone stream detects `자비스`, `헤이 자비스`, and
+  `hey jarvis` as spoken wake phrases without a console prompt;
 - every future input surface normalizes into a privacy-safe `InputEnvelope`;
 - queue-based trigger contracts isolate OS hotkey and remote transport adapters
   from Planner and Voice Runtime.

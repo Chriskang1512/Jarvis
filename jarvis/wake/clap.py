@@ -54,15 +54,19 @@ class ClapDetector:
 
 
 class SoundDeviceClapMonitor:
-    """Feed normalized microphone frames to a Clap Provider before STT starts."""
+    """Fan out normalized microphone frames to wake detectors before STT starts."""
 
     def __init__(self, on_audio, sample_rate=16000, block_size=800, device=None):
-        self.on_audio = on_audio
+        self.listeners = [on_audio] if on_audio is not None else []
         self.sample_rate = int(sample_rate)
         self.block_size = int(block_size)
         self.device = device
         self.stream = None
         self.started_at = 0.0
+
+    def add_listener(self, on_audio):
+        if on_audio not in self.listeners:
+            self.listeners.append(on_audio)
 
     def start(self):
         if self.stream is not None:
@@ -76,7 +80,9 @@ class SoundDeviceClapMonitor:
             def callback(indata, frames, time_info, status):
                 del frames, time_info, status
                 samples = tuple(float(item[0]) for item in indata)
-                self.on_audio(samples, monotonic())
+                timestamp = monotonic()
+                for listener in tuple(self.listeners):
+                    listener(samples, timestamp)
 
             self.stream = sounddevice.InputStream(
                 samplerate=self.sample_rate,
