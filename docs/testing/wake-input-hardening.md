@@ -38,9 +38,15 @@ second clap from two adjacent microphone frames produced by one clap.
 Detector output also includes `first_clap_at`, `second_clap_at`, `gap`, and
 `rejection_reason`. Tune the interval only after repeated results identify
 `gap_above_max`; `refractory` usually means adjacent frames from one impulse.
-Keep the baseline peak `0.55`, RMS `0.08`, and crest factor `3.0` until the
-state fix passes at least 9 of 10 repeated double-clap trials. Only then compare
-a sensitivity profile against the full environmental false-positive matrix.
+Keep the first-clap baseline at peak `0.55`, RMS `0.08`, and crest factor `3.0`.
+Any adaptive sensitivity change must remain limited to an active pending pair
+and must be compared against the full environmental false-positive matrix.
+
+The first post-fix baseline measured 2/11 confirmations with zero exceptions:
+four trials had no candidate and five accepted only the first clap. The first
+clap retains the strict baseline. During its bounded 0.8-second pending window,
+the second clap uses `clap_second_threshold_ratio=0.65` to tolerate microphone
+AGC attenuation without allowing a weak sound to start a clap sequence.
 
 ## Full Runtime Checks
 

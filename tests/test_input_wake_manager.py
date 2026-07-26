@@ -206,6 +206,17 @@ class TestClapDetector(unittest.TestCase):
         self.assertIsNone(detector.first_clap_at)
         self.assertIsNone(detector.second_clap_at)
 
+    def test_second_clap_uses_adaptive_threshold_after_strict_first_clap(self):
+        detector = ClapDetector()
+        strict_first = [0.0] * 99 + [1.0]
+        weaker_second = [0.0] * 97 + [0.4, 0.4, 0.4]
+
+        self.assertFalse(detector.process(strict_first, 1.0))
+        self.assertFalse(detector.process(weaker_second, 1.45))
+
+        self.assertEqual(detector.pop_decision(), "DOUBLE_PENDING")
+        self.assertAlmostEqual(detector.second_clap_at, 1.45)
+
     def test_missing_first_clap_is_rejected_without_callback_exception(self):
         detector = ClapDetector()
         detector.second_clap_at = 1.45
@@ -362,6 +373,7 @@ class TestWakeConfiguration(unittest.TestCase):
                     "keyboard_hotkey": "alt+j",
                     "clap_peak_threshold": 0.7,
                     "clap_settle_seconds": 0.3,
+                    "clap_second_threshold_ratio": 0.6,
                 }
             }
         )
@@ -372,6 +384,7 @@ class TestWakeConfiguration(unittest.TestCase):
         self.assertEqual(config.wake.keyboard_hotkey, "alt+j")
         self.assertEqual(config.wake.clap_peak_threshold, 0.7)
         self.assertEqual(config.wake.clap_settle_seconds, 0.3)
+        self.assertEqual(config.wake.clap_second_threshold_ratio, 0.6)
 
     def test_legacy_listener_accepts_korean_alias(self):
         listener = WakeWordListener("hey jarvis", aliases=("헤이 자비스", "자비스"))

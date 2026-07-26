@@ -14,6 +14,8 @@
   confirmation, preventing a callback exception after valid 0.45-second pairs.
 - Guarded corrupt pending-clap state and isolated audio listener exceptions so
   one detector failure cannot silently stop the shared microphone callback.
+- Added a bounded adaptive threshold for only the second clap after a strict
+  first-clap match; the post-fix room baseline was 2/11 confirmations.
 - Ignored context-free yes/no transcripts on the first post-Wake command and
   returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard

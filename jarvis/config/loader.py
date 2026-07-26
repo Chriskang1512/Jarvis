@@ -122,6 +122,9 @@ def create_wake_config(wake_data):
         clap_min_gap_seconds=float(wake_data.get("clap_min_gap_seconds", 0.12)),
         clap_max_gap_seconds=float(wake_data.get("clap_max_gap_seconds", 0.8)),
         clap_settle_seconds=float(wake_data.get("clap_settle_seconds", 0.5)),
+        clap_second_threshold_ratio=float(
+            wake_data.get("clap_second_threshold_ratio", 0.65)
+        ),
     )
 
 

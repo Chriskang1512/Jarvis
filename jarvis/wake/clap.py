@@ -15,6 +15,7 @@ class ClapDetectorSettings:
     max_gap_seconds: float = 0.8
     refractory_seconds: float = 0.08
     settle_seconds: float = 0.5
+    second_clap_threshold_ratio: float = 0.65
 
 
 class ClapDetector:
@@ -35,9 +36,14 @@ class ClapDetector:
         peak = max(abs(sample) for sample in values)
         rms = sqrt(sum(sample * sample for sample in values) / len(values))
         crest = peak / max(rms, 1e-9)
+        threshold_ratio = (
+            self.settings.second_clap_threshold_ratio
+            if self.first_clap_at is not None and self.second_clap_at is None
+            else 1.0
+        )
         is_impulse = (
-            peak >= self.settings.peak_threshold
-            and rms >= self.settings.rms_threshold
+            peak >= self.settings.peak_threshold * threshold_ratio
+            and rms >= self.settings.rms_threshold * threshold_ratio
             and crest >= self.settings.crest_factor_threshold
         )
         now = float(timestamp)

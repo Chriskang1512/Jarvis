@@ -41,6 +41,7 @@ def main():
         min_gap_seconds=config.wake.clap_min_gap_seconds,
         max_gap_seconds=config.wake.clap_max_gap_seconds,
         settle_seconds=config.wake.clap_settle_seconds,
+        second_clap_threshold_ratio=config.wake.clap_second_threshold_ratio,
     )
     detector = ClapDetector(settings)
     activations = 0
@@ -64,7 +65,8 @@ def main():
         f"rms={settings.rms_threshold:.3f} "
         f"crest={settings.crest_factor_threshold:.2f} "
         f"gap={settings.min_gap_seconds:.2f}-{settings.max_gap_seconds:.2f}s "
-        f"settle={settings.settle_seconds:.2f}s"
+        f"settle={settings.settle_seconds:.2f}s "
+        f"second_ratio={settings.second_clap_threshold_ratio:.2f}"
     )
     print("[Probe] READY - perform the sound now")
 
@@ -83,9 +85,14 @@ def main():
         max_peak = max(max_peak, peak)
         max_rms = max(max_rms, rms)
         max_crest = max(max_crest, crest)
+        threshold_ratio = (
+            settings.second_clap_threshold_ratio
+            if detector.first_clap_at is not None and detector.second_clap_at is None
+            else 1.0
+        )
         if (
-            peak >= settings.peak_threshold
-            and rms >= settings.rms_threshold
+            peak >= settings.peak_threshold * threshold_ratio
+            and rms >= settings.rms_threshold * threshold_ratio
             and crest >= settings.crest_factor_threshold
         ):
             candidate_count += 1

@@ -49,6 +49,7 @@ class WakeConfig:
     clap_min_gap_seconds: float = 0.12
     clap_max_gap_seconds: float = 0.8
     clap_settle_seconds: float = 0.5
+    clap_second_threshold_ratio: float = 0.65
 
 
 @dataclass
