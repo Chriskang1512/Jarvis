@@ -36,6 +36,59 @@ class TransitionSource(str, Enum):
 
 
 @dataclass(frozen=True)
+class PendingQuestion:
+    """One Runtime-owned question waiting for a user answer."""
+
+    kind: str = ""
+    text: str = ""
+    payload: dict = field(default_factory=dict)
+    turns_remaining: int = 0
+    expires_at: float = 0.0
+
+
+@dataclass(frozen=True)
+class PendingArtifact:
+    """A draft or selection frozen at a conversation boundary."""
+
+    artifact_type: str
+    artifact_id: str
+    fingerprint: str
+    created_at: str
+    verified: bool = False
+    payload: object | None = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class ClarificationTurn:
+    """Privacy-safe record of a clarification exchange."""
+
+    question_kind: str
+    answer_kind: str = ""
+    occurred_at: str = ""
+
+
+@dataclass(frozen=True)
+class ConversationContext:
+    """All transient conversation state owned by one RuntimeTask."""
+
+    task_id: str = ""
+    goal: str = ""
+    current_step: int = 0
+    pending_question: PendingQuestion | None = None
+    pending_answer: str = ""
+    clarification_history: tuple[ClarificationTurn, ...] = ()
+    selected_entities: dict = field(default_factory=dict)
+    pending_artifacts: tuple[PendingArtifact, ...] = ()
+    confirmation_state: str = ""
+    expires_at: float = 0.0
+
+    def __post_init__(self):
+        object.__setattr__(self, "clarification_history", tuple(self.clarification_history))
+        object.__setattr__(self, "selected_entities", dict(self.selected_entities))
+        object.__setattr__(self, "pending_artifacts", tuple(self.pending_artifacts))
+
+
+@dataclass(frozen=True)
 class StateTransitionRecord:
     """Privacy-safe record of one RuntimeTask state change."""
 
@@ -108,6 +161,7 @@ class RuntimeTask:
     confirmation_state: str = ""
     draft_version: int = 0
     permission_snapshot: str = ""
+    conversation_context: ConversationContext | None = None
     duration_ms: int = 0
 
     def __post_init__(self):
@@ -127,6 +181,12 @@ class RuntimeTask:
         object.__setattr__(self, "failed_steps", tuple(self.failed_steps))
         object.__setattr__(self, "step_records", tuple(self.step_records))
         object.__setattr__(self, "transition_history", tuple(self.transition_history))
+        if self.conversation_context is None:
+            object.__setattr__(
+                self,
+                "conversation_context",
+                ConversationContext(task_id=self.id, goal=self.goal, current_step=self.current_step),
+            )
 
     def transition(
         self,
@@ -166,6 +226,7 @@ class RuntimeTask:
             "confirmation_state": self.confirmation_state,
             "draft_version": self.draft_version,
             "permission_snapshot": self.permission_snapshot,
+            "conversation_context": conversation_context_to_dict(self.conversation_context),
             "duration_ms": self.duration_ms,
             "transition_history": [
                 {
@@ -211,3 +272,46 @@ def create_task_id():
 def now_iso():
     """Return local timestamp."""
     return datetime.now().isoformat(timespec="seconds")
+
+
+def conversation_context_to_dict(context):
+    """Return privacy-safe conversation diagnostics without artifact payloads."""
+    if context is None:
+        return None
+    question = context.pending_question
+    return {
+        "task_id": context.task_id,
+        "goal": context.goal,
+        "current_step": context.current_step,
+        "pending_question": (
+            {
+                "kind": question.kind,
+                "text": question.text,
+                "turns_remaining": question.turns_remaining,
+                "expires_at": question.expires_at,
+            }
+            if question is not None
+            else None
+        ),
+        "clarification_history": [
+            {
+                "question_kind": item.question_kind,
+                "answer_kind": item.answer_kind,
+                "occurred_at": item.occurred_at,
+            }
+            for item in context.clarification_history
+        ],
+        "selected_entity_keys": sorted(context.selected_entities),
+        "pending_artifacts": [
+            {
+                "artifact_type": item.artifact_type,
+                "artifact_id": item.artifact_id,
+                "fingerprint": item.fingerprint,
+                "created_at": item.created_at,
+                "verified": item.verified,
+            }
+            for item in context.pending_artifacts
+        ],
+        "confirmation_state": context.confirmation_state,
+        "expires_at": context.expires_at,
+    }

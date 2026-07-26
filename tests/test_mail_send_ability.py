@@ -139,11 +139,20 @@ class TestMailSendAbility(unittest.TestCase):
         )
         provider = FakeSendProvider(messages=(message,))
         ability = MailAbility(provider=provider)
-        ability.execute({"action": "list"})
-        ability.execute({"action": "get", "ordinal": 1})
+        listed = ability.execute({"action": "list"})
+        selected = ability.execute(
+            {"action": "get", "ordinal": 1, "_mail_messages": listed.data.messages}
+        )
 
         preview = ability.execute({"text": "그 메일에 확인했다고 답장해줘"})
 
+        preview = ability.execute(
+            {
+                "action": "reply",
+                "body": preview.metadata["query"].body,
+                "_mail_selected_message": selected.data.message,
+            }
+        )
         query = preview.metadata["query"]
         self.assertEqual(query.action, "reply")
         self.assertEqual(query.reply_to_message_id, "m1")
@@ -154,6 +163,8 @@ class TestMailSendAbility(unittest.TestCase):
         preview_text = preview.data.to_natural_language()
         self.assertEqual(preview_text, '아야님께 "확인했습니다."라는 내용으로 답장을 보낼까요?')
         self.assertNotIn("Re:", preview_text)
+        self.assertFalse(hasattr(ability, "last_messages"))
+        self.assertFalse(hasattr(ability, "last_selected_message"))
 
     def test_reply_without_context_is_blocked(self):
         ability = MailAbility(provider=FakeSendProvider())

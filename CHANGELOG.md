@@ -4,6 +4,17 @@
 
 ### Added
 
+- Sprint 18.4 RuntimeTask-owned ConversationContext, PendingQuestion, and
+  PendingArtifact contracts.
+- ConversationResolver for clarification, selection, confirmation, expiry,
+  artifact, and cleanup operations.
+- Runtime-owned voice pending actions, clarifications, Calendar forms, and
+  follow-up selections behind a compatibility facade.
+- Stateless Mail Ability follow-up context and ordinal Contact clarification.
+- Checkpoint restoration and privacy-safe fingerprint coverage for
+  conversation context.
+- Prevented Calendar and Contacts auth/smoke tools from narrowing the shared
+  Workspace OAuth token to an Ability-specific scope.
 - Sprint 18.3.1 live Runtime integration for the Task State Machine, EventBus,
   confirmation continuation, checkpoint validation, and recovery decisions.
 - Projection of completed planning, validation, optimization, and readiness

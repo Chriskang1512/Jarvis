@@ -1,4 +1,5 @@
 import unittest
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from jarvis.abilities import AbilityRegistry
@@ -42,7 +43,8 @@ class TestWorkspaceIntegration(unittest.TestCase):
         self.assertEqual(plan.steps[1].depends_on, (1,))
 
     def test_calendar_event_is_frozen_into_mail_preview(self):
-        event = CalendarEvent(id="event-1", title="제품 회의", date="2026-07-25", time="15:00")
+        event_date = (date.today() + timedelta(days=1)).isoformat()
+        event = CalendarEvent(id="event-1", title="제품 회의", date=event_date, time="15:00")
         dispatcher, _, provider = create_dispatcher(events=[event])
 
         result = dispatcher.execute_plan_text("아야에게 내일 오후 3시 일정 메일로 보내줘")
@@ -50,7 +52,7 @@ class TestWorkspaceIntegration(unittest.TestCase):
         self.assertEqual(result.error, "confirm_required")
         query = result.step_results[-1].tool_result.output.metadata["query"]
         self.assertEqual(query.subject, "제품 회의 일정 안내")
-        self.assertEqual(query.body, "2026-07-25 15:00 제품 회의 일정입니다.")
+        self.assertEqual(query.body, f"{event_date} 15:00 제품 회의 일정입니다.")
         self.assertEqual(provider.send_calls, [])
 
     def test_missing_calendar_event_never_reaches_send_confirmation(self):

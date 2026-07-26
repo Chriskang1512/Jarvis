@@ -9,7 +9,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from jarvis.config.loader import ConfigurationLoader
 from jarvis.providers.google.auth import GoogleAuthManager
-from jarvis.providers.google.config import GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE, GoogleProviderConfig
+from jarvis.providers.google.config import (
+    GOOGLE_CALENDAR_SCOPE,
+    GOOGLE_CONTACTS_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
+    GoogleProviderConfig,
+)
 from jarvis.providers.google.errors import GoogleProviderError
 
 
@@ -19,7 +24,11 @@ def main():
     google_config = GoogleProviderConfig(
         credentials_path=config.calendar.google_credentials_path,
         client_secret_path=config.calendar.google_client_secret_path,
-        scopes=(GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE),
+        scopes=(
+            GOOGLE_CALENDAR_SCOPE,
+            GOOGLE_CONTACTS_SCOPE,
+            GOOGLE_GMAIL_MODIFY_SCOPE,
+        ),
         timezone=config.calendar.timezone,
     )
     manager = GoogleAuthManager(google_config)

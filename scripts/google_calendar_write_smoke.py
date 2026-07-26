@@ -13,7 +13,12 @@ from jarvis.abilities.native.calendar.query import CalendarQuery
 from jarvis.config.loader import ConfigurationLoader
 from jarvis.providers.google.auth import GoogleAuthManager, GoogleAuthStatus
 from jarvis.providers.google.calendar.provider import GoogleCalendarProvider
-from jarvis.providers.google.config import GOOGLE_CALENDAR_SCOPE, GoogleProviderConfig
+from jarvis.providers.google.config import (
+    GOOGLE_CALENDAR_SCOPE,
+    GOOGLE_CONTACTS_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
+    GoogleProviderConfig,
+)
 
 
 def main():
@@ -98,7 +103,11 @@ def load_google_config():
     return GoogleProviderConfig(
         credentials_path=runtime_config.calendar.google_credentials_path,
         client_secret_path=runtime_config.calendar.google_client_secret_path,
-        scopes=(GOOGLE_CALENDAR_SCOPE,),
+        scopes=(
+            GOOGLE_CALENDAR_SCOPE,
+            GOOGLE_CONTACTS_SCOPE,
+            GOOGLE_GMAIL_MODIFY_SCOPE,
+        ),
         timezone=runtime_config.calendar.timezone,
     )
 

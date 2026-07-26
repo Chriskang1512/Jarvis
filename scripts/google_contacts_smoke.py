@@ -13,7 +13,12 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from jarvis.abilities.native.contacts.query import ContactQuery
-from jarvis.providers.google.config import GOOGLE_CONTACTS_READONLY_SCOPE, GoogleProviderConfig
+from jarvis.providers.google.config import (
+    GOOGLE_CALENDAR_SCOPE,
+    GOOGLE_CONTACTS_SCOPE,
+    GOOGLE_GMAIL_MODIFY_SCOPE,
+    GoogleProviderConfig,
+)
 from jarvis.providers.google.contacts import GoogleContactsProvider
 
 
@@ -27,7 +32,11 @@ def main():
         config=GoogleProviderConfig(
             credentials_path=os.environ.get("JARVIS_GOOGLE_CREDENTIALS_PATH", "data/credentials/google_token.json"),
             client_secret_path=os.environ.get("JARVIS_GOOGLE_CLIENT_SECRET_PATH", "client_secret.json"),
-            scopes=(GOOGLE_CONTACTS_READONLY_SCOPE,),
+            scopes=(
+                GOOGLE_CALENDAR_SCOPE,
+                GOOGLE_CONTACTS_SCOPE,
+                GOOGLE_GMAIL_MODIFY_SCOPE,
+            ),
         )
     )
 

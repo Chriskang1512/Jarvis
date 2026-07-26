@@ -72,6 +72,17 @@ class VoicePipeline:
         self.semantic_normalizer = semantic_normalizer or SemanticTranscriptNormalizer()
         self.runtime_last_calendar_result = None
         self.runtime_last_calendar_event = None
+        self.configure_conversation_context_provider()
+
+    def configure_conversation_context_provider(self):
+        """Let Dispatcher read selections from the active RuntimeTask."""
+        dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
+        if dispatcher is not None and hasattr(dispatcher, "set_conversation_context_provider"):
+            dispatcher.set_conversation_context_provider(self.active_conversation_context)
+
+    def active_conversation_context(self):
+        task = getattr(self.conversation_session, "runtime_task", None)
+        return getattr(task, "conversation_context", None)
 
     def run_once(self):
         """Run one complete voice conversation turn."""
@@ -152,6 +163,7 @@ class VoicePipeline:
 
         if reply is None and intent_result is not None and intent_result.handled:
             reply = intent_result.response
+            self.remember_runtime_task(intent_result)
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
             self.remember_mail_context(intent_result)
@@ -159,7 +171,6 @@ class VoicePipeline:
             self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
             self.remember_reminder_result(intent_result)
-            self.remember_runtime_task(intent_result)
             trace_event(
                 "voice.intent.handled",
                 routed_ability=getattr(intent_result, "tool", ""),
@@ -290,6 +301,7 @@ class VoicePipeline:
 
         if reply is None and intent_result is not None and intent_result.handled:
             reply = intent_result.response
+            self.remember_runtime_task(intent_result)
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
             self.remember_mail_context(intent_result)
@@ -297,7 +309,6 @@ class VoicePipeline:
             memory_context_refreshed = self.remember_recalled_memory(intent_result)
             self.remember_calendar_result(intent_result)
             self.remember_reminder_result(intent_result)
-            self.remember_runtime_task(intent_result)
             trace_event(
                 "voice.intent.handled",
                 routed_ability=getattr(intent_result, "tool", ""),
@@ -894,6 +905,20 @@ class VoicePipeline:
         ):
             return False
 
+        task = self.conversation_session.ensure_runtime_task()
+        if getattr(data, "action", "") == "list":
+            task = self.conversation_session.resolver.select(
+                task,
+                "mail_messages",
+                tuple(getattr(data, "messages", ()) or ()),
+            )
+        elif getattr(data, "action", "") == "get" and getattr(data, "message", None) is not None:
+            task = self.conversation_session.resolver.select(
+                task,
+                "mail_selected_message",
+                data.message,
+            )
+        self.conversation_session.runtime_task = task
         self.conversation_session.clear_last_calendar_result()
         trace_event("voice.context.focused", ability="mail")
         return True
@@ -917,27 +942,37 @@ class VoicePipeline:
     def try_contact_ambiguous_clarification_reply(self, pending, user_message):
         """Resolve a pending ambiguous contact candidate with a follow-up answer."""
         decision = confirmation_decision(user_message)
+        contacts = list(pending.get("contacts", []) or [])
+        ordinal = contact_candidate_ordinal(user_message)
         trace_event(
             "voice.pending_clarification.contact_ambiguous",
             decision=decision,
-            candidates=len(pending.get("contacts", []) or []),
+            candidates=len(contacts),
         )
 
         if decision == "no":
-            self.conversation_session.clear_pending_clarification()
+            self.conversation_session.answer_pending_clarification("cancelled")
             return "痍⑥냼?덉뒿?덈떎."
+
+        if ordinal > 0:
+            if ordinal > len(contacts):
+                self.conversation_session.advance_pending_clarification_turn()
+                return pending.get("question", "") or "연락처 번호를 다시 말씀해 주세요."
+            self.conversation_session.answer_pending_clarification("ordinal")
+            return format_confirmed_contact_candidate(
+                contacts[ordinal - 1],
+                pending.get("attribute", "contact"),
+            )
 
         if decision != "yes":
             self.conversation_session.advance_pending_clarification_turn()
             return pending.get("question", "") or "?대뼡 ?곕씫泥섎? 留먯??섏떊 嫄닿???"
 
-        contacts = list(pending.get("contacts", []) or [])
-
         if len(contacts) != 1:
             self.conversation_session.advance_pending_clarification_turn()
             return pending.get("question", "") or "?대뼡 ?곕씫泥섎? 留먯??섏떊 嫄닿???"
 
-        self.conversation_session.clear_pending_clarification()
+        self.conversation_session.answer_pending_clarification("confirmed")
         return format_confirmed_contact_candidate(contacts[0], pending.get("attribute", "contact"))
 
     def execute_pending_reminder_clarification(self, pending, minutes, user_message):
@@ -1071,12 +1106,15 @@ class VoicePipeline:
 
         if decision == "yes":
             trace_event("voice.confirmation.execute", pending_action=action_name)
-            self.conversation_session.clear_pending_action()
-            return self.execute_pending_action(pending_action)
+            self.conversation_session.answer_pending_action("yes")
+            reply = self.execute_pending_action(pending_action)
+            self.conversation_session.complete_pending_action()
+            return reply
 
         if decision == "no":
             self.cancel_pending_runtime_task(pending_action)
-            self.conversation_session.clear_pending_action()
+            self.conversation_session.answer_pending_action("no")
+            self.conversation_session.cleanup_conversation_context()
             return "취소했습니다."
 
         return pending_action_confirmation_question(pending_action)
@@ -1465,6 +1503,8 @@ class VoicePipeline:
 
         if task is None:
             return False
+
+        self.conversation_session.bind_runtime_task(task)
 
         if hasattr(task, "to_dict"):
             self.conversation_session.set_last_task(task.to_dict())
@@ -2442,6 +2482,24 @@ def contact_attribute_from_fields(fields):
         if field in {"email", "phone", "birthday", "contact"}:
             return field
     return "contact"
+
+
+def contact_candidate_ordinal(text):
+    """Return a 1-based candidate number from a short clarification answer."""
+    normalized = str(text or "").strip().replace(" ", "")
+    words = {
+        "첫번째": 1,
+        "첫째": 1,
+        "두번째": 2,
+        "둘째": 2,
+        "세번째": 3,
+        "셋째": 3,
+    }
+    for token, value in words.items():
+        if token in normalized:
+            return value
+    matched = re.search(r"([1-9])(?:번|번째)?", normalized)
+    return int(matched.group(1)) if matched else 0
 
 
 def format_confirmed_contact_candidate(contact_data, attribute):

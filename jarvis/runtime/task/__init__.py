@@ -2,6 +2,10 @@
 
 from jarvis.runtime.task.history import TaskHistory
 from jarvis.runtime.task.models import (
+    ClarificationTurn,
+    ConversationContext,
+    PendingArtifact,
+    PendingQuestion,
     RuntimeTask,
     StateTransitionRecord,
     TaskState,
@@ -23,6 +27,10 @@ from jarvis.runtime.task.checkpoint import (
 
 __all__ = [
     "RuntimeTask",
+    "ConversationContext",
+    "PendingQuestion",
+    "PendingArtifact",
+    "ClarificationTurn",
     "RuntimeTaskCheckpoint",
     "StateTransitionRecord",
     "TaskStateMachine",

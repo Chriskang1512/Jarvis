@@ -24,8 +24,6 @@ class MailAbility:
         self.parser = parser or MailIntentParser()
         self.provider = provider if provider is not None else create_mail_provider(config=config)
         self.contacts_provider = contacts_provider
-        self.last_messages = ()
-        self.last_selected_message = None
         self._sending_fingerprints = set()
         self._sent_fingerprints = set()
 
@@ -59,11 +57,13 @@ class MailAbility:
         """Execute a read-only mail action."""
         started = perf_counter()
         query = normalize_query(input_data, self.parser)
+        messages = tuple(input_data.get("_mail_messages", ()) or ()) if isinstance(input_data, dict) else ()
+        selected_message = input_data.get("_mail_selected_message") if isinstance(input_data, dict) else None
         trace_event("mail.query", action=query.action, query=query.query, ordinal=query.ordinal)
 
         try:
             if query.action in {"send", "reply"}:
-                query, preparation_error = self.prepare_outgoing_query(query)
+                query, preparation_error = self.prepare_outgoing_query(query, selected_message=selected_message)
                 if preparation_error is not None:
                     return self.ability_result(preparation_error, query)
 
@@ -81,7 +81,11 @@ class MailAbility:
                         metadata={"ability_id": self.id, "query": query, "permission": "confirm_required"},
                     )
 
-            result = self.execute_query(query)
+            result = self.execute_query(
+                query,
+                conversation_messages=messages,
+                selected_message=selected_message,
+            )
             result = attach_runtime_fields(result, self.provider_name, elapsed_ms(started))
             trace_event(
                 "mail.result",
@@ -96,15 +100,13 @@ class MailAbility:
         except Exception as error:
             return AbilityResult(success=False, error=str(error), metadata={"ability_id": self.id})
 
-    def execute_query(self, query):
+    def execute_query(self, query, conversation_messages=(), selected_message=None):
         """Execute one MailQuery."""
         if query.action == "get":
-            message = self.message_from_query(query)
+            message = self.message_from_query(query, conversation_messages)
             if message is None:
                 return MailResult(success=False, action="get", error_code="MAIL_NOT_FOUND")
             message, warning = self.mark_message_read(message)
-            self.last_selected_message = message
-            self.replace_cached_message(message)
             return MailResult(
                 success=True,
                 action="get",
@@ -124,18 +126,15 @@ class MailAbility:
         else:
             result = self.provider.list_messages(query)
 
-        if result.success:
-            self.last_messages = tuple(result.messages or ())
-
         return result
 
-    def prepare_outgoing_query(self, query):
+    def prepare_outgoing_query(self, query, selected_message=None):
         """Resolve a complete immutable draft before confirmation."""
         pending_action_id = query.pending_action_id or uuid.uuid4().hex
         query = replace(query, pending_action_id=pending_action_id)
 
         if query.action == "reply":
-            target = self.reply_target(query)
+            target = self.reply_target(query, selected_message=selected_message)
             if target is None:
                 return query, mail_error(query.action, "REPLY_TARGET_NOT_FOUND")
             subject = query.subject or reply_subject(getattr(target, "subject", ""))
@@ -192,15 +191,15 @@ class MailAbility:
             to=(emails[0],),
         ), None
 
-    def reply_target(self, query):
+    def reply_target(self, query, selected_message=None):
         """Resolve explicit, ordinal, or last-read reply context."""
         if query.message_id and self.provider is not None:
             result = self.provider.get_message(query.message_id)
             if getattr(result, "success", False):
                 return result.message
         if query.ordinal > 0:
-            return self.message_from_query(query)
-        return self.last_selected_message
+            return self.message_from_query(query, ())
+        return selected_message
 
     def execute_send(self, query):
         """Send once after confirmation and block duplicate execution."""
@@ -231,7 +230,7 @@ class MailAbility:
             metadata={"ability_id": self.id, "query": query},
         )
 
-    def message_from_query(self, query):
+    def message_from_query(self, query, conversation_messages=()):
         """Return one message from id or recent ordinal."""
         if query.message_id and self.provider is not None:
             result = self.provider.get_message(query.message_id)
@@ -239,8 +238,8 @@ class MailAbility:
 
         if query.ordinal > 0:
             index = query.ordinal - 1
-            if 0 <= index < len(self.last_messages):
-                message = self.last_messages[index]
+            if 0 <= index < len(conversation_messages):
+                message = conversation_messages[index]
                 if self.provider is not None and message.id:
                     result = self.provider.get_message(message.id)
                     return result.message if result.success else message
@@ -262,12 +261,8 @@ class MailAbility:
         return replace(message, unread=False, labels=labels), ""
 
     def replace_cached_message(self, message):
-        """Keep the session's recent-mail cache consistent after a state change."""
-        message_id = getattr(message, "id", "")
-        self.last_messages = tuple(
-            message if getattr(item, "id", "") == message_id else item
-            for item in self.last_messages
-        )
+        """Backward-compatible no-op; selections belong to RuntimeTask."""
+        return message
 
     def health(self):
         return AbilityHealth(status="ok", provider=self.provider_name, message="Mail ability is ready.")

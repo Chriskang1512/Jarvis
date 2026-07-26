@@ -3,8 +3,9 @@ from time import perf_counter
 from jarvis.debug_trace import trace_event
 from jarvis.core.events import InMemoryEventBus
 from jarvis.permissions import PermissionLayer, PermissionStatus
+from jarvis.runtime.conversation_resolver import ConversationResolver
 from jarvis.runtime.planner import PlanResult, PlanStepResult, RuntimePlanner
-from jarvis.runtime.task import TaskHistory, TaskRunner, TaskStateMachine
+from jarvis.runtime.task import RuntimeTask, TaskHistory, TaskRunner, TaskStateMachine
 from jarvis.runtime.tool_dispatcher.context import DispatchContext
 from jarvis.runtime.tool_dispatcher.registry import RuntimeToolRegistry
 from jarvis.runtime.tool_dispatcher.result import DispatchResult, DispatchSelection
@@ -31,6 +32,9 @@ class RuntimeToolDispatcher:
         self.diagnostics_collector = diagnostics_collector
         self.min_confidence = float(min_confidence)
         self.intent_parser = intent_parser
+        self.conversation_context_provider = None
+        self.conversation_resolver = ConversationResolver()
+        self.conversation_task = RuntimeTask(id="", goal="dispatcher conversation")
         self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
         self.event_bus = event_bus or InMemoryEventBus()
         self.task_history = TaskHistory()
@@ -48,6 +52,10 @@ class RuntimeToolDispatcher:
         """Attach a structured intent parser to the runtime planner."""
         self.intent_parser = intent_parser
         self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
+
+    def set_conversation_context_provider(self, provider):
+        """Attach a read-only RuntimeTask conversation context supplier."""
+        self.conversation_context_provider = provider
 
     def select(self, text, context=None):
         """Select the best tool for text without executing it."""
@@ -252,7 +260,7 @@ class RuntimeToolDispatcher:
     def execute(self, request, step_index=0, step_count=0, task_id=""):
         """Execute one ToolRequest and return a ToolResult-compatible result."""
         started = perf_counter()
-        tool_request = normalize_request(request)
+        tool_request = self.enrich_conversation_input(normalize_request(request))
         tool = self.registry.get(tool_request.tool_name)
 
         if tool is None:
@@ -308,6 +316,7 @@ class RuntimeToolDispatcher:
             )
             return ToolResult(tool_name=tool_request.tool_name, success=False, error=str(error))
 
+        self.capture_conversation_result(tool_request, result)
         duration = elapsed_ms(started)
         trace_event(
             "dispatcher.result",
@@ -321,6 +330,44 @@ class RuntimeToolDispatcher:
             task_id=task_id,
         )
         return result
+
+    def enrich_conversation_input(self, tool_request):
+        """Inject Runtime-owned selections without storing them on an Ability."""
+        if tool_request.tool_name != "mail":
+            return tool_request
+        context = (
+            self.conversation_context_provider()
+            if self.conversation_context_provider is not None
+            else self.conversation_task.conversation_context
+        )
+        if context is None:
+            return tool_request
+        selected = dict(getattr(context, "selected_entities", {}) or {})
+        input_data = dict(tool_request.input_data)
+        input_data["_mail_messages"] = selected.get("mail_messages", ())
+        input_data["_mail_selected_message"] = selected.get("mail_selected_message")
+        return ToolRequest(tool_name=tool_request.tool_name, input_data=input_data)
+
+    def capture_conversation_result(self, tool_request, result):
+        """Keep direct-dispatch selections on a RuntimeTask, never an Ability."""
+        if tool_request.tool_name != "mail" or self.conversation_context_provider is not None:
+            return
+        output = getattr(result, "output", None)
+        data = getattr(output, "data", None)
+        if not getattr(data, "success", False):
+            return
+        if getattr(data, "action", "") == "list":
+            self.conversation_task = self.conversation_resolver.select(
+                self.conversation_task,
+                "mail_messages",
+                tuple(getattr(data, "messages", ()) or ()),
+            )
+        elif getattr(data, "action", "") == "get" and getattr(data, "message", None) is not None:
+            self.conversation_task = self.conversation_resolver.select(
+                self.conversation_task,
+                "mail_selected_message",
+                data.message,
+            )
 
     def find_candidates(self, text):
         """Return sorted dispatcher selections for text."""

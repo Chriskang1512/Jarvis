@@ -46,6 +46,18 @@ Sprint 18.3.1 connects the Task State Machine to the live Runtime path:
 - retry and authentication pause behavior consume `RecoveryDecision`;
 - every transition publishes a privacy-safe Core EventBus envelope.
 
+Sprint 18.4 moves conversation ownership into RuntimeTask:
+
+- `ConversationContext` owns questions, selections, clarification history, and
+  confirmation state;
+- `PendingArtifact` freezes drafts and exposes only privacy-safe fingerprints;
+- `ConversationResolver` is the single update contract;
+- Mail Ability no longer stores recent or selected messages;
+- terminal tasks and closed voice sessions clear transient conversation data.
+
+See
+[`docs/architecture/conversation-resolver.md`](docs/architecture/conversation-resolver.md).
+
 ## Current Version
 
 v0.6.0 - Sprint 17.6 Google Workspace Integration Polish

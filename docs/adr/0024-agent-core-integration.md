@@ -99,6 +99,19 @@ Accepted for Sprint 18.3.1:
 - Journal payloads use normalized IDs, hashes, masked fields, and protected
   artifact references instead of secrets or raw provider responses.
 
+## Conversation Ownership
+
+Conversation state belongs to RuntimeTask, never to an Ability.
+
+`ConversationResolver` owns pending questions, selected entities, clarification
+history, confirmation state, and pending artifacts. `ConversationSession` is a
+voice lifecycle facade and does not persist those values independently.
+Ability implementations remain stateless across calls.
+
+Artifact payloads remain in transient RuntimeTask context. Diagnostics expose
+only privacy-safe keys and fingerprints. Terminal task transitions clear the
+context automatically.
+
 ## Migration
 
 The migration is incremental:
@@ -131,3 +144,4 @@ The migration is incremental:
 - `docs/architecture/task-state-machine.md`
 - `docs/architecture/checkpoint-resume-contract.md`
 - `docs/architecture/execution-journal.md`
+- `docs/architecture/conversation-resolver.md`

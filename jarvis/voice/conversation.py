@@ -1,7 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
 from uuid import uuid4
+
+from jarvis.runtime.conversation_resolver import ConversationResolver
+from jarvis.runtime.task import RuntimeTask
 
 
 CONVERSATION_IDLE = "IDLE"
@@ -27,19 +30,8 @@ class ConversationSession:
     state: str = CONVERSATION_IDLE
     follow_up_timeout: float = 0.0
     last_activity_time: float = 0.0
-    last_memory_result: dict | None = None
-    last_memory_result_turns_remaining: int = 0
-    last_calendar_result: dict | None = None
-    last_calendar_event: dict | None = None
-    last_reminder: dict | None = None
-    last_task: dict | None = None
-    pending_action: dict | None = None
-    pending_action_turns_remaining: int = 0
-    pending_action_expires_at: float = 0.0
-    pending_clarification: dict | None = None
-    pending_clarification_turns_remaining: int = 0
-    pending_clarification_expires_at: float = 0.0
-    conversation_task: object | None = None
+    runtime_task: RuntimeTask | None = None
+    resolver: ConversationResolver = field(default_factory=ConversationResolver, repr=False)
 
     def start(self):
         """Mark the conversation as listening."""
@@ -61,15 +53,21 @@ class ConversationSession:
         self.clear_last_calendar_result()
         self.clear_last_reminder()
         self.clear_last_task()
-        self.clear_pending_action()
-        self.clear_pending_clarification()
-        self.clear_conversation_task()
+        self.cleanup_conversation_context()
         self.transition(CONVERSATION_CLOSED)
 
     def set_last_memory_result(self, memory_result, turns=DEFAULT_LAST_MEMORY_RESULT_TURNS):
         """Keep one memory result only inside this wake session."""
-        self.last_memory_result = dict(memory_result)
-        self.last_memory_result_turns_remaining = max(0, int(turns))
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_memory_result",
+            dict(memory_result),
+        )
+        self.runtime_task = self.resolver.select(
+            self.runtime_task,
+            "last_memory_result_turns_remaining",
+            max(0, int(turns)),
+        )
 
     def get_last_memory_result(self):
         """Return the session-scoped memory result while it is still valid."""
@@ -77,67 +75,87 @@ class ConversationSession:
             self.clear_last_memory_result()
             return None
 
-        return self.last_memory_result
+        return self.resolver.selected(self.ensure_runtime_task(), "last_memory_result")
 
     def advance_memory_result_turn(self):
         """Age the session-scoped memory result by one follow-up turn."""
-        if self.last_memory_result is None:
+        if self.get_last_memory_result() is None:
             return
 
-        self.last_memory_result_turns_remaining -= 1
-
-        if self.last_memory_result_turns_remaining <= 0:
+        remaining = self.last_memory_result_turns_remaining - 1
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_memory_result_turns_remaining",
+            remaining,
+        )
+        if remaining <= 0:
             self.clear_last_memory_result()
 
     def clear_last_memory_result(self):
         """Clear session-scoped memory context."""
-        self.last_memory_result = None
-        self.last_memory_result_turns_remaining = 0
+        self.clear_selected_entity("last_memory_result")
+        self.clear_selected_entity("last_memory_result_turns_remaining")
 
     def set_last_calendar_result(self, calendar_result):
         """Keep the last CalendarResult inside this wake session."""
-        self.last_calendar_result = dict(calendar_result)
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_calendar_result",
+            dict(calendar_result),
+        )
 
     def set_last_calendar_event(self, calendar_event):
         """Keep the last selected Calendar event inside this wake session."""
-        self.last_calendar_event = dict(calendar_event)
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_calendar_event",
+            dict(calendar_event),
+        )
 
     def get_last_calendar_event(self):
         """Return the last selected Calendar event."""
-        return self.last_calendar_event
+        return self.resolver.selected(self.ensure_runtime_task(), "last_calendar_event")
 
     def get_last_calendar_result(self):
         """Return session-scoped calendar context."""
-        return self.last_calendar_result
+        return self.resolver.selected(self.ensure_runtime_task(), "last_calendar_result")
 
     def clear_last_calendar_result(self):
         """Clear session-scoped calendar context."""
-        self.last_calendar_result = None
-        self.last_calendar_event = None
+        self.clear_selected_entity("last_calendar_result")
+        self.clear_selected_entity("last_calendar_event")
 
     def set_last_reminder(self, reminder):
         """Keep the last Reminder inside this wake session."""
-        self.last_reminder = dict(reminder)
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_reminder",
+            dict(reminder),
+        )
 
     def get_last_reminder(self):
         """Return the last Reminder context."""
-        return self.last_reminder
+        return self.resolver.selected(self.ensure_runtime_task(), "last_reminder")
 
     def clear_last_reminder(self):
         """Clear session-scoped Reminder context."""
-        self.last_reminder = None
+        self.clear_selected_entity("last_reminder")
 
     def set_last_task(self, task):
         """Keep the last RuntimeTask inside this wake session."""
-        self.last_task = dict(task)
+        self.runtime_task = self.resolver.select(
+            self.ensure_runtime_task(),
+            "last_task",
+            dict(task),
+        )
 
     def get_last_task(self):
         """Return the last RuntimeTask context."""
-        return self.last_task
+        return self.resolver.selected(self.ensure_runtime_task(), "last_task")
 
     def clear_last_task(self):
         """Clear session-scoped RuntimeTask context."""
-        self.last_task = None
+        self.clear_selected_entity("last_task")
 
     def set_pending_action(
         self,
@@ -145,37 +163,63 @@ class ConversationSession:
         turns=DEFAULT_PENDING_ACTION_TURNS,
         seconds=DEFAULT_PENDING_ACTION_SECONDS,
     ):
-        """Keep one confirmation action inside this wake session."""
-        self.pending_action = dict(pending_action)
-        self.pending_action_turns_remaining = max(0, int(turns))
-        self.pending_action_expires_at = perf_counter() + float(seconds)
+        """Store one confirmation action on the active RuntimeTask."""
+        task = self.ensure_runtime_task(goal=format_pending_goal(pending_action))
+        task = self.resolver.set_question(
+            task,
+            "confirmation",
+            payload=dict(pending_action),
+            turns=turns,
+            seconds=seconds,
+        )
+        task = self.resolver.add_artifact(
+            task,
+            artifact_type="pending_action",
+            artifact_id=str(pending_action.get("task_id", "") or task.id),
+            payload=dict(pending_action),
+        )
+        self.runtime_task = self.resolver.set_confirmation(task, "PENDING")
 
     def get_pending_action(self):
         """Return pending action if it has not expired."""
-        if self.pending_action is None:
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        if question is None or question.kind != "confirmation":
             return None
-
-        if self.pending_action_turns_remaining <= 0 or perf_counter() > self.pending_action_expires_at:
-            self.clear_pending_action()
-            return None
-
-        return self.pending_action
+        return dict(question.payload)
 
     def advance_pending_action_turn(self):
         """Age pending confirmation by one follow-up attempt."""
-        if self.pending_action is None:
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        if question is None or question.kind != "confirmation":
             return
-
-        self.pending_action_turns_remaining -= 1
-
-        if self.pending_action_turns_remaining <= 0:
-            self.clear_pending_action()
+        self.runtime_task = self.resolver.advance_question(self.runtime_task)
 
     def clear_pending_action(self):
         """Clear pending confirmation action."""
-        self.pending_action = None
-        self.pending_action_turns_remaining = 0
-        self.pending_action_expires_at = 0.0
+        task = self.ensure_runtime_task()
+        question = self.resolver.get_question(task)
+        if question is not None and question.kind == "confirmation":
+            task = self.resolver.clear_question(task)
+        self.runtime_task = self.resolver.set_confirmation(task, "")
+
+    def answer_pending_action(self, answer):
+        """Resolve the Runtime-owned confirmation question."""
+        task = self.ensure_runtime_task()
+        self.runtime_task = self.resolver.set_confirmation(
+            self.resolver.answer_question(task, answer),
+            str(answer or "").upper(),
+        )
+
+    def complete_pending_action(self):
+        """Drop the confirmed draft while retaining follow-up selections."""
+        task = self.ensure_runtime_task()
+        artifacts = tuple(
+            item
+            for item in task.conversation_context.pending_artifacts
+            if item.artifact_type != "pending_action"
+        )
+        task = self.resolver.update_context(task, pending_artifacts=artifacts)
+        self.runtime_task = self.resolver.set_confirmation(task, "COMPLETED")
 
     def set_pending_clarification(
         self,
@@ -183,61 +227,158 @@ class ConversationSession:
         turns=DEFAULT_PENDING_CLARIFICATION_TURNS,
         seconds=DEFAULT_PENDING_CLARIFICATION_SECONDS,
     ):
-        """Keep one clarification request inside this wake session."""
-        self.pending_clarification = dict(pending_clarification)
-        self.pending_clarification_turns_remaining = max(0, int(turns))
-        self.pending_clarification_expires_at = perf_counter() + float(seconds)
+        """Store one clarification request on the active RuntimeTask."""
+        task = self.ensure_runtime_task(goal="clarification")
+        self.runtime_task = self.resolver.set_question(
+            task,
+            str(pending_clarification.get("kind", "") or "clarification"),
+            payload=dict(pending_clarification),
+            text=str(pending_clarification.get("question", "") or ""),
+            turns=turns,
+            seconds=seconds,
+        )
 
     def get_pending_clarification(self):
         """Return pending clarification if it has not expired."""
-        if self.pending_clarification is None:
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        if question is None or question.kind == "confirmation":
             return None
-
-        if self.pending_clarification_turns_remaining <= 0 or perf_counter() > self.pending_clarification_expires_at:
-            self.clear_pending_clarification()
-            return None
-
-        return self.pending_clarification
+        return dict(question.payload)
 
     def advance_pending_clarification_turn(self):
         """Age pending clarification by one follow-up attempt."""
-        if self.pending_clarification is None:
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        if question is None or question.kind == "confirmation":
             return
-
-        self.pending_clarification_turns_remaining -= 1
-
-        if self.pending_clarification_turns_remaining <= 0:
-            self.clear_pending_clarification()
+        self.runtime_task = self.resolver.advance_question(self.runtime_task)
 
     def clear_pending_clarification(self):
         """Clear pending clarification state."""
-        self.pending_clarification = None
-        self.pending_clarification_turns_remaining = 0
-        self.pending_clarification_expires_at = 0.0
+        task = self.ensure_runtime_task()
+        question = self.resolver.get_question(task)
+        if question is not None and question.kind != "confirmation":
+            self.runtime_task = self.resolver.clear_question(task)
+
+    def answer_pending_clarification(self, answer):
+        """Resolve the Runtime-owned clarification question."""
+        self.runtime_task = self.resolver.answer_question(self.ensure_runtime_task(), answer)
 
     def set_conversation_task(self, conversation_task):
-        """Store one active multi-turn runtime task."""
-        self.conversation_task = conversation_task
+        """Store a legacy collected form as a RuntimeTask artifact."""
+        task = self.ensure_runtime_task(goal="calendar conversation")
+        self.runtime_task = self.resolver.add_artifact(
+            task,
+            artifact_type="calendar_conversation",
+            artifact_id=str(getattr(conversation_task, "id", "") or task.id),
+            payload=conversation_task,
+        )
 
     def get_conversation_task(self):
         """Return the active conversation task if it has not expired."""
-        if self.conversation_task is None:
+        artifact = self.resolver.artifact(self.ensure_runtime_task(), "calendar_conversation")
+        conversation_task = artifact.payload if artifact is not None else None
+        if conversation_task is None:
             return None
 
-        if hasattr(self.conversation_task, "is_expired") and self.conversation_task.is_expired():
-            if hasattr(self.conversation_task, "task_state"):
-                self.conversation_task.task_state = "expired"
-            if hasattr(self.conversation_task, "state"):
-                self.conversation_task.state = "EXPIRED"
-            expired_task = self.conversation_task
+        if hasattr(conversation_task, "is_expired") and conversation_task.is_expired():
+            if hasattr(conversation_task, "task_state"):
+                conversation_task.task_state = "expired"
+            if hasattr(conversation_task, "state"):
+                conversation_task.state = "EXPIRED"
+            expired_task = conversation_task
             self.clear_conversation_task()
             return expired_task
 
-        return self.conversation_task
+        return conversation_task
 
     def clear_conversation_task(self):
         """Clear the active multi-turn runtime task."""
-        self.conversation_task = None
+        task = self.ensure_runtime_task()
+        artifacts = tuple(
+            item
+            for item in task.conversation_context.pending_artifacts
+            if item.artifact_type != "calendar_conversation"
+        )
+        self.runtime_task = self.resolver.update_context(task, pending_artifacts=artifacts)
+
+    def bind_runtime_task(self, task):
+        """Make an execution RuntimeTask the owner of subsequent conversation state."""
+        if task is not None and self.runtime_task is None:
+            self.runtime_task = task
+        elif task is not None:
+            self.runtime_task = self.resolver.select(
+                self.runtime_task,
+                "last_execution_task_id",
+                getattr(task, "id", ""),
+            )
+        return self.runtime_task
+
+    def ensure_runtime_task(self, goal=""):
+        self.runtime_task = self.resolver.ensure_task(self.runtime_task, goal=goal)
+        return self.runtime_task
+
+    def cleanup_conversation_context(self):
+        """Remove all transient selections, questions, and artifacts."""
+        self.runtime_task = self.resolver.cleanup(self.ensure_runtime_task())
+
+    def clear_selected_entity(self, key):
+        task = self.ensure_runtime_task()
+        selected = dict(task.conversation_context.selected_entities)
+        selected.pop(str(key), None)
+        self.runtime_task = self.resolver.update_context(task, selected_entities=selected)
+
+    @property
+    def last_memory_result(self):
+        return self.resolver.selected(self.ensure_runtime_task(), "last_memory_result")
+
+    @property
+    def last_memory_result_turns_remaining(self):
+        return int(
+            self.resolver.selected(
+                self.ensure_runtime_task(),
+                "last_memory_result_turns_remaining",
+                0,
+            )
+            or 0
+        )
+
+    @property
+    def last_calendar_result(self):
+        return self.resolver.selected(self.ensure_runtime_task(), "last_calendar_result")
+
+    @property
+    def last_calendar_event(self):
+        return self.resolver.selected(self.ensure_runtime_task(), "last_calendar_event")
+
+    @property
+    def last_reminder(self):
+        return self.resolver.selected(self.ensure_runtime_task(), "last_reminder")
+
+    @property
+    def last_task(self):
+        return self.resolver.selected(self.ensure_runtime_task(), "last_task")
+
+    @property
+    def pending_action(self):
+        return self.get_pending_action()
+
+    @property
+    def pending_action_turns_remaining(self):
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        return question.turns_remaining if question is not None and question.kind == "confirmation" else 0
+
+    @property
+    def pending_clarification(self):
+        return self.get_pending_clarification()
+
+    @property
+    def pending_clarification_turns_remaining(self):
+        question = self.resolver.get_question(self.ensure_runtime_task())
+        return question.turns_remaining if question is not None and question.kind != "confirmation" else 0
+
+    @property
+    def conversation_task(self):
+        return self.get_conversation_task()
 
     def remaining_follow_up_seconds(self, now=None):
         """Return remaining follow-up seconds."""
@@ -271,7 +412,8 @@ class ConversationSession:
             "pending_action_turns_remaining": self.pending_action_turns_remaining,
             "pending_clarification": self.pending_clarification,
             "pending_clarification_turns_remaining": self.pending_clarification_turns_remaining,
-            "conversation_task": conversation_task_to_dict(self.conversation_task),
+            "conversation_task": conversation_task_to_dict(self.get_conversation_task()),
+            "runtime_task_id": getattr(self.runtime_task, "id", ""),
         }
 
 
@@ -314,3 +456,14 @@ def conversation_task_to_dict(conversation_task):
         "expires_turns": getattr(conversation_task, "expires_turns", 0),
         "last_updated": getattr(conversation_task, "last_updated", ""),
     }
+
+
+def format_pending_goal(pending_action):
+    return ".".join(
+        item
+        for item in (
+            str(pending_action.get("ability", "") or ""),
+            str(pending_action.get("action", "") or ""),
+        )
+        if item
+    ) or "confirmation"

@@ -6,10 +6,33 @@ from jarvis.abilities.native.contacts.result import ContactResult
 from jarvis.core.contacts import Contact
 from jarvis.providers.google.config import GOOGLE_CONTACTS_READONLY_SCOPE, GOOGLE_CONTACTS_SCOPE, GoogleProviderConfig
 from jarvis.providers.google.contacts import GoogleContactsProvider
-from jarvis.voice.pipeline import extract_contact_ambiguous_clarification, format_confirmed_contact_candidate
+from jarvis.voice.conversation import create_conversation_session
+from jarvis.voice.pipeline import VoicePipeline, extract_contact_ambiguous_clarification, format_confirmed_contact_candidate
 
 
 class TestGoogleContactsProvider(unittest.TestCase):
+    def test_contact_ordinal_clarification_uses_runtime_context(self):
+        session = create_conversation_session()
+        session.set_pending_clarification(
+            {
+                "kind": "contact_ambiguous",
+                "attribute": "phone",
+                "contacts": [
+                    {"display_name": "First", "phones": ("010-1111-1111",)},
+                    {"display_name": "Second", "phones": ("010-2222-2222",)},
+                ],
+                "question": "choose",
+            }
+        )
+        pipeline = VoicePipeline(None, None, None, None, conversation_session=session)
+
+        reply = pipeline.try_pending_clarification_reply("2\ubc88")
+
+        self.assertIn("010-2222-2222", reply)
+        self.assertIsNone(session.get_pending_clarification())
+        history = session.runtime_task.conversation_context.clarification_history
+        self.assertEqual(history[-1].answer_kind, "ordinal")
+
     def test_google_contacts_search_maps_person_to_contact(self):
         service = FakePeopleService(
             search_response={

@@ -118,6 +118,7 @@ class RuntimeTaskCheckpoint:
     confirmation_state: str
     draft_version: int
     permission_snapshot: str
+    conversation_context: object
     checkpoint_created_at: str
     checkpoint_fingerprint: str
 
@@ -184,6 +185,16 @@ class TaskStateMachine:
             transition_history=task.transition_history + (record,),
             **changes,
         )
+        if to_state in {
+            TaskState.COMPLETED,
+            TaskState.SUCCESS,
+            TaskState.FAILED,
+            TaskState.CANCELLED,
+            TaskState.PARTIAL_SUCCESS,
+        }:
+            from jarvis.runtime.conversation_resolver import ConversationResolver
+
+            updated = ConversationResolver().cleanup(updated)
         checkpoint = self.checkpoint_store.save(create_runtime_checkpoint(updated, occurred_at))
         self.publish_transition(updated, record, checkpoint)
         return updated
@@ -199,6 +210,13 @@ class TaskStateMachine:
     def resume(self, task, decision, checkpoint):
         if task.status != TaskState.PAUSED:
             raise InvalidTaskTransition("Resume requires a PAUSED task.")
+        checkpoint_context = (
+            checkpoint.get("conversation_context")
+            if isinstance(checkpoint, dict)
+            else getattr(checkpoint, "conversation_context", None)
+        )
+        if checkpoint_context is not None:
+            task = replace(task, conversation_context=checkpoint_context)
         validation = decision.validate_resume(checkpoint)
         resuming = self.transition(
             task,
@@ -408,6 +426,20 @@ def create_runtime_checkpoint(task, occurred_at=None):
         "confirmation_state": task.confirmation_state,
         "draft_version": task.draft_version,
         "permission_snapshot": task.permission_snapshot,
+        "conversation_context": {
+            "task_id": task.conversation_context.task_id,
+            "current_step": task.conversation_context.current_step,
+            "pending_question_kind": (
+                task.conversation_context.pending_question.kind
+                if task.conversation_context.pending_question is not None
+                else ""
+            ),
+            "selected_entity_keys": sorted(task.conversation_context.selected_entities),
+            "artifact_fingerprints": [
+                item.fingerprint for item in task.conversation_context.pending_artifacts
+            ],
+            "confirmation_state": task.conversation_context.confirmation_state,
+        },
         "step_records": [
             {
                 "step_index": record.step_index,
@@ -442,6 +474,7 @@ def create_runtime_checkpoint(task, occurred_at=None):
         confirmation_state=task.confirmation_state,
         draft_version=task.draft_version,
         permission_snapshot=task.permission_snapshot,
+        conversation_context=task.conversation_context,
         checkpoint_created_at=created_at,
         checkpoint_fingerprint=fingerprint,
     )
