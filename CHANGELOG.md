@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Ignored context-free yes/no transcripts on the first post-Wake command and
+  returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard
   transients cannot start Follow-up STT recording.
 - Blocked unprompted bare-noun Follow-up transcripts before Planner/LLM routing

@@ -38,6 +38,7 @@ from jarvis.voice.pipeline import (
     confirmation_decision,
     extract_pending_action,
     extract_pending_clarification,
+    is_context_free_confirmation,
     is_unprompted_short_follow_up_noise,
     mail_reply_offer_decision,
     runtime_result_from_plan_result,
@@ -47,6 +48,34 @@ from jarvis.voice.pipeline import (
 
 class TestFollowUpConversationMode(unittest.TestCase):
     """Test v0.5.0 Beta.5.3 follow-up conversation mode."""
+
+    def test_context_free_confirmation_is_not_a_command(self):
+        self.assertTrue(is_context_free_confirmation("응."))
+        self.assertTrue(is_context_free_confirmation("아니"))
+        self.assertFalse(is_context_free_confirmation("응 등록해"))
+        self.assertFalse(is_context_free_confirmation("날씨 알려줘"))
+
+    def test_context_free_confirmation_skips_planner_tts_and_follow_up(self):
+        wake_listener = CountingWakeListener()
+        stt_provider = FollowUpSTTProvider(first="응.", follow_ups=["후속 입력"])
+        chat_service = CapturingChatService()
+        tts_provider = CapturingTTSProvider()
+        pipeline = VoicePipeline(
+            wake_listener=wake_listener,
+            stt_provider=stt_provider,
+            chat_service=chat_service,
+            tts_provider=tts_provider,
+            follow_up_timeout=8,
+        )
+
+        reply = pipeline.run_once()
+
+        self.assertEqual(reply, "")
+        self.assertEqual(wake_listener.calls, 1)
+        self.assertEqual(chat_service.messages, [])
+        self.assertEqual(tts_provider.spoken, [])
+        self.assertEqual(stt_provider.follow_ups, ["후속 입력"])
+        self.assertEqual(pipeline.conversation_session.state, CONVERSATION_CLOSED)
 
     def test_calendar_update_can_remove_named_participant(self):
         """Check relative Calendar updates can remove one participant."""

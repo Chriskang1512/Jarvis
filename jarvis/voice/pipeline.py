@@ -75,6 +75,7 @@ class VoicePipeline:
         self.input_manager = input_manager or InputManager()
         self.last_input_envelope = None
         self.last_wake_event = None
+        self.skip_follow_up_for_turn = False
         self.runtime_last_calendar_result = None
         self.runtime_last_calendar_event = None
         self.configure_conversation_context_provider()
@@ -91,6 +92,7 @@ class VoicePipeline:
 
     def run_once(self):
         """Run one complete voice conversation turn."""
+        self.skip_follow_up_for_turn = False
         if self.voice_session is not None:
             self.voice_session.start_turn()
 
@@ -121,7 +123,8 @@ class VoicePipeline:
         self.log_event("Wake detected")
         self.start_conversation_session()
         first_reply = self.process_voice_turn()
-        self.run_follow_up_loop()
+        if not self.skip_follow_up_for_turn:
+            self.run_follow_up_loop()
         return first_reply
 
     def process_voice_turn(self):
@@ -164,6 +167,16 @@ class VoicePipeline:
             self.publish_pipeline(stt="empty", current_stage="idle")
             self.publish_performance(llm_latency, perf_counter() - total_start, stt_latency, tts_latency)
             self.log_event("STT returned empty or failed input")
+            return ""
+
+        if is_context_free_confirmation(user_message):
+            self.skip_follow_up_for_turn = True
+            trace_event(
+                "voice.command.skipped",
+                reason="context_free_confirmation",
+                content_length=len(str(user_message or "")),
+            )
+            self.close_conversation_session()
             return ""
 
         self.set_conversation_state(CONVERSATION_THINKING)
@@ -1977,6 +1990,25 @@ def is_unprompted_short_follow_up_noise(message):
             return True
 
     return False
+
+
+def is_context_free_confirmation(message):
+    """Reject yes/no transcripts when no action has asked for confirmation."""
+    text = normalize_confirmation_text(message).replace(" ", "")
+    return text in {
+        "응",
+        "예",
+        "네",
+        "어",
+        "그래",
+        "좋아",
+        "아니",
+        "아니요",
+        "싫어",
+        "취소",
+        "no",
+        "yes",
+    }
 
 
 def contains_any(text, tokens):

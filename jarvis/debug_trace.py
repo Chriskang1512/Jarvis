@@ -41,6 +41,13 @@ def format_trace_event(event, payload):
     if event == "voice.wake.clap_state":
         return f"[Clap] state={payload.get('state') or '-'}"
 
+    if event == "voice.command.skipped":
+        return (
+            "[Voice] command_skipped "
+            f"reason={payload.get('reason') or '-'} "
+            f"content_length={payload.get('content_length', 0)}"
+        )
+
     if event == "weather.query":
         return (
             "[Weather] query "
