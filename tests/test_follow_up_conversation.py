@@ -100,6 +100,12 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertTrue(is_unprompted_short_follow_up_noise("\ud560\uc77c"))
         self.assertFalse(is_unprompted_short_follow_up_noise("\ud560 \uc77c \uc54c\ub824\uc918"))
 
+    def test_unprompted_follow_up_noise_blocks_hallucinated_bare_noun(self):
+        self.assertTrue(is_unprompted_short_follow_up_noise("고용보험공단"))
+        self.assertTrue(is_unprompted_short_follow_up_noise("날씨"))
+        self.assertFalse(is_unprompted_short_follow_up_noise("모레는"))
+        self.assertFalse(is_unprompted_short_follow_up_noise("날씨 알려줘"))
+
     def test_calendar_confirmation_noise_does_not_overwrite_title(self):
         """Check unknown short confirmation noise is not stored as a title."""
         task = start_calendar_conversation_task("내일 오후 3시에 만나기 일정 등록해")

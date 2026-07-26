@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Required both RMS and dBFS voice-activity thresholds so low-energy keyboard
+  transients cannot start Follow-up STT recording.
+- Blocked unprompted bare-noun Follow-up transcripts before Planner/LLM routing
+  while preserving explicit commands and referential questions.
 - Reduced the double-clap confirmation window from 0.8 to 0.5 seconds while
   retaining naturally paced triple-clap cancellation.
 - Extended double-clap confirmation through the full valid clap interval so a

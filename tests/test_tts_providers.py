@@ -587,6 +587,30 @@ class TestTTSProviders(unittest.TestCase):
         self.assertEqual(recording.shape[0], 40)
         self.assertGreaterEqual(metadata["max_rms"], 120)
 
+    def test_sounddevice_recording_rejects_keyboard_level_transient(self):
+        """Check a low-RMS key press cannot start Follow-up speech recording."""
+        np = __import__("numpy")
+        chunks = [
+            np.zeros((10, 1), dtype=np.int16),
+            np.ones((10, 1), dtype=np.int16) * 64,
+            np.zeros((10, 1), dtype=np.int16),
+        ]
+        sd = FakeSoundDevice(chunks)
+
+        _recording, metadata = record_until_silence(
+            sd=sd,
+            np=np,
+            sample_rate=10,
+            min_record_seconds=1.0,
+            max_record_seconds=3.0,
+            silence_timeout=1.0,
+            chunk_seconds=1.0,
+            return_metadata=True,
+        )
+
+        self.assertFalse(metadata["speech_started"])
+        self.assertEqual(metadata["max_rms"], 64.0)
+
     def test_sounddevice_recording_reports_no_speech_for_silence(self):
         """Check all-silence recording reports max_seconds and no speech."""
         np = __import__("numpy")

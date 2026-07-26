@@ -1283,11 +1283,10 @@ def update_noise_floor(noise_floor_dbfs, dbfs, speech_started):
 
 def is_speech_chunk(rms, dbfs, noise_floor_dbfs, rms_threshold=80, min_dbfs=-55.0, noise_margin_db=8.0):
     """Return whether one audio chunk likely contains speech."""
-    adaptive_threshold = noise_floor_dbfs + noise_margin_db if noise_floor_dbfs is not None else min_dbfs
-    dbfs_threshold = max(min_dbfs, adaptive_threshold)
+    del noise_floor_dbfs, noise_margin_db
     rms_floor = min(float(rms_threshold), 120.0)
 
-    return rms >= rms_floor or dbfs >= dbfs_threshold
+    return rms >= rms_floor and dbfs >= min_dbfs
 
 
 def remove_file_if_exists(path):

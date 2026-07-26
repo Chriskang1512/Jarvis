@@ -1952,6 +1952,30 @@ def is_unprompted_short_follow_up_noise(message):
     if len(normalized) <= 2 and confirmation_decision(text) != "yes" and rejection_decision(text) != "no":
         return True
 
+    if " " not in text and len(normalized) >= 3:
+        intentional_tokens = (
+            "알려",
+            "해줘",
+            "보여",
+            "등록",
+            "삭제",
+            "읽어",
+            "답장",
+            "보내",
+            "찾아",
+            "뭐",
+            "어때",
+            "언제",
+            "어디",
+            "누구",
+            "왜",
+            "계속",
+            "다시",
+        )
+        referential_endings = ("은", "는", "도", "까", "지")
+        if not contains_any(text, intentional_tokens) and not text.endswith(referential_endings):
+            return True
+
     return False
 
 
