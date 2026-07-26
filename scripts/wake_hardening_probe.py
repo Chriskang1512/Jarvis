@@ -22,6 +22,12 @@ def parse_args():
         required=True,
         help="Expected confirmed double-clap activations",
     )
+    parser.add_argument(
+        "--require-state",
+        action="append",
+        default=[],
+        help="Detector state that must be observed; may be repeated",
+    )
     return parser.parse_args()
 
 
@@ -42,6 +48,9 @@ def main():
     max_peak = 0.0
     max_rms = 0.0
     max_crest = 0.0
+    observed_states = []
+    last_candidate_at = None
+    capture_started_at = monotonic()
 
     try:
         import sounddevice
@@ -61,6 +70,7 @@ def main():
 
     def on_audio(indata, frames, time_info, status):
         nonlocal activations, candidate_count, max_peak, max_rms, max_crest
+        nonlocal last_candidate_at
         del frames, time_info
         if status:
             print(f"[Probe] audio_status={status}")
@@ -79,9 +89,22 @@ def main():
             and crest >= settings.crest_factor_threshold
         ):
             candidate_count += 1
+            candidate_at = monotonic()
+            gap = (
+                "-"
+                if last_candidate_at is None
+                else f"{candidate_at - last_candidate_at:.3f}s"
+            )
+            print(
+                f"[Probe] candidate={candidate_count} "
+                f"at={candidate_at - capture_started_at:.3f}s gap={gap} "
+                f"peak={peak:.3f} rms={rms:.3f} crest={crest:.2f}"
+            )
+            last_candidate_at = candidate_at
         detected = detector.process(samples, monotonic())
         decision = detector.pop_decision()
         if decision:
+            observed_states.append(decision)
             print(
                 f"[Probe] state={decision} "
                 f"peak={peak:.3f} rms={rms:.3f} crest={crest:.2f}"
@@ -100,12 +123,17 @@ def main():
     ):
         sleep(max(0.1, args.duration))
 
-    passed = activations == args.expected
+    missing_states = [
+        state for state in args.require_state if state not in observed_states
+    ]
+    passed = activations == args.expected and not missing_states
     print(
         f"[Probe] RESULT={'PASS' if passed else 'FAIL'} "
         f"label={args.label} activations={activations} expected={args.expected} "
         f"candidates={candidate_count} max_peak={max_peak:.3f} "
-        f"max_rms={max_rms:.3f} max_crest={max_crest:.2f}"
+        f"max_rms={max_rms:.3f} max_crest={max_crest:.2f} "
+        f"states={','.join(observed_states) or '-'} "
+        f"missing_states={','.join(missing_states) or '-'}"
     )
     raise SystemExit(0 if passed else 1)
 

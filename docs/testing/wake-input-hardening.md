@@ -19,9 +19,9 @@ rejection.
 Perform only the sound named by `--label` after `READY` appears.
 
 ```powershell
-python scripts\wake_hardening_probe.py --label single-clap --duration 4 --expected 0
-python scripts\wake_hardening_probe.py --label double-clap --duration 4 --expected 1
-python scripts\wake_hardening_probe.py --label triple-clap --duration 4 --expected 0
+python scripts\wake_hardening_probe.py --label single-clap --duration 4 --expected 0 --require-state FIRST_CLAP
+python scripts\wake_hardening_probe.py --label double-clap --duration 4 --expected 1 --require-state CONFIRMED
+python scripts\wake_hardening_probe.py --label triple-clap --duration 4 --expected 0 --require-state TRIPLE_CANCELLED
 python scripts\wake_hardening_probe.py --label keyboard-typing --duration 8 --expected 0
 python scripts\wake_hardening_probe.py --label desk-impact --duration 5 --expected 0
 python scripts\wake_hardening_probe.py --label door-close --duration 5 --expected 0
@@ -31,6 +31,10 @@ python scripts\wake_hardening_probe.py --label music-video --duration 15 --expec
 Repeat the double-clap probe with a fast, normal, and slow pair. The supported
 interval is printed by the probe. Tune thresholds only after retaining the
 `RESULT` lines for all cases; improving one case must not regress another.
+Clap cases pass only when their required detector state is observed. This
+prevents a triple-clap test with inaudible claps from being reported as a
+successful rejection. Candidate timestamps and gaps help distinguish a real
+second clap from two adjacent microphone frames produced by one clap.
 
 ## Full Runtime Checks
 
