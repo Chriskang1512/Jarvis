@@ -42,6 +42,16 @@ class TestWorkspaceIntegration(unittest.TestCase):
         self.assertEqual([step.tool_name for step in plan.steps], ["calendar", "mail"])
         self.assertEqual(plan.steps[1].depends_on, (1,))
 
+    def test_calendar_mail_without_recipient_requests_clarification(self):
+        dispatcher, _, provider = create_dispatcher()
+
+        plan = dispatcher.create_plan("내일 오후 3시 일정을 메일로 보내줘")
+
+        self.assertTrue(plan.requires_clarification)
+        self.assertEqual(plan.clarification_question, "일정을 누구에게 메일로 보낼까요?")
+        self.assertEqual(plan.step_count, 0)
+        self.assertEqual(provider.send_calls, [])
+
     def test_calendar_event_is_frozen_into_mail_preview(self):
         event_date = (date.today() + timedelta(days=1)).isoformat()
         event = CalendarEvent(id="event-1", title="제품 회의", date=event_date, time="15:00")

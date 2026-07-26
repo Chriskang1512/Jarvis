@@ -23,6 +23,7 @@
 - Stateless Mail Ability follow-up context and ordinal Contact clarification.
 - Checkpoint restoration and privacy-safe fingerprint coverage for
   conversation context.
+
 - Prevented Calendar and Contacts auth/smoke tools from narrowing the shared
   Workspace OAuth token to an Ability-specific scope.
 - Sprint 18.3.1 live Runtime integration for the Task State Machine, EventBus,
@@ -121,6 +122,15 @@
   unchanged semantic fingerprint.
 - A compatibility adapter from `ExecutionPlan` and `ExecutionStep` into the
   new Agent Core contracts.
+
+### Fixed
+
+- Restored compact Gmail voice UX by announcing the total count while reading
+  only the two newest sender/subject/time rows.
+- Bounded opened-mail summaries to 120 spoken characters and removed image,
+  URL, and HTML noise before TTS.
+- Changed recipient-less Calendar-to-Mail requests to ask who should receive
+  the message instead of treating schedule text as a contact name.
 
 ### Compatibility
 

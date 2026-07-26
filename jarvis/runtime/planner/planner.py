@@ -654,6 +654,18 @@ def create_workspace_integration_plan(text, registry):
             ),
         )
 
+    recipient_missing_calendar_mail = re.fullmatch(
+        r"(?P<schedule>.+?\s+일정)\s*(?:을|를)?\s*(?:메일|이메일)?로?\s*"
+        r"(?:보내줘|보내\s*줘|보내|전송해줘|전송해)",
+        normalized,
+    )
+    if recipient_missing_calendar_mail:
+        return ExecutionPlan(
+            raw_text=normalized,
+            requires_clarification=True,
+            clarification_question="일정을 누구에게 메일로 보낼까요?",
+        )
+
     return None
 
 

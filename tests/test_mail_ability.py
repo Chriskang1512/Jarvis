@@ -95,8 +95,38 @@ class TestMailAbilityVerticalSlice(unittest.TestCase):
         result = self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
         spoken = result.output.to_natural_language()
 
-        self.assertIn("가" * 47 + "…", spoken)
-        self.assertNotIn("가" * 48, spoken)
+        self.assertIn("가" * 31 + "…", spoken)
+        self.assertNotIn("가" * 32, spoken)
+
+    def test_mail_list_speaks_only_top_two_messages(self):
+        self.provider.messages = self.provider.messages + (
+            MailMessage(id="m3", sender_name="Third", subject="세 번째 제목"),
+        )
+
+        result = self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
+        spoken = result.output.to_natural_language()
+
+        self.assertIn("최근 메일은 3건입니다.", spoken)
+        self.assertIn("2. OpenAI.", spoken)
+        self.assertNotIn("3. Third.", spoken)
+
+    def test_mail_body_summary_removes_markup_and_is_bounded(self):
+        self.provider.messages = (
+            MailMessage(
+                id="m1",
+                sender_name="Google",
+                subject="보안 알림",
+                body_summary="[image: Google] " + ("가" * 100) + " https://example.com " + ("나" * 100),
+            ),
+        )
+        self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))
+
+        result = self.dispatcher.execute(ToolRequest("mail", {"text": "첫 번째 읽어줘"}))
+        spoken = result.output.to_natural_language()
+
+        self.assertNotIn("[image:", spoken)
+        self.assertNotIn("https://", spoken)
+        self.assertIn("…", spoken)
 
     def test_mail_ordinal_get_reads_selected_summary(self):
         self.dispatcher.execute(ToolRequest("mail", {"text": "최근 메일 알려줘"}))

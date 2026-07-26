@@ -1,5 +1,6 @@
 """Korean formatter for Mail Ability results."""
 
+import re
 from datetime import datetime
 
 
@@ -93,9 +94,9 @@ def list_message(messages, query=""):
 
     lines = [f"{prefix}은 {len(items)}건입니다."]
 
-    for index, message in enumerate(items, start=1):
+    for index, message in enumerate(items[:2], start=1):
         sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
-        subject = compact_text(message.subject or "제목 없음", 48)
+        subject = compact_text(message.subject or "제목 없음", 32)
         received = format_received_at(message.received_at)
         suffix = f" {received}." if received else ""
         lines.append(f"{index}. {sender}. {subject}.{suffix}")
@@ -111,7 +112,7 @@ def get_message(message, include_body=False):
 
     sender = clean_sender(message.sender_name or message.sender_email or "보낸 사람 없음")
     subject = message.subject or "제목 없음"
-    snippet = compact_text(message.body_summary or message.snippet, 240)
+    snippet = compact_spoken_summary(message.body_summary or message.snippet, 120)
     received = format_received_at(message.received_at)
     received_sentence = f" 받은 시각은 {received}입니다." if received else ""
 
@@ -153,6 +154,15 @@ def compact_text(value, max_length):
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
+
+
+def compact_spoken_summary(value, max_length):
+    """Remove non-spoken markup and bound a mail summary for voice UX."""
+    text = str(value or "")
+    text = re.sub(r"\[image:[^\]]*\]", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"https?://\S+", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return compact_text(text, max_length)
 
 
 def reply_recipient(value):
