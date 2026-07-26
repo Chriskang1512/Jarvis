@@ -41,6 +41,7 @@ class TaskRunner:
         history=None,
         state_machine=None,
         execution_journal=None,
+        rollback_step=None,
     ):
         """Create a task runner from dispatcher callbacks."""
         self.execute_step = execute_step
@@ -51,6 +52,10 @@ class TaskRunner:
         self.history = history or TaskHistory()
         self.state_machine = state_machine or TaskStateMachine()
         self.execution_journal = execution_journal
+        self.rollback_step = rollback_step
+        from jarvis.runtime.conversation_resolver import ConversationResolver
+
+        self.conversation_resolver = ConversationResolver()
         self.recovery_policy = HealthRecoveryPolicy()
         self._cancelled_task_ids = set()
         self._active_task_id = ""
@@ -107,7 +112,11 @@ class TaskRunner:
                         "capability": planned_step.tool_name,
                         "operation": planned_step.action,
                         "selected_implementation": planned_step.tool_name,
-                        "reason": "REGISTRY_PLAN_SELECTED",
+                        "reason": (
+                            "DEPENDENCY_ORDER"
+                            if tuple(getattr(planned_step, "depends_on", ()) or ())
+                            else "DEPENDENCY_ROOT"
+                        ),
                     },
                 )
             task = self.reflect_compiled_plan(task)
@@ -223,6 +232,13 @@ class TaskRunner:
                 if is_confirm_required_step_result(step_result):
                     wait_record = replace(record, status=TaskState.WAIT_CONFIRM)
                     step_records.append(wait_record)
+                    task = self.conversation_resolver.add_artifact(
+                        task,
+                        f"{step.tool_name}_draft",
+                        pending_external_operation_id(step_result) or f"{task.id}:{step.index}",
+                        input_data,
+                    )
+                    task = self.conversation_resolver.set_confirmation(task, "PENDING")
                     task = self.state_machine.transition(
                         task,
                         TaskState.WAIT_CONFIRM,
@@ -293,6 +309,16 @@ class TaskRunner:
                     continue
 
                 failed_steps.append(step.index)
+                if (
+                    getattr(getattr(step_result, "tool_result", None), "success", False)
+                    and step_result.failure_reason == "validation_failed"
+                ):
+                    self.rollback_failed_verification(
+                        task,
+                        step,
+                        input_data,
+                        step_result.tool_result,
+                    )
                 final_state = TaskState.PARTIAL_SUCCESS if len(completed_steps) > 0 else TaskState.FAILED
                 task = self.state_machine.transition(
                     task,
@@ -340,6 +366,35 @@ class TaskRunner:
             return self.finish(task, plan, step_results, context, "")
         finally:
             self._active_task_id = ""
+
+    def rollback_failed_verification(self, task, step, input_data, tool_result):
+        """Compensate a side effect whose provider result failed verification."""
+        if self.rollback_step is None:
+            return False
+        try:
+            rolled_back = bool(
+                self.rollback_step(
+                    step,
+                    input_data,
+                    tool_result,
+                    task_id=task.id,
+                )
+            )
+        except Exception:
+            rolled_back = False
+        self.record_journal(
+            task,
+            JournalPhase.RECOVERY,
+            "ROLLBACK_COMPLETED" if rolled_back else "ROLLBACK_UNAVAILABLE",
+            "SUCCESS" if rolled_back else "WARNING",
+            {
+                "step_id": str(step.index),
+                "capability": step.tool_name,
+                "operation": step.action,
+                "reason": "verification_failed",
+            },
+        )
+        return rolled_back
 
     def reflect_compiled_plan(self, task):
         """Project already-completed planning phases without re-running them."""
@@ -490,6 +545,7 @@ class TaskRunner:
 
     def finish(self, task, plan, step_results, context, error):
         """Build PlanResult, save history, and return TaskRunnerResult."""
+        task = self.conversation_resolver.cleanup_if_terminal(task)
         success = task.status in (TaskState.SUCCESS, TaskState.COMPLETED, TaskState.WAIT_CONFIRM)
         response = self.merge_responses(step_results, plan)
 
@@ -555,6 +611,14 @@ def validate_step_result(step_result):
 
 def validate_tool_result(step, tool_result):
     """Return structured validation for one executed tool result."""
+    if getattr(tool_result, "verification_success", True) is False:
+        return invalid_validation(
+            "validation_failed",
+            str(getattr(tool_result, "verification_validator", "") or "ProviderResultValidator"),
+            str(getattr(tool_result, "verification_field", "") or "provider_result"),
+            str(getattr(tool_result, "verification_error", "") or "Provider result verification failed."),
+        )
+
     if getattr(step, "tool_name", "") == "reminder":
         return validate_reminder_tool_result(tool_result)
 

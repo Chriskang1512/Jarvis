@@ -591,6 +591,10 @@ def create_workspace_integration_plan(text, registry):
     if registry is None or registry.get("mail") is None:
         return None
 
+    multi_step = create_calendar_reminder_mail_plan(normalized, registry)
+    if multi_step is not None:
+        return multi_step
+
     contact_match = re.fullmatch(
         r"(?P<name>.+?)\s*연락처\s*(?:찾아서|찾아\s*서|찾고)\s*(?P<tail>.*(?:메일|이메일)\s*(?:보내줘|보내\s*줘|보내|전송해줘|전송해))",
         normalized,
@@ -673,6 +677,63 @@ def create_workspace_integration_plan(text, registry):
         )
 
     return None
+
+
+def create_calendar_reminder_mail_plan(text, registry):
+    """Build the Sprint 18.7 Calendar -> Reminder -> Mail vertical slice."""
+    if registry.get("calendar") is None or registry.get("reminder") is None:
+        return None
+    has_calendar = any(token in text for token in ["미팅", "회의", "일정", "약속"])
+    has_create = any(token in text for token in ["만들", "잡", "등록", "추가"])
+    has_reminder = any(token in text for token in ["리마인더", "알려", "알림"])
+    has_mail = any(token in text for token in ["메일", "이메일"])
+    if not (has_calendar and has_create and has_reminder and has_mail):
+        return None
+
+    person_match = re.search(r"(?:에|에서)\s*(?P<name>[^\s]+?)(?:와|과|랑|이랑)\s*", text)
+    recipient = person_match.group("name").strip() if person_match else ""
+    calendar_text = re.split(r"\s*(?:그리고|하루\s*전|리마인더|알림)\s*", text, maxsplit=1)[0]
+    if not any(token in calendar_text for token in ["등록", "만들", "잡"]):
+        calendar_text = f"{calendar_text} 일정 등록해"
+    mail_text = (
+        f"{recipient}에게 일정 내용을 메일로 보내줘"
+        if recipient
+        else "일정 내용을 메일로 보내줘"
+    )
+    return ExecutionPlan(
+        raw_text=text,
+        steps=(
+            ExecutionStep(
+                index=1,
+                tool_name="calendar",
+                action="create",
+                input_data={"text": calendar_text, "remind_before_minutes": 1440},
+                raw_text=calendar_text,
+            ),
+            ExecutionStep(
+                index=2,
+                tool_name="reminder",
+                action="create",
+                input_data={"remind_before": 1440},
+                raw_text="하루 전에 알려줘",
+                depends_on=(1,),
+            ),
+            ExecutionStep(
+                index=3,
+                tool_name="mail",
+                action="send",
+                input_data={
+                    "action": "send",
+                    "recipient": recipient,
+                    "recipient_name": recipient,
+                    "raw_text": mail_text,
+                    "_workspace_calendar_mail": True,
+                },
+                raw_text=mail_text,
+                depends_on=(1, 2),
+            ),
+        ),
+    )
 
 
 def split_calendar_reminder_clause(text):

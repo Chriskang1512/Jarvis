@@ -1,4 +1,6 @@
+from dataclasses import dataclass, field
 from time import perf_counter
+from types import SimpleNamespace
 
 from jarvis.debug_trace import trace_event
 from jarvis.core.events import InMemoryEventBus
@@ -6,12 +8,48 @@ from jarvis.permissions import PermissionLayer, PermissionStatus
 from jarvis.runtime.conversation_resolver import ConversationResolver
 from jarvis.runtime.execution_journal import ExecutionJournal
 from jarvis.runtime.planner import PlanResult, PlanStepResult, RuntimePlanner
-from jarvis.runtime.task import RuntimeTask, TaskHistory, TaskRunner, TaskStateMachine
+from jarvis.runtime.task import (
+    RuntimeTask,
+    TaskHistory,
+    TaskRunner,
+    TaskState,
+    TaskStateMachine,
+    TransitionSource,
+)
 from jarvis.runtime.tool_dispatcher.context import DispatchContext
 from jarvis.runtime.tool_dispatcher.registry import RuntimeToolRegistry
 from jarvis.runtime.tool_dispatcher.result import DispatchResult, DispatchSelection
 from jarvis.tools import ToolRequest, ToolResult
 from jarvis.tools.router import select_candidate
+
+
+@dataclass(frozen=True)
+class PendingPlanExecution:
+    """Frozen continuation data for one paused RuntimeTask."""
+
+    task_id: str
+    plan: object
+    task: RuntimeTask
+    next_step_index: int
+    context: dict = field(default_factory=dict, repr=False)
+    step_results: tuple = field(default_factory=tuple, repr=False)
+
+
+class InMemoryPendingExecutionStore:
+    """Process-local pending execution store with an injectable contract."""
+
+    def __init__(self):
+        self._items = {}
+
+    def save(self, pending):
+        self._items[pending.task_id] = pending
+        return pending
+
+    def load(self, task_id):
+        return self._items.get(str(task_id or ""))
+
+    def delete(self, task_id):
+        return self._items.pop(str(task_id or ""), None)
 
 
 class RuntimeToolDispatcher:
@@ -25,6 +63,9 @@ class RuntimeToolDispatcher:
         min_confidence=0.75,
         intent_parser=None,
         event_bus=None,
+        state_machine=None,
+        pending_execution_store=None,
+        execution_journal=None,
     ):
         """Create dispatcher from an existing registry."""
         self.registry = registry
@@ -38,9 +79,10 @@ class RuntimeToolDispatcher:
         self.conversation_task = RuntimeTask(id="", goal="dispatcher conversation")
         self.planner = RuntimePlanner(min_confidence=self.min_confidence, intent_parser=intent_parser)
         self.event_bus = event_bus or InMemoryEventBus()
-        self.execution_journal = ExecutionJournal()
+        self.execution_journal = execution_journal or ExecutionJournal()
         self.event_bus.subscribe("*", self.execution_journal.handle, priority=10)
         self.task_history = TaskHistory()
+        self.pending_execution_store = pending_execution_store or InMemoryPendingExecutionStore()
         self.task_runner = TaskRunner(
             execute_step=self.execute_task_step,
             resolve_step_input=self.resolve_step_input,
@@ -48,8 +90,9 @@ class RuntimeToolDispatcher:
             update_context=update_plan_context,
             merge_responses=merge_plan_responses,
             history=self.task_history,
-            state_machine=TaskStateMachine(event_bus=self.event_bus),
+            state_machine=state_machine or TaskStateMachine(event_bus=self.event_bus),
             execution_journal=self.execution_journal,
+            rollback_step=self.rollback_task_step,
         )
 
     def set_intent_parser(self, intent_parser):
@@ -172,14 +215,120 @@ class RuntimeToolDispatcher:
                 step_count=plan.step_count,
             )
 
-        return self.task_runner.run(
+        run_result = self.task_runner.run(
             plan,
             confirmed=confirmed,
             start_index=start_index,
             initial_context=initial_context,
             pre_step_results=pre_step_results,
             runtime_task=runtime_task,
-        ).plan_result
+        )
+        self.capture_pending_execution(run_result, plan)
+        return run_result.plan_result
+
+    def capture_pending_execution(self, run_result, plan):
+        """Freeze the exact plan and context at a confirmation or pause boundary."""
+        task = run_result.task
+        if task.status not in {TaskState.WAIT_CONFIRM, TaskState.PAUSED}:
+            self.pending_execution_store.delete(task.id)
+            return None
+        pending = PendingPlanExecution(
+            task_id=task.id,
+            plan=plan,
+            task=task,
+            next_step_index=max(0, int(task.current_step) - 1),
+            context=dict(run_result.context),
+            step_results=tuple(run_result.plan_result.step_results),
+        )
+        return self.pending_execution_store.save(pending)
+
+    def confirm_task(self, task_id):
+        """Resume the exact frozen step after user confirmation."""
+        pending = self.require_pending_execution(task_id, TaskState.WAIT_CONFIRM)
+        resumed = self.task_runner.state_machine.resume_confirmed(pending.task)
+        self.execution_journal.record(
+            resumed.id,
+            "PERMISSION",
+            "PERMISSION_GRANTED",
+            status="CONFIRMED",
+            metadata={"step_id": str(pending.task.current_step), "reason": "user_confirmed"},
+        )
+        return self.execute_plan(
+            pending.plan,
+            confirmed=True,
+            start_index=pending.next_step_index,
+            initial_context=pending.context,
+            pre_step_results=list(pending.step_results[:-1]),
+            runtime_task=resumed,
+        )
+
+    def cancel_task(self, task_id):
+        """Cancel only the pending branch while preserving completed side effects."""
+        pending = self.require_pending_execution(task_id, TaskState.WAIT_CONFIRM)
+        cancelled = self.task_runner.state_machine.transition(
+            pending.task,
+            TaskState.CANCELLED,
+            reason="user_rejected",
+            source=TransitionSource.USER,
+        )
+        cancelled = self.conversation_resolver.cleanup(cancelled)
+        self.task_history.add(cancelled)
+        self.execution_journal.record(
+            cancelled.id,
+            "PERMISSION",
+            "PERMISSION_REJECTED",
+            status="CANCELLED",
+            metadata={"step_id": str(pending.task.current_step), "reason": "user_rejected"},
+        )
+        self.execution_journal.record(
+            cancelled.id,
+            "RESULT",
+            "TASK_RESULT",
+            status="SUCCESS_CANCELLED_BRANCH",
+            metadata={
+                "status": "CANCELLED",
+                "completed_step_count": len(cancelled.completed_steps),
+            },
+        )
+        self.pending_execution_store.delete(cancelled.id)
+        return PlanResult(
+            success=True,
+            plan=pending.plan,
+            step_results=list(pending.step_results[:-1]),
+            response="요청한 전송을 취소했습니다.",
+            task=cancelled,
+        )
+
+    def resume_task(self, task_id, decision):
+        """Restore a policy-approved paused task and continue at its safe step."""
+        pending = self.require_pending_execution(task_id, TaskState.PAUSED)
+        checkpoint = self.task_runner.state_machine.checkpoint_store.load(pending.task.id)
+        if checkpoint is None:
+            raise ValueError("RUNTIME_CHECKPOINT_REQUIRED")
+        resumed, validation = self.task_runner.state_machine.resume(
+            pending.task,
+            decision.bind_checkpoint(checkpoint),
+            checkpoint,
+        )
+        if resumed.status != TaskState.RUNNING:
+            raise ValueError(f"RUNTIME_RESUME_REPLAN_REQUIRED:{validation.code}")
+        return self.execute_plan(
+            pending.plan,
+            start_index=pending.next_step_index,
+            initial_context=pending.context,
+            pre_step_results=list(pending.step_results[:-1]),
+            runtime_task=resumed,
+        )
+
+    def require_pending_execution(self, task_id, expected_state):
+        pending = self.pending_execution_store.load(task_id)
+        if pending is None:
+            raise ValueError("PENDING_EXECUTION_NOT_FOUND")
+        if pending.task.status != expected_state:
+            raise ValueError(
+                f"PENDING_EXECUTION_STATE_MISMATCH:{pending.task.status.value}"
+            )
+        return pending
 
     def execute_task_step(self, step, input_data, step_count, task_id=""):
         """Execute one task step through the existing dispatcher path."""
@@ -198,6 +347,15 @@ class RuntimeToolDispatcher:
             step_count=step_count,
             task_id=task_id,
         )
+
+    def rollback_task_step(self, step, input_data, tool_result, task_id=""):
+        """Invoke an Ability's explicit compensation contract when available."""
+        tool = self.registry.get(step.tool_name)
+        rollback = getattr(tool, "rollback", None) if tool is not None else None
+        if not callable(rollback):
+            return False
+        rollback(dict(input_data), tool_result)
+        return True
 
     def resolve_step_input(self, step, context):
         """Fill a planned step input from prior step context when needed."""
@@ -421,6 +579,12 @@ def create_permission_tool_result(tool_request, permission_decision):
         return ToolResult(
             tool_name=tool_request.tool_name,
             success=False,
+            output=SimpleNamespace(
+                metadata={
+                    "permission": "confirm_required",
+                    "reason": permission_decision.reason,
+                }
+            ),
             error=f"Permission confirmation required: {permission_decision.reason}",
         )
 

@@ -13,6 +13,14 @@
 
 ### Added
 
+- Sprint 18.7 Calendar -> Reminder -> Mail multi-step vertical slice under one
+  RuntimeTask.
+- Runtime-owned pending execution snapshots and confirm, cancel, and resume
+  APIs that preserve one Task ID without reparsing or rebuilding drafts.
+- Provider-result verification hooks and explicit Ability rollback
+  compensation with privacy-safe Journal events.
+- Integrated Happy, Cancel, Pause/Resume, Retry, Verification failure, Replay,
+  Explain, Permission, and Journal regression coverage.
 - Sprint 18.6 append-only Execution Journal with standardized Goal through
   Result phases, task-scoped sequence numbers, and fingerprint chaining.
 - EventBus and TaskRunner Journal integration across planning, Registry

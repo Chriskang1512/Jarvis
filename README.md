@@ -21,6 +21,7 @@ The approved migration design is documented in:
 - [`Task state machine`](docs/architecture/task-state-machine.md)
 - [`Checkpoint and resume contract`](docs/architecture/checkpoint-resume-contract.md)
 - [`Execution Journal`](docs/architecture/execution-journal.md)
+- [`Multi-step Vertical Slice`](docs/architecture/multi-step-vertical-slice.md)
 - [`Capability Discovery`](docs/architecture/capability-discovery.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
@@ -97,6 +98,20 @@ See
 [`docs/architecture/execution-journal.md`](docs/architecture/execution-journal.md)
 and
 [`ADR 0026 - Execution Journal Authority`](docs/adr/0026-execution-journal-authority.md).
+
+Sprint 18.7 proves the integrated Agent Core path:
+
+- one Goal keeps one `RuntimeTask` across Calendar, Reminder, and Mail;
+- confirmation freezes the exact plan, context, and draft instead of reparsing;
+- cancel preserves accepted Calendar and Reminder work without calling Mail;
+- retry and resume consume `RecoveryDecision` and checkpoint contracts;
+- verification failures use explicit Ability rollback compensation;
+- Replay, Explain, and the Journal retain one causal execution history.
+
+See
+[`docs/architecture/multi-step-vertical-slice.md`](docs/architecture/multi-step-vertical-slice.md)
+and
+[`ADR 0027 - Multi-step Runtime Continuation`](docs/adr/0027-multi-step-runtime-continuation.md).
 
 ## Current Version
 
