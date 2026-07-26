@@ -703,6 +703,21 @@ class TestTTSProviders(unittest.TestCase):
         self.assertEqual(snapshot.success_count, 1)
         self.assertEqual(snapshot.provider_requests["openai"], 1)
 
+    def test_wake_transcription_is_not_counted_as_fallback(self):
+        """Check a dedicated Wake STT role does not corrupt fallback metrics."""
+        reset_stt_metrics()
+
+        transcribe_stt_audio(
+            b"RIFFfake",
+            provider="openai_wake",
+            client_factory=lambda api_key: FakeOpenAISTTClient(text="hey jarvis"),
+            api_key_reader=lambda: "test-key",
+        )
+
+        snapshot = get_stt_metrics_snapshot()
+        self.assertEqual(snapshot.provider_requests["openai_wake"], 1)
+        self.assertEqual(snapshot.fallback_count, 0)
+
     def test_openai_stt_prompt_includes_runtime_context(self):
         """Check STT prompt can include compact runtime context."""
         fake_client = FakeOpenAISTTClient(text="\uc751")

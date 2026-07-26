@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Prevented primary Wake phrase transcription (`openai_wake`) from being
+  misreported as STT fallback usage in runtime metrics.
 - Replaced the misleading console-backed Voice Wake path with real microphone
   recognition for `자비스`, `헤이 자비스`, and `hey jarvis`, sharing one audio
   stream with double-clap detection.

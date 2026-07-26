@@ -1361,7 +1361,7 @@ def transcribe_stt_audio(
             language=normalize_openai_stt_language(language),
             error_code="missing_api_key",
             error_message="OPENAI_API_KEY is not configured.",
-            fallback_used=provider != "openai",
+            fallback_used=is_fallback_stt_provider(provider),
         )
         record_stt_result(result)
         trace_event(
@@ -1467,7 +1467,7 @@ def transcribe_stt_audio(
             model=model,
             language=request_language,
             latency_ms=latency_ms,
-            fallback_used=provider != "openai",
+            fallback_used=is_fallback_stt_provider(provider),
             error_code="" if text else "empty_transcript",
             error_message="" if text else "OpenAI STT returned an empty transcript.",
             confidence=transcription_metadata.get("confidence"),
@@ -1495,7 +1495,7 @@ def transcribe_stt_audio(
             model=model,
             language=normalize_openai_stt_language(language),
             latency_ms=latency_ms,
-            fallback_used=provider != "openai",
+            fallback_used=is_fallback_stt_provider(provider),
             error_code=error.__class__.__name__,
             error_message=str(error),
         )
@@ -1512,6 +1512,11 @@ def transcribe_stt_audio(
         return ""
     finally:
         remove_file_if_exists(audio_path)
+
+
+def is_fallback_stt_provider(provider):
+    """Distinguish fallback transcription from primary and Wake STT roles."""
+    return str(provider or "") in {"openai_fallback", "openai_confirmation"}
 
 
 def is_short_stt_text(text):
