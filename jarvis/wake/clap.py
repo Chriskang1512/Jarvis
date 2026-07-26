@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+import logging
 from math import sqrt
+
+
+LOGGER = logging.getLogger("jarvis.wake.clap")
 
 
 @dataclass(frozen=True)
 class ClapDetectorSettings:
-    peak_threshold: float = 0.40
-    rms_threshold: float = 0.06
+    peak_threshold: float = 0.55
+    rms_threshold: float = 0.08
     crest_factor_threshold: float = 3.0
     min_gap_seconds: float = 0.12
     max_gap_seconds: float = 0.8
@@ -44,6 +48,15 @@ class ClapDetector:
             ):
                 first_clap_at = self.first_clap_at
                 second_clap_at = self.second_clap_at
+                if first_clap_at is None:
+                    self.reset_pattern()
+                    self.last_decision = "REJECTED"
+                    self.set_diagnostic(
+                        "REJECTED",
+                        rejection_reason="missing_first_clap",
+                        second_clap_at=second_clap_at,
+                    )
+                    return False
                 self.reset_pattern()
                 self.last_decision = "CONFIRMED"
                 self.set_diagnostic(
@@ -183,8 +196,7 @@ class SoundDeviceClapMonitor:
                 del frames, time_info, status
                 samples = tuple(float(item[0]) for item in indata)
                 timestamp = monotonic()
-                for listener in tuple(self.listeners):
-                    listener(samples, timestamp)
+                self.dispatch_audio(samples, timestamp)
 
             self.stream = sounddevice.InputStream(
                 samplerate=self.sample_rate,
@@ -199,6 +211,18 @@ class SoundDeviceClapMonitor:
         except (ImportError, OSError, RuntimeError, ValueError):
             self.stream = None
             return False
+
+    def dispatch_audio(self, samples, timestamp):
+        """Isolate listener failures so the shared microphone stream survives."""
+        for listener in tuple(self.listeners):
+            try:
+                listener(samples, timestamp)
+            except Exception as error:
+                LOGGER.exception(
+                    "wake audio listener failed listener=%s error_type=%s",
+                    getattr(listener, "__name__", type(listener).__name__),
+                    type(error).__name__,
+                )
 
     def stop(self):
         stream = self.stream

@@ -14,6 +14,7 @@ from jarvis.wake import (
     ApiWakeProvider,
     ClapDetector,
     ClapWakeProvider,
+    SoundDeviceClapMonitor,
     KeyboardWakeProvider,
     MicrophoneWakeWordProvider,
     MobileWakeProvider,
@@ -202,6 +203,34 @@ class TestClapDetector(unittest.TestCase):
         diagnostic = detector.pop_diagnostic()
         self.assertEqual(diagnostic["detector_state"], "CONFIRMED")
         self.assertAlmostEqual(diagnostic["gap_seconds"], 0.45)
+        self.assertIsNone(detector.first_clap_at)
+        self.assertIsNone(detector.second_clap_at)
+
+    def test_missing_first_clap_is_rejected_without_callback_exception(self):
+        detector = ClapDetector()
+        detector.second_clap_at = 1.45
+
+        self.assertFalse(detector.process([0.0] * 100, 1.96))
+
+        diagnostic = detector.pop_diagnostic()
+        self.assertEqual(diagnostic["detector_state"], "REJECTED")
+        self.assertEqual(diagnostic["rejection_reason"], "missing_first_clap")
+        self.assertIsNone(detector.first_clap_at)
+        self.assertIsNone(detector.second_clap_at)
+
+    def test_audio_monitor_isolates_listener_exceptions(self):
+        received = []
+
+        def failing_listener(samples, timestamp):
+            del samples, timestamp
+            raise TypeError("simulated callback failure")
+
+        monitor = SoundDeviceClapMonitor(failing_listener)
+        monitor.add_listener(lambda samples, timestamp: received.append((samples, timestamp)))
+
+        monitor.dispatch_audio((0.1,), 1.0)
+
+        self.assertEqual(received, [((0.1,), 1.0)])
 
 
 class TestWakeProvidersAndManager(unittest.TestCase):

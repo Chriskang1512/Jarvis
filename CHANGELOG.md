@@ -12,8 +12,8 @@
   gap or settle thresholds.
 - Preserved the first clap while an accepted double-clap waits for settle
   confirmation, preventing a callback exception after valid 0.45-second pairs.
-- Tuned reference microphone clap peak/RMS thresholds from room measurements
-  while retaining separation from recorded desk, door, and keyboard noise.
+- Guarded corrupt pending-clap state and isolated audio listener exceptions so
+  one detector failure cannot silently stop the shared microphone callback.
 - Ignored context-free yes/no transcripts on the first post-Wake command and
   returned directly to Wake listening without Planner, LLM, TTS, or Follow-up.
 - Required both RMS and dBFS voice-activity thresholds so low-energy keyboard
