@@ -39,7 +39,7 @@ class MemoryStorePolicy:
 
         relationship = re.fullmatch(
             r"(?P<name>[가-힣A-Za-z0-9_]+)[은는]\s*"
-            r"(?P<value>.+?)(?:에\s*살아|에\s*살고\s*있어)",
+            r"(?P<value>.+?)에\s*(?:살아|산다|살고\s*있어)",
             normalized,
         )
         if relationship:
@@ -59,7 +59,8 @@ class MemoryStorePolicy:
 def parse_preference(text):
     location = re.fullmatch(
         r"(?:앞으로\s*)?기본\s*날씨(?:\s*지역)?(?:은|는|을|를)?\s*"
-        r"(?P<value>[가-힣A-Za-z0-9_\-\s]+?)(?:으로|로)\s*해\s*줘",
+        r"(?P<value>[가-힣A-Za-z0-9_\-\s]+?)(?:으로|로)\s*"
+        r"(?:해(?:\s*줘|로)?|설정해(?:\s*줘)?)",
         text,
     )
     if location:

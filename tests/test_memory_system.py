@@ -94,6 +94,20 @@ class TestMemorySystem(unittest.TestCase):
         self.assertEqual(location.key, "user.location")
         self.assertEqual(location.value, "강릉")
 
+    def test_store_policy_accepts_observed_preference_and_fact_variants(self):
+        policy = MemoryStorePolicy()
+
+        short_preference = policy.decide("앞으로 기본 날씨를 강릉으로 해.")
+        stt_preference = policy.decide("앞으로 기본 날씨를 강릉으로 해로.")
+        relationship = policy.decide("아야는 오사카에 산다.")
+
+        self.assertTrue(short_preference.should_store)
+        self.assertEqual(short_preference.value, "강릉")
+        self.assertTrue(stt_preference.should_store)
+        self.assertEqual(stt_preference.value, "강릉")
+        self.assertTrue(relationship.should_store)
+        self.assertEqual(relationship.value, "오사카")
+
     def test_successful_ability_execution_applies_store_policy(self):
         manager = MemoryManager(SQLiteMemoryProvider(self.path))
         request = SimpleNamespace(

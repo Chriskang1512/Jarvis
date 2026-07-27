@@ -15,6 +15,13 @@
 - Typed extension stubs for Personal Lexicon, Correction Memory, Entity Graph,
   and Cloud Memory.
 
+### Fixed
+
+- Let incomplete AI-generated Memory writes fall through to normal conversation
+  instead of exposing a missing-parameter error for ephemeral statements.
+- Accepted observed Korean preference and relationship phrasing variants in the
+  conservative Memory Store Policy.
+
 ## [v1.1.0-wake-input] - 2026-07-27
 
 ### Release Summary

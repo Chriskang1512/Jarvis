@@ -325,6 +325,36 @@ class TestAIIntentParserSprint8(unittest.TestCase):
                 self.assertFalse(result.success)
                 self.assertEqual(result.error_code, error_code)
 
+    def test_incomplete_ai_memory_write_falls_through_without_error(self):
+        """Ephemeral chat must not become a visible memory validation error."""
+        validator = IntentValidator()
+        raw_text = "오늘 점심은 김치찌개 먹었어."
+        intent = StructuredIntent(
+            "memory.remember",
+            "memory",
+            "remember",
+            parameters={},
+            confidence=0.9,
+            source="ai",
+            raw_text=raw_text,
+            normalized_text=raw_text,
+        )
+
+        result = validator.validate_result(
+            IntentParseResult(
+                success=True,
+                intents=(intent,),
+                source="ai",
+                confidence=0.9,
+                raw_text=raw_text,
+                normalized_text=raw_text,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.error_code, "")
+        self.assertEqual(result.intents, ())
+
     def test_validator_allows_current_weather_temporal_expressions(self):
         """Weather queries may use Korean current-time words without ISO datetime."""
         validator = IntentValidator()

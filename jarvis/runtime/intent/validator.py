@@ -44,6 +44,17 @@ class IntentValidator:
             error_code, error_message = self.validate_intent(intent)
 
             if error_code:
+                if (
+                    error_code == MISSING_REQUIRED_PARAMETER
+                    and intent.ability == "memory"
+                    and intent.action == "remember"
+                ):
+                    return IntentParseResult(
+                        success=False,
+                        source=result.source,
+                        raw_text=result.raw_text,
+                        normalized_text=result.normalized_text,
+                    )
                 return IntentParseResult(
                     success=False,
                     source=result.source,
