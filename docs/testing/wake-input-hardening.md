@@ -8,8 +8,10 @@ Run the wizard with the microphone in its normal position:
 python scripts\wake_calibration.py
 ```
 
-The wizard records a short noise sample and five Double Clap trials. It stores
-features only, never audio, and writes the versioned result atomically to
+The wizard records a short noise sample and five valid Double Clap trials.
+Each trial must detect exactly two candidates and retries up to three times
+before failing without replacing the existing profile. It stores features
+only, never audio, and writes the versioned result atomically to
 `data/wake_calibration.json`. Jarvis overlays only the calibrated Wake fields
 at startup; `config.json` is not rewritten. Insufficient sample count or signal
 separation leaves the previous profile untouched.
@@ -84,6 +86,13 @@ The first calibrated room matrix measured Double `8/10`, Single `11/11` with
 zero activation, and Triple cancellation `2/5`. Calibration profile v2 uses a
 second-clap ratio of `0.55`. The same adaptive threshold is used only as a
 third-clap cancellation guard during settle; it cannot create an activation.
+
+The Sprint 19 release matrix after calibration v2 measured Double `9/10`,
+Single `10/10` with zero activation, and Triple cancellation `5/5`. Keyboard
+typing, desk impact, door close, and the measured media sample produced zero
+activation. Door close reached `DOUBLE_PENDING` once before a third transient
+cancelled it; the project accepts this as a target-room residual risk and
+retests only if a live false activation is observed.
 
 ## Full Runtime Checks
 

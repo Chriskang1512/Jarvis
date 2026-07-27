@@ -35,3 +35,11 @@ before command transcription begins.
 - Wake monitoring is inactive during STT, TTS, and Follow-up execution.
 - A short post-pattern settle window rejects rapid triple claps, and all
   losing-provider events are discarded after one provider activates Runtime.
+- Per-device calibration must accept exactly two clap candidates per trial;
+  incomplete trials retry and cannot silently weaken the resulting profile.
+- Sprint 19.2 owns the completed integration, diagnostics, calibration, and
+  regression scope. A separate Sprint 19.3 integration phase is unnecessary.
+- Environmental detection cannot be universally perfect. A measured
+  door-close near-match is accepted as a documented residual risk because it
+  produced no activation in the target room; real false activations trigger
+  recalibration or policy tuning.

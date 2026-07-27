@@ -23,6 +23,7 @@ The approved migration design is documented in:
 - [`Execution Journal`](docs/architecture/execution-journal.md)
 - [`Multi-step Vertical Slice`](docs/architecture/multi-step-vertical-slice.md)
 - [`Input and Wake Manager`](docs/architecture/input-wake-manager.md)
+- [`Sprint 19 Release Review`](docs/releases/sprint-19-release-review.md)
 - [`Capability Discovery`](docs/architecture/capability-discovery.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
@@ -135,7 +136,22 @@ and
 
 ## Current Version
 
-v0.6.0 - Sprint 17.6 Google Workspace Integration Polish
+v1.1.0-wake-input - Sprint 19 Wake and Input Foundation
+
+Sprint 19 is complete:
+
+- Sprint 19.1 established `InputManager`, `InputEnvelope`, `WakeManager`, and
+  provider-neutral activation contracts.
+- Sprint 19.2 integrated live Clap and microphone Wake, privacy-safe
+  diagnostics, per-device calibration, false-positive hardening, and full
+  regression coverage.
+- The planned Sprint 19.3 Integration and Diagnostics work was completed
+  inside Sprint 19.2 and removed as a separate sprint.
+- The final room baseline reached Double Clap `9/10`, Single Clap `10/10` with
+  zero activation, Triple Clap cancellation `5/5`, and no measured activation
+  from keyboard typing, desk impact, door close, or the tested media sample.
+
+The next product milestone is v1.2 Memory.
 
 ## v0.6.0 Sprint 17.6
 

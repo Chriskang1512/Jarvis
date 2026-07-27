@@ -2,20 +2,18 @@
 
 Sprint 19 places a provider-driven Wake layer before normalized input.
 
-```text
-Voice / Keyboard / Clipboard / Future Inputs
-  -> InputProvider
-  -> InputManager
-  -> InputEnvelope
-     -> InputContext
-        -> ActivationContext
-  -> Intent Parser
-  -> Planner
-
-Microphone / Hotkey / External Trigger
-  -> WakeManager
-  -> ActivationContext
-  -> InputManager
+```mermaid
+flowchart TD
+    MIC["Microphone PCM"] --> WM["WakeManager"]
+    HOTKEY["Keyboard / Touch Portal / External Trigger"] --> WM
+    WM --> AC["ActivationContext"]
+    AC --> IM["InputManager"]
+    VOICE["Voice Command / Follow-up"] --> IP["InputProvider"]
+    TEXT["Keyboard / Clipboard / Future Inputs"] --> IP
+    IP --> IM
+    IM --> IE["InputEnvelope"]
+    IE --> PARSER["Intent Parser"]
+    PARSER --> PLANNER["Planner"]
 ```
 
 ## Wake Providers
@@ -59,12 +57,17 @@ separate adapters; they call `trigger()` and do not bypass Wake policy.
   impulse; any third impulse in that window cancels the pending activation.
 
 One clap never activates Jarvis. Three rapid claps are rejected instead of
-activating on the first two. Real-room calibration remains a device-level task.
+activating on the first two. Real-room calibration is stored per device.
 The Wake profile supports `clap_peak_threshold`, `clap_rms_threshold`,
 `clap_crest_factor_threshold`, `clap_min_gap_seconds`,
 `clap_max_gap_seconds`, and `clap_settle_seconds`.
 The default settle window is 0.5 seconds, trading a small Wake delay for
 reliable rejection of naturally paced triple claps.
+
+`python scripts\wake_calibration.py` records a noise sample and five valid
+Double Clap trials. Every trial must contain exactly two detected clap
+candidates; incomplete trials retry and cannot produce a profile. The wizard
+stores only derived features in `data/wake_calibration.json`, never audio.
 
 Debug Trace exposes the live state without microphone content:
 
@@ -128,3 +131,22 @@ stubs with stable source and modality declarations.
 `WakeManager.wait_for_wake_word()` preserves the existing Voice Pipeline
 interface. Tests may still use `WakeWordProvider.feed_text()` directly, but the
 live provider receives text only from microphone wake transcription.
+
+## Sprint 19 Closure
+
+Sprint 19.1 delivered the common Wake and Input contracts. Sprint 19.2 absorbed
+the planned 19.3 Integration and Diagnostics scope by completing the live
+Wake-to-Planner path, detector diagnostics, calibration, and regression matrix.
+
+The final measured room baseline was:
+
+- Double Clap: `9/10` confirmed;
+- Single Clap: `10/10` with zero activation;
+- Triple Clap: `5/5` cancelled;
+- keyboard typing, desk impact, door close, and measured media: zero activation;
+- detector exceptions and duplicate activations: zero.
+
+Door-close input reached `DOUBLE_PENDING` once and was cancelled by the third
+transient. This is an accepted low-frequency residual risk, not a guarantee for
+all rooms or microphones. Recalibration and the live probe remain the supported
+response if a real false activation is observed.

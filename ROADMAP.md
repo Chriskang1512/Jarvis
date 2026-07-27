@@ -1,5 +1,19 @@
 # Jarvis Roadmap
 
+## v1 Product Milestones
+
+- [x] v1.0 Agent Core
+- [x] v1.1 Wake and Input
+  - [x] Sprint 19.1 Wake and Input Foundation
+  - [x] Sprint 19.2 Hardening, Integration, Diagnostics, and Calibration
+  - Sprint 19.3 was absorbed into Sprint 19.2 and removed.
+- [ ] v1.2 Memory
+- [ ] v1.3 Local Dashboard
+- [ ] v1.4 Plugin and Ability SDK
+- [ ] v1.5 Work-style Agent
+- [ ] v1.6 GUI
+- [ ] v1.7 Mobile
+
 ## Internal Milestone - Jarvis Core v1 Complete
 
 Status: Complete after v0.5.0 Beta.5.3 Follow-up Conversation Mode.

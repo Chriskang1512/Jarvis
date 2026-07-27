@@ -1,6 +1,24 @@
 # Changelog
 
-## [Unreleased] - Sprint 18.1 Agent Core Planner Contract
+## [Unreleased]
+
+## [v1.1.0-wake-input] - 2026-07-27
+
+### Release Summary
+
+- Completed Sprint 19.1 Wake and Input Foundation and Sprint 19.2 Hardening.
+- Absorbed the planned Sprint 19.3 Integration and Diagnostics scope into
+  Sprint 19.2 after completing live integration, diagnostics, calibration, and
+  regression work.
+- Established the production path `WakeManager -> InputManager ->
+  InputEnvelope -> Planner`.
+- Verified the calibrated room baseline at Double Clap `9/10`, Single Clap
+  `10/10` with zero activation, Triple Clap cancellation `5/5`, and zero
+  activation for keyboard typing, desk impact, door close, and the measured
+  media sample.
+- Preserved the platform boundary: Keyboard and Touch Portal have stable
+  provider contracts, while their live OS and transport adapters remain future
+  integration work.
 
 ### Fixed
 
