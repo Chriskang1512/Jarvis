@@ -39,6 +39,7 @@ class MemoryRecord:
     def to_dict(self):
         payload = asdict(self)
         payload["memory_type"] = self.memory_type.value
+        payload["provider"] = self.source_provider
         return payload
 
 

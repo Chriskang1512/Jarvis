@@ -31,8 +31,9 @@ through operation-specific allowlists; raw MemoryContext is never attached to
 Plan or Journal payloads.
 
 Memory lifecycle changes publish `MemoryStored`, `MemoryUpdated`,
-`MemoryDeleted`, and `MemoryRetrieved` through Core EventBus. Events expose
-fingerprints and provenance metadata, never raw values or user utterances.
+`MemoryDeleted`, `MemoryRetrieved`, and preference-specific
+`PreferenceChanged` through Core EventBus. Events expose fingerprints,
+timestamps, and provenance metadata, never raw values or user utterances.
 
 Memory provenance is explicit: source channel, source provider, creator, and a
 bounded confidence score are part of the record contract. Working Memory has a

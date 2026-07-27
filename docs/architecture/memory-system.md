@@ -82,13 +82,15 @@ Journal metadata. Trace records keys, types, counts, reasons, and value lengths.
 
 ## Events And Provenance
 
-`MemoryManager` publishes `MemoryStored`, `MemoryUpdated`, `MemoryDeleted`, and
-`MemoryRetrieved` through the same Core EventBus used by RuntimeTask.
+`MemoryManager` publishes `MemoryStored`, `MemoryUpdated`, `MemoryDeleted`,
+`MemoryRetrieved`, and the preference-specific `PreferenceChanged` through the
+same Core EventBus used by RuntimeTask.
 
 Memory mutation events contain the Memory ID, type, scope, key fingerprint,
-source, source provider, creator, confidence, and expiry. Retrieval events
-contain query/session fingerprints, result count, and Memory IDs. Raw values,
-user utterances, and query text are never included in these events.
+source, source provider (`provider` alias), creator, confidence, expiry, and
+created/updated timestamps. Retrieval events contain query/session
+fingerprints, result count, and Memory IDs. Raw values, user utterances, and
+query text are never included in these events.
 
 Voice-created memories use `source=voice`, the configured STT provider, and
 `created_by=user`. Confidence is clamped to the inclusive `0.0..1.0` range so

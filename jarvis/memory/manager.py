@@ -89,6 +89,8 @@ class MemoryManager:
             "MemoryUpdated" if existing is not None else "MemoryStored",
             saved,
         )
+        if saved.memory_type == MemoryType.PREFERENCE:
+            self.publish_memory_event("PreferenceChanged", saved)
         return saved
 
     def remember_working(self, key, value, metadata=None, ttl_seconds=None):
@@ -257,9 +259,12 @@ def memory_event_payload(record):
         "key_fingerprint": fingerprint(record.key),
         "source": record.source,
         "source_provider": record.source_provider,
+        "provider": record.source_provider,
         "created_by": record.created_by,
         "confidence": record.confidence,
         "expires_at": record.expires_at,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
     }
 
 

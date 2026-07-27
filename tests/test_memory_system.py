@@ -129,6 +129,37 @@ class TestMemorySystem(unittest.TestCase):
         self.assertNotIn("도쿄", event_text)
         self.assertIn("key_fingerprint", events[0].payload)
 
+    def test_preference_change_event_includes_provenance_and_timestamps(self):
+        bus = InMemoryEventBus()
+        events = []
+        bus.subscribe("*", events.append)
+        manager = MemoryManager(
+            SQLiteMemoryProvider(self.path),
+            event_bus=bus,
+            default_source="voice",
+            default_source_provider="openai",
+        )
+
+        saved = manager.store(
+            "preference.weather.default_location",
+            "강릉",
+            MemoryType.PREFERENCE,
+            confidence=1.0,
+        )
+
+        self.assertEqual(
+            [event.event_type for event in events],
+            ["MemoryStored", "PreferenceChanged"],
+        )
+        preference_event = events[1]
+        self.assertEqual(preference_event.payload["source"], "voice")
+        self.assertEqual(preference_event.payload["provider"], "openai")
+        self.assertEqual(preference_event.payload["confidence"], 1.0)
+        self.assertEqual(preference_event.payload["created_at"], saved.created_at)
+        self.assertEqual(preference_event.payload["updated_at"], saved.updated_at)
+        self.assertNotIn("강릉", preference_event.to_json())
+        self.assertEqual(saved.to_dict()["provider"], "openai")
+
     def test_sqlite_provider_migrates_source_and_ttl_columns(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path)

@@ -16,6 +16,8 @@
   and Cloud Memory.
 - `MemoryStored`, `MemoryUpdated`, `MemoryDeleted`, and `MemoryRetrieved`
   events with fingerprint-only audit payloads.
+- Preference-specific `PreferenceChanged` events plus created/updated
+  timestamps and a public `provider` provenance alias.
 - Explicit Memory source provider, creator, confidence, and expiry metadata,
   including additive SQLite migration for existing databases.
 - Default 30-minute Working Memory TTL and Voice runtime session cleanup.
