@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from jarvis.config.loader import ConfigurationLoader
 from jarvis.wake import (
@@ -9,9 +10,59 @@ from jarvis.wake import (
     load_wake_calibration,
     save_wake_calibration,
 )
+from scripts.wake_calibration import collect_trial
 
 
 class TestWakeCalibration(unittest.TestCase):
+    @patch("scripts.wake_calibration.input", return_value="")
+    @patch("scripts.wake_calibration.capture_features")
+    def test_calibration_trial_retries_until_exactly_two_claps(
+        self,
+        capture_features,
+        _input,
+    ):
+        feature = AudioFeature(0.30, 0.05, 6.0)
+        capture_features.side_effect = [
+            [(0.1, feature)],
+            [(0.1, feature), (0.4, feature)],
+        ]
+
+        candidates = collect_trial(
+            trial=1,
+            trial_count=5,
+            max_attempts=3,
+            duration=3.0,
+            device=None,
+            noise_peak=0.001,
+            noise_rms=0.001,
+        )
+
+        self.assertEqual(candidates, [feature, feature])
+        self.assertEqual(capture_features.call_count, 2)
+
+    @patch("scripts.wake_calibration.input", return_value="")
+    @patch("scripts.wake_calibration.capture_features")
+    def test_calibration_trial_fails_after_incomplete_attempts(
+        self,
+        capture_features,
+        _input,
+    ):
+        feature = AudioFeature(0.30, 0.05, 6.0)
+        capture_features.return_value = [(0.1, feature)]
+
+        candidates = collect_trial(
+            trial=1,
+            trial_count=5,
+            max_attempts=2,
+            duration=3.0,
+            device=None,
+            noise_peak=0.001,
+            noise_rms=0.001,
+        )
+
+        self.assertIsNone(candidates)
+        self.assertEqual(capture_features.call_count, 2)
+
     def test_derives_profile_between_noise_and_natural_claps(self):
         noise = [AudioFeature(0.01, 0.003, 3.3) for _ in range(20)]
         claps = [AudioFeature(0.30 + index * 0.02, 0.05, 6.0) for index in range(10)]

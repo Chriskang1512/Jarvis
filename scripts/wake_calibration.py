@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--noise-seconds", type=float, default=3.0)
     parser.add_argument("--clap-seconds", type=float, default=3.0)
+    parser.add_argument("--max-attempts-per-trial", type=int, default=3)
     parser.add_argument("--output", default="data/wake_calibration.json")
     return parser.parse_args()
 
@@ -34,14 +35,23 @@ def main():
 
     clap_features = []
     for trial in range(1, max(1, args.trials) + 1):
-        input(f"Trial {trial}/{args.trials}: Press Enter, then clap twice naturally...")
-        frames = capture_features(args.clap_seconds, device=device)
-        candidates = extract_trial_claps(frames, noise_peak, noise_rms)
-        print(
-            f"[Calibration] trial={trial} detected={len(candidates)} "
-            f"features={format_features(candidates)}"
+        candidates = collect_trial(
+            trial=trial,
+            trial_count=max(1, args.trials),
+            max_attempts=max(1, args.max_attempts_per_trial),
+            duration=args.clap_seconds,
+            device=device,
+            noise_peak=noise_peak,
+            noise_rms=noise_rms,
         )
-        clap_features.extend(candidates[:2])
+        if candidates is None:
+            print(
+                "[Calibration] FAILED "
+                f"reason=CALIBRATION_TRIAL_INCOMPLETE trial={trial}"
+            )
+            print("[Calibration] No profile was written.")
+            raise SystemExit(1)
+        clap_features.extend(candidates)
 
     try:
         profile = derive_wake_calibration(
@@ -96,6 +106,33 @@ def capture_features(duration, device=None):
     ):
         sleep(max(0.1, float(duration)))
     return frames
+
+
+def collect_trial(
+    trial,
+    trial_count,
+    max_attempts,
+    duration,
+    device,
+    noise_peak,
+    noise_rms,
+):
+    for attempt in range(1, max_attempts + 1):
+        input(
+            f"Trial {trial}/{trial_count} (attempt {attempt}/{max_attempts}): "
+            "Press Enter, then clap twice naturally..."
+        )
+        frames = capture_features(duration, device=device)
+        candidates = extract_trial_claps(frames, noise_peak, noise_rms)
+        detected = len(candidates)
+        status = "accepted" if detected == 2 else "retry"
+        print(
+            f"[Calibration] trial={trial} attempt={attempt} detected={detected} "
+            f"status={status} features={format_features(candidates)}"
+        )
+        if detected == 2:
+            return candidates
+    return None
 
 
 def extract_trial_claps(frames, noise_peak, noise_rms):
