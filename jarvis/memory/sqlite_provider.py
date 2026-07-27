@@ -17,6 +17,7 @@ class MemoryRepository(Protocol):
     def search(self, query="", memory_types=(), session_id="", limit=20): ...
     def delete(self, key, memory_type=None, session_id=""): ...
     def clear_working(self, session_id): ...
+    def purge_expired(self, expires_before): ...
 
 
 StructuredMemoryProvider = MemoryRepository
@@ -57,7 +58,10 @@ class SQLiteMemoryProvider:
                     scope TEXT NOT NULL,
                     session_id TEXT NOT NULL,
                     source TEXT NOT NULL,
+                    source_provider TEXT NOT NULL DEFAULT '',
+                    created_by TEXT NOT NULL DEFAULT 'user',
                     confidence REAL NOT NULL,
+                    expires_at TEXT NOT NULL DEFAULT '',
                     metadata_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -69,6 +73,13 @@ class SQLiteMemoryProvider:
                 "CREATE INDEX IF NOT EXISTS idx_memories_lookup "
                 "ON memories(memory_type, session_id, key)"
             )
+            ensure_column(connection, "memories", "source_provider", "TEXT NOT NULL DEFAULT ''")
+            ensure_column(connection, "memories", "created_by", "TEXT NOT NULL DEFAULT 'user'")
+            ensure_column(connection, "memories", "expires_at", "TEXT NOT NULL DEFAULT ''")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memories_expiry "
+                "ON memories(expires_at)"
+            )
 
     def upsert(self, record):
         with self.session() as connection:
@@ -76,12 +87,16 @@ class SQLiteMemoryProvider:
                 """
                 INSERT INTO memories (
                     id, key, value, memory_type, scope, session_id, source,
-                    confidence, metadata_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_provider, created_by, confidence, expires_at,
+                    metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(key, memory_type, scope, session_id) DO UPDATE SET
                     value=excluded.value,
                     source=excluded.source,
+                    source_provider=excluded.source_provider,
+                    created_by=excluded.created_by,
                     confidence=excluded.confidence,
+                    expires_at=excluded.expires_at,
                     metadata_json=excluded.metadata_json,
                     updated_at=excluded.updated_at
                 """,
@@ -93,7 +108,10 @@ class SQLiteMemoryProvider:
                     record.scope,
                     record.session_id,
                     record.source,
+                    record.source_provider,
+                    record.created_by,
                     record.confidence,
+                    record.expires_at,
                     json.dumps(record.metadata, ensure_ascii=False, sort_keys=True),
                     record.created_at,
                     record.updated_at,
@@ -172,9 +190,31 @@ class SQLiteMemoryProvider:
             )
         return cursor.rowcount
 
+    def purge_expired(self, expires_before):
+        with self.session() as connection:
+            rows = connection.execute(
+                "SELECT * FROM memories "
+                "WHERE expires_at != '' AND expires_at <= ?",
+                (str(expires_before),),
+            ).fetchall()
+            connection.execute(
+                "DELETE FROM memories WHERE expires_at != '' AND expires_at <= ?",
+                (str(expires_before),),
+            )
+        return [row_to_record(row) for row in rows]
+
 
 def normalize_type(value):
     return value if isinstance(value, MemoryType) else MemoryType(str(value))
+
+
+def ensure_column(connection, table, column, definition):
+    columns = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def row_to_record(row):
@@ -186,7 +226,10 @@ def row_to_record(row):
         scope=row["scope"],
         session_id=row["session_id"],
         source=row["source"],
+        source_provider=row["source_provider"],
+        created_by=row["created_by"],
         confidence=float(row["confidence"]),
+        expires_at=row["expires_at"],
         metadata=json.loads(row["metadata_json"] or "{}"),
         created_at=row["created_at"],
         updated_at=row["updated_at"],

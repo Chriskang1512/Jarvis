@@ -23,7 +23,10 @@ class MemoryRecord:
     scope: str = "user"
     session_id: str = ""
     source: str = "user"
+    source_provider: str = ""
+    created_by: str = "user"
     confidence: float = 1.0
+    expires_at: str = ""
     metadata: dict = field(default_factory=dict)
     id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(
@@ -65,4 +68,3 @@ class StoreDecision:
     key: str = ""
     value: str = ""
     confidence: float = 0.0
-

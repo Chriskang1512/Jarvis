@@ -11,6 +11,7 @@ from jarvis.abilities.native.weather.provider import read_env_value
 from jarvis.debug_trace import is_debug_trace_enabled, read_env_file_value
 from jarvis.debug_trace import trace_event
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
+from jarvis.core.events import InMemoryEventBus
 from jarvis.memory import (
     MemoryManager,
     MemoryService,
@@ -74,9 +75,14 @@ def main():
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
     chat_provider = ProviderFactory(diagnostics_collector=diagnostics_collector).create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
+    event_bus = InMemoryEventBus()
     memory_manager = MemoryManager(
         provider=SQLiteMemoryProvider(config.memory_store.sqlite_path),
         session_id=voice_session.session_id,
+        event_bus=event_bus,
+        default_source="voice",
+        default_source_provider=config.stt.provider,
+        default_created_by="user",
     )
     stt_provider = create_stt_provider(config.stt)
     tts_provider = create_tts_provider(config.tts, diagnostics_collector=diagnostics_collector)
@@ -92,6 +98,7 @@ def main():
         registry=tool_registry,
         diagnostics_collector=diagnostics_collector,
         intent_parser=create_runtime_intent_parser(config),
+        event_bus=event_bus,
         memory_manager=memory_manager,
     )
     intent_runtime = IntentRuntime(
@@ -137,6 +144,7 @@ def main():
         while True:
             pipeline.run_once()
     finally:
+        memory_manager.clear_working()
         reminder_scheduler.stop()
 
 

@@ -14,6 +14,11 @@
   binding and post-Ability Memory updates after successful execution.
 - Typed extension stubs for Personal Lexicon, Correction Memory, Entity Graph,
   and Cloud Memory.
+- `MemoryStored`, `MemoryUpdated`, `MemoryDeleted`, and `MemoryRetrieved`
+  events with fingerprint-only audit payloads.
+- Explicit Memory source provider, creator, confidence, and expiry metadata,
+  including additive SQLite migration for existing databases.
+- Default 30-minute Working Memory TTL and Voice runtime session cleanup.
 
 ### Fixed
 

@@ -30,6 +30,15 @@ Planner retrieval is read-only. Retrieved memory can influence execution only
 through operation-specific allowlists; raw MemoryContext is never attached to
 Plan or Journal payloads.
 
+Memory lifecycle changes publish `MemoryStored`, `MemoryUpdated`,
+`MemoryDeleted`, and `MemoryRetrieved` through Core EventBus. Events expose
+fingerprints and provenance metadata, never raw values or user utterances.
+
+Memory provenance is explicit: source channel, source provider, creator, and a
+bounded confidence score are part of the record contract. Working Memory has a
+default 30-minute TTL and is also cleared when its owning runtime session ends.
+SQLite schema additions use in-place additive migration for existing users.
+
 ## Consequences
 
 - SQLite becomes the replaceable structured Repository without forcing a
@@ -40,5 +49,8 @@ Plan or Journal payloads.
   explicit extension points, not partial implementations.
 - Store Policy must grow through reviewed rules and tests rather than generic
   transcript capture.
+- Dashboard, Metrics, History, Audit, and future Sync can consume Memory
+  lifecycle events without coupling to SQLite.
+- Working Memory cleanup is deterministic across both timeout and normal
+  runtime shutdown paths.
 - Legacy JSON migration can be performed incrementally in a later sprint.
-

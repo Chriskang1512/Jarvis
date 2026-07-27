@@ -14,6 +14,8 @@ flowchart TD
     POLICY -->|rejected| DROP["No Memory Update"]
     STORE --> REPOSITORY["MemoryRepository"]
     REPOSITORY --> SQLITE["SQLiteMemoryProvider"]
+    STORE --> EVENTS["Core EventBus"]
+    EVENTS --> OBSERVERS["Journal / Metrics / Dashboard / Sync"]
 ```
 
 ## Contracts
@@ -26,7 +28,8 @@ Sprint 20 provider; cloud, vector, and graph implementations can replace it
 without changing Planner or Ability code.
 
 `MemoryRecord` stores a canonical key, value, type, scope, session ID, source,
-confidence, timestamps, and operational metadata. Supported types are:
+source provider, creator, confidence, optional expiry, timestamps, and
+operational metadata. Supported types are:
 
 - `working`
 - `long_term`
@@ -41,8 +44,10 @@ stubs in this sprint.
 ## Working Memory
 
 Working Memory uses the same Repository with a required `session_id`. Retrieval
-includes only the current session plus durable records, and
-`clear_working()` removes only the current session.
+includes only the current session plus durable records. Working records expire
+after 30 minutes by default, expired records are purged before retrieval, and
+`clear_working()` removes only the current session. The Voice runtime also
+clears its Working Memory when the process session ends.
 
 RuntimeTask ConversationContext remains authoritative for pending questions,
 confirmations, selections, and artifacts. Memory System does not take ownership
@@ -75,9 +80,25 @@ Weather step when the user did not specify a location.
 Raw stored values are not copied wholesale into Plan diagnostics or Execution
 Journal metadata. Trace records keys, types, counts, reasons, and value lengths.
 
+## Events And Provenance
+
+`MemoryManager` publishes `MemoryStored`, `MemoryUpdated`, `MemoryDeleted`, and
+`MemoryRetrieved` through the same Core EventBus used by RuntimeTask.
+
+Memory mutation events contain the Memory ID, type, scope, key fingerprint,
+source, source provider, creator, confidence, and expiry. Retrieval events
+contain query/session fingerprints, result count, and Memory IDs. Raw values,
+user utterances, and query text are never included in these events.
+
+Voice-created memories use `source=voice`, the configured STT provider, and
+`created_by=user`. Confidence is clamped to the inclusive `0.0..1.0` range so
+future OCR, email extraction, and Entity Graph consumers can compare evidence
+using one contract.
+
 ## Storage
 
 The default database is `data/jarvis_memory.db`. SQLite uses WAL mode,
 parameterized statements, a unique canonical key constraint, and explicit
-connection closure. Database, WAL, and shared-memory files are ignored by git.
-
+connection closure. Existing databases are migrated in place with additive
+provenance and expiry columns. Database, WAL, and shared-memory files are
+ignored by git.

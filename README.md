@@ -162,6 +162,9 @@ Sprint 20 adds the first v1.2 Memory foundation:
   Memory;
 - a provider-neutral `MemoryRepository` and local SQLite provider;
 - session-isolated Working Memory and durable canonical records;
+- a 30-minute Working Memory TTL plus runtime-session cleanup;
+- Memory lifecycle events for Dashboard, Metrics, Audit, and future Sync;
+- explicit source channel, provider, creator, and confidence provenance;
 - a conservative `MemoryStorePolicy` that rejects ephemeral statements;
 - Planner retrieval with an operation-specific context allowlist;
 - post-Ability Memory updates only after successful execution;
