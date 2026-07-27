@@ -24,8 +24,10 @@ class MemoryRecord:
     session_id: str = ""
     source: str = "user"
     source_provider: str = ""
+    origin: str = "manual"
     created_by: str = "user"
     confidence: float = 1.0
+    version: int = 1
     expires_at: str = ""
     metadata: dict = field(default_factory=dict)
     id: str = field(default_factory=lambda: uuid4().hex)

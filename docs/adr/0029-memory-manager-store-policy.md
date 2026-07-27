@@ -36,9 +36,15 @@ Memory lifecycle changes publish `MemoryStored`, `MemoryUpdated`,
 timestamps, and provenance metadata, never raw values or user utterances.
 
 Memory provenance is explicit: source channel, source provider, creator, and a
-bounded confidence score are part of the record contract. Working Memory has a
-default 30-minute TTL and is also cleared when its owning runtime session ends.
-SQLite schema additions use in-place additive migration for existing users.
+bounded confidence score are part of the record contract. Source identifies
+who supplied the information, provider identifies the implementation, and
+origin identifies the input system or channel. Working Memory has a default
+30-minute TTL and is also cleared when its owning runtime session ends. SQLite
+schema additions use in-place additive migration for existing users.
+
+Every new record starts at version 1. SQLite increments the version atomically
+on canonical-key conflict, and Memory events expose that version as their
+revision. This establishes ordering without yet retaining historical values.
 
 ## Consequences
 

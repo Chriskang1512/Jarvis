@@ -59,8 +59,10 @@ class SQLiteMemoryProvider:
                     session_id TEXT NOT NULL,
                     source TEXT NOT NULL,
                     source_provider TEXT NOT NULL DEFAULT '',
+                    origin TEXT NOT NULL DEFAULT 'manual',
                     created_by TEXT NOT NULL DEFAULT 'user',
                     confidence REAL NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
                     expires_at TEXT NOT NULL DEFAULT '',
                     metadata_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -74,7 +76,9 @@ class SQLiteMemoryProvider:
                 "ON memories(memory_type, session_id, key)"
             )
             ensure_column(connection, "memories", "source_provider", "TEXT NOT NULL DEFAULT ''")
+            ensure_column(connection, "memories", "origin", "TEXT NOT NULL DEFAULT 'manual'")
             ensure_column(connection, "memories", "created_by", "TEXT NOT NULL DEFAULT 'user'")
+            ensure_column(connection, "memories", "version", "INTEGER NOT NULL DEFAULT 1")
             ensure_column(connection, "memories", "expires_at", "TEXT NOT NULL DEFAULT ''")
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_memories_expiry "
@@ -87,15 +91,17 @@ class SQLiteMemoryProvider:
                 """
                 INSERT INTO memories (
                     id, key, value, memory_type, scope, session_id, source,
-                    source_provider, created_by, confidence, expires_at,
-                    metadata_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    source_provider, origin, created_by, confidence, version,
+                    expires_at, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(key, memory_type, scope, session_id) DO UPDATE SET
                     value=excluded.value,
                     source=excluded.source,
                     source_provider=excluded.source_provider,
+                    origin=excluded.origin,
                     created_by=excluded.created_by,
                     confidence=excluded.confidence,
+                    version=memories.version + 1,
                     expires_at=excluded.expires_at,
                     metadata_json=excluded.metadata_json,
                     updated_at=excluded.updated_at
@@ -109,8 +115,10 @@ class SQLiteMemoryProvider:
                     record.session_id,
                     record.source,
                     record.source_provider,
+                    record.origin,
                     record.created_by,
                     record.confidence,
+                    record.version,
                     record.expires_at,
                     json.dumps(record.metadata, ensure_ascii=False, sort_keys=True),
                     record.created_at,
@@ -227,8 +235,10 @@ def row_to_record(row):
         session_id=row["session_id"],
         source=row["source"],
         source_provider=row["source_provider"],
+        origin=row["origin"],
         created_by=row["created_by"],
         confidence=float(row["confidence"]),
+        version=int(row["version"]),
         expires_at=row["expires_at"],
         metadata=json.loads(row["metadata_json"] or "{}"),
         created_at=row["created_at"],

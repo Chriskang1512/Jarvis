@@ -18,6 +18,7 @@ class MemoryManager:
         event_bus=None,
         default_source="user",
         default_source_provider="",
+        default_origin="manual",
         default_created_by="user",
         working_ttl_seconds=1800,
     ):
@@ -27,6 +28,7 @@ class MemoryManager:
         self.event_bus = event_bus
         self.default_source = str(default_source or "user")
         self.default_source_provider = str(default_source_provider or "")
+        self.default_origin = str(default_origin or "manual")
         self.default_created_by = str(default_created_by or "user")
         self.working_ttl_seconds = max(1, int(working_ttl_seconds))
 
@@ -38,6 +40,7 @@ class MemoryManager:
         scope="user",
         source=None,
         source_provider=None,
+        origin=None,
         created_by=None,
         confidence=1.0,
         ttl_seconds=None,
@@ -72,6 +75,7 @@ class MemoryManager:
                 if source_provider is None
                 else source_provider
             ),
+            origin=str(origin or self.default_origin),
             created_by=str(created_by or self.default_created_by),
             confidence=normalize_confidence(confidence),
             expires_at=expiry,
@@ -139,6 +143,7 @@ class MemoryManager:
         text,
         source=None,
         source_provider=None,
+        origin=None,
         created_by=None,
     ):
         decision = self.store_policy.decide(text)
@@ -156,6 +161,7 @@ class MemoryManager:
             decision.memory_type,
             source=source,
             source_provider=source_provider,
+            origin=origin,
             created_by=created_by,
             confidence=decision.confidence,
             metadata={"policy_reason": decision.reason},
@@ -208,7 +214,8 @@ class MemoryManager:
                 event_type=event_type,
                 aggregate_type="Memory",
                 aggregate_id=record.id,
-                idempotency_key=f"{event_type}:{record.id}:{record.updated_at}",
+                revision=record.version,
+                idempotency_key=f"{event_type}:{record.id}:v{record.version}",
                 source="memory_manager",
                 payload={
                     **memory_event_payload(record),
@@ -260,8 +267,10 @@ def memory_event_payload(record):
         "source": record.source,
         "source_provider": record.source_provider,
         "provider": record.source_provider,
+        "origin": record.origin,
         "created_by": record.created_by,
         "confidence": record.confidence,
+        "version": record.version,
         "expires_at": record.expires_at,
         "created_at": record.created_at,
         "updated_at": record.updated_at,

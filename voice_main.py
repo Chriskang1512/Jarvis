@@ -80,8 +80,9 @@ def main():
         provider=SQLiteMemoryProvider(config.memory_store.sqlite_path),
         session_id=voice_session.session_id,
         event_bus=event_bus,
-        default_source="voice",
+        default_source="user",
         default_source_provider=config.stt.provider,
+        default_origin="voice",
         default_created_by="user",
     )
     stt_provider = create_stt_provider(config.stt)

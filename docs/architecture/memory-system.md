@@ -27,9 +27,9 @@ memory cleanup, explicit storage, and post-execution policy evaluation.
 Sprint 20 provider; cloud, vector, and graph implementations can replace it
 without changing Planner or Ability code.
 
-`MemoryRecord` stores a canonical key, value, type, scope, session ID, source,
-source provider, creator, confidence, optional expiry, timestamps, and
-operational metadata. Supported types are:
+`MemoryRecord` stores a canonical key, value, type, scope, session ID, version,
+source, source provider, origin, creator, confidence, optional expiry,
+timestamps, and operational metadata. Supported types are:
 
 - `working`
 - `long_term`
@@ -92,10 +92,26 @@ created/updated timestamps. Retrieval events contain query/session
 fingerprints, result count, and Memory IDs. Raw values, user utterances, and
 query text are never included in these events.
 
-Voice-created memories use `source=voice`, the configured STT provider, and
-`created_by=user`. Confidence is clamped to the inclusive `0.0..1.0` range so
+Provenance separates three meanings:
+
+- `source`: who supplied the information, such as `user`;
+- `provider`: which implementation produced the structured input, such as
+  `openai`;
+- `origin`: which channel or system it came through, such as `voice`,
+  `manual`, `calendar`, `gmail`, `ocr`, or `api`.
+
+Voice runtime records therefore use `source=user`, `provider=openai`, and
+`origin=voice`. Confidence is clamped to the inclusive `0.0..1.0` range so
 future OCR, email extraction, and Entity Graph consumers can compare evidence
 using one contract.
+
+## Versioning
+
+New Memory records start at version 1. Updating the same canonical key, type,
+scope, and session increments the version atomically inside SQLite conflict
+handling. Memory lifecycle events use the same number as their Event revision.
+This supplies the ordering contract for future conflict resolution and Sync;
+historical value snapshots remain a later feature.
 
 ## Storage
 

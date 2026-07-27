@@ -121,9 +121,12 @@ class TestMemorySystem(unittest.TestCase):
         )
         self.assertEqual(stored.source, "voice")
         self.assertEqual(stored.source_provider, "openai")
+        self.assertEqual(stored.origin, "manual")
         self.assertEqual(stored.created_by, "user")
         self.assertEqual(stored.confidence, 0.98)
         self.assertEqual(updated.id, stored.id)
+        self.assertEqual(stored.version, 1)
+        self.assertEqual(updated.version, 2)
         event_text = " ".join(event.to_json() for event in events)
         self.assertNotIn("오사카", event_text)
         self.assertNotIn("도쿄", event_text)
@@ -136,8 +139,9 @@ class TestMemorySystem(unittest.TestCase):
         manager = MemoryManager(
             SQLiteMemoryProvider(self.path),
             event_bus=bus,
-            default_source="voice",
+            default_source="user",
             default_source_provider="openai",
+            default_origin="voice",
         )
 
         saved = manager.store(
@@ -152,13 +156,42 @@ class TestMemorySystem(unittest.TestCase):
             ["MemoryStored", "PreferenceChanged"],
         )
         preference_event = events[1]
-        self.assertEqual(preference_event.payload["source"], "voice")
+        self.assertEqual(preference_event.payload["source"], "user")
         self.assertEqual(preference_event.payload["provider"], "openai")
+        self.assertEqual(preference_event.payload["origin"], "voice")
         self.assertEqual(preference_event.payload["confidence"], 1.0)
+        self.assertEqual(preference_event.payload["version"], 1)
+        self.assertEqual(preference_event.revision, 1)
         self.assertEqual(preference_event.payload["created_at"], saved.created_at)
         self.assertEqual(preference_event.payload["updated_at"], saved.updated_at)
         self.assertNotIn("강릉", preference_event.to_json())
         self.assertEqual(saved.to_dict()["provider"], "openai")
+
+    def test_preference_versions_increase_for_each_change(self):
+        manager = MemoryManager(
+            SQLiteMemoryProvider(self.path),
+            default_source="user",
+            default_origin="voice",
+        )
+
+        gangneung = manager.store(
+            "preference.weather.default_location",
+            "강릉",
+            MemoryType.PREFERENCE,
+        )
+        seoul = manager.store(
+            "preference.weather.default_location",
+            "서울",
+            MemoryType.PREFERENCE,
+        )
+        busan = manager.store(
+            "preference.weather.default_location",
+            "부산",
+            MemoryType.PREFERENCE,
+        )
+
+        self.assertEqual((gangneung.version, seoul.version, busan.version), (1, 2, 3))
+        self.assertEqual(busan.origin, "voice")
 
     def test_sqlite_provider_migrates_source_and_ttl_columns(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,7 +228,9 @@ class TestMemorySystem(unittest.TestCase):
         )
 
         self.assertEqual(saved.source_provider, "openai")
+        self.assertEqual(saved.origin, "manual")
         self.assertEqual(saved.created_by, "user")
+        self.assertEqual(saved.version, 1)
 
     def test_store_policy_rejects_ephemeral_meal(self):
         decision = MemoryStorePolicy().decide("오늘 점심은 김치찌개 먹었어.")

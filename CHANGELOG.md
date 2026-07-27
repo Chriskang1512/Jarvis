@@ -18,6 +18,10 @@
   events with fingerprint-only audit payloads.
 - Preference-specific `PreferenceChanged` events plus created/updated
   timestamps and a public `provider` provenance alias.
+- Monotonic Memory versions with atomic SQLite increments and matching Event
+  revisions.
+- Separate `source`, `provider`, and `origin` provenance semantics, with Voice
+  records represented as user-supplied data originating from Voice.
 - Explicit Memory source provider, creator, confidence, and expiry metadata,
   including additive SQLite migration for existing databases.
 - Default 30-minute Working Memory TTL and Voice runtime session cleanup.
