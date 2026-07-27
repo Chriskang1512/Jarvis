@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from time import perf_counter
 from types import SimpleNamespace
 
@@ -7,7 +7,13 @@ from jarvis.core.events import InMemoryEventBus
 from jarvis.permissions import PermissionLayer, PermissionStatus
 from jarvis.runtime.conversation_resolver import ConversationResolver
 from jarvis.runtime.execution_journal import ExecutionJournal
-from jarvis.runtime.planner import PlanResult, PlanStepResult, RuntimePlanner
+from jarvis.runtime.planner import (
+    ExecutionPlan,
+    ExecutionStep,
+    PlanResult,
+    PlanStepResult,
+    RuntimePlanner,
+)
 from jarvis.runtime.task import (
     RuntimeTask,
     TaskHistory,
@@ -66,6 +72,7 @@ class RuntimeToolDispatcher:
         state_machine=None,
         pending_execution_store=None,
         execution_journal=None,
+        memory_manager=None,
     ):
         """Create dispatcher from an existing registry."""
         self.registry = registry
@@ -74,6 +81,7 @@ class RuntimeToolDispatcher:
         self.diagnostics_collector = diagnostics_collector
         self.min_confidence = float(min_confidence)
         self.intent_parser = intent_parser
+        self.memory_manager = memory_manager
         self.conversation_context_provider = None
         self.conversation_resolver = ConversationResolver()
         self.conversation_task = RuntimeTask(id="", goal="dispatcher conversation")
@@ -130,7 +138,9 @@ class RuntimeToolDispatcher:
 
     def plan(self, text, context=None):
         """Prepare one or more tool selections without executing them."""
-        plan = self.planner.plan(text, self.registry)
+        plan = self.create_policy_plan(text) or self.planner.plan(text, self.registry)
+        if self.memory_manager is not None:
+            plan = apply_memory_context(plan, self.memory_manager.retrieve(text))
         selections = [
             DispatchSelection(
                 tool_name=step.tool_name,
@@ -165,7 +175,46 @@ class RuntimeToolDispatcher:
 
     def create_plan(self, text):
         """Create an ExecutionPlan without running it."""
-        return self.planner.plan(text, self.registry)
+        plan = self.create_policy_plan(text) or self.planner.plan(text, self.registry)
+        if self.memory_manager is None:
+            return plan
+        return apply_memory_context(plan, self.memory_manager.retrieve(text))
+
+    def create_policy_plan(self, text):
+        """Turn a Store Policy decision into an explicit Memory step."""
+        if self.memory_manager is None or not self.runtime_registry.exists("memory"):
+            return None
+        decision = self.memory_manager.store_policy.decide(text)
+        if not decision.should_store:
+            return None
+        trace_event(
+            "planner.memory_store_policy",
+            should_store=True,
+            reason=decision.reason,
+            memory_type=decision.memory_type.value,
+        )
+        return ExecutionPlan(
+            raw_text=str(text or ""),
+            steps=(
+                ExecutionStep(
+                    index=1,
+                    tool_name="memory",
+                    action="remember",
+                    raw_text=str(text or ""),
+                    input_data={
+                        "action": "remember",
+                        "key": decision.key,
+                        "value": decision.value,
+                        "category": decision.memory_type.value,
+                        "scope": "long_term",
+                        "raw_text": str(text or ""),
+                        "text": str(text or ""),
+                        "source": "store_policy",
+                        "confidence": decision.confidence,
+                    },
+                ),
+            ),
+        )
 
     def execute_plan_text(self, text, confirmed=False):
         """Plan and execute text through ordered dispatcher steps."""
@@ -483,6 +532,8 @@ class RuntimeToolDispatcher:
             return ToolResult(tool_name=tool_request.tool_name, success=False, error=str(error))
 
         self.capture_conversation_result(tool_request, result)
+        if self.memory_manager is not None:
+            self.memory_manager.observe_execution(tool_request, result)
         duration = elapsed_ms(started)
         trace_event(
             "dispatcher.result",
@@ -707,6 +758,36 @@ def find_remind_before(plan):
                 return 0
 
     return 0
+
+
+def apply_memory_context(plan, memory_context):
+    """Apply allowlisted Planner inputs from retrieved memory."""
+    default_location = memory_context.get(
+        "preference.weather.default_location",
+        "",
+    )
+    if not default_location:
+        return plan
+
+    steps = []
+    changed = False
+    for step in plan.steps:
+        if step.tool_name != "weather":
+            steps.append(step)
+            continue
+        input_data = dict(step.input_data)
+        input_data["_memory_default_location"] = default_location
+        steps.append(replace(step, input_data=input_data))
+        changed = True
+    if not changed:
+        return plan
+    trace_event(
+        "planner.memory_context_applied",
+        plan_id=plan.id,
+        preference_count=1,
+        value_length=len(default_location),
+    )
+    return replace(plan, steps=tuple(steps))
 
 
 def elapsed_ms(started):

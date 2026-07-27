@@ -24,6 +24,7 @@ The approved migration design is documented in:
 - [`Multi-step Vertical Slice`](docs/architecture/multi-step-vertical-slice.md)
 - [`Input and Wake Manager`](docs/architecture/input-wake-manager.md)
 - [`Sprint 19 Release Review`](docs/releases/sprint-19-release-review.md)
+- [`Memory System`](docs/architecture/memory-system.md)
 - [`Capability Discovery`](docs/architecture/capability-discovery.md)
 - [`ADR 0024 - Agent Core Integration`](docs/adr/0024-agent-core-integration.md)
 
@@ -152,6 +153,24 @@ Sprint 19 is complete:
   from keyboard typing, desk impact, door close, or the tested media sample.
 
 The next product milestone is v1.2 Memory.
+
+## Sprint 20 Memory System
+
+Sprint 20 adds the first v1.2 Memory foundation:
+
+- one `MemoryManager` entry point for Working, Long-term, and Preference
+  Memory;
+- a provider-neutral `MemoryRepository` and local SQLite provider;
+- session-isolated Working Memory and durable canonical records;
+- a conservative `MemoryStorePolicy` that rejects ephemeral statements;
+- Planner retrieval with an operation-specific context allowlist;
+- post-Ability Memory updates only after successful execution;
+- typed stubs for Personal Lexicon, Correction Memory, Entity Graph, and Cloud
+  providers.
+
+See [`docs/architecture/memory-system.md`](docs/architecture/memory-system.md)
+and
+[`ADR 0029 - Memory Manager And Store Policy`](docs/adr/0029-memory-manager-store-policy.md).
 
 ## v0.6.0 Sprint 17.6
 

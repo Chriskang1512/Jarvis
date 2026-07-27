@@ -12,6 +12,9 @@ memory.txt
 data/*.txt
 data/credentials/
 data/wake_calibration.json
+data/*.db
+data/*.db-shm
+data/*.db-wal
 logs/*.log
 output/
 tmp/

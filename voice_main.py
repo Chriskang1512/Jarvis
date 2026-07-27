@@ -11,7 +11,12 @@ from jarvis.abilities.native.weather.provider import read_env_value
 from jarvis.debug_trace import is_debug_trace_enabled, read_env_file_value
 from jarvis.debug_trace import trace_event
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
-from jarvis.memory import MemoryService, MockMemoryProvider
+from jarvis.memory import (
+    MemoryManager,
+    MemoryService,
+    MockMemoryProvider,
+    SQLiteMemoryProvider,
+)
 from jarvis.native.reminder import ReminderEngine, ReminderScheduler
 from jarvis.native.reminder.registry import set_default_reminder_engine
 from jarvis.llm.factory import create_llm_provider
@@ -69,6 +74,10 @@ def main():
     prompt_builder = PromptBuilder(profile=create_default_prompt_profile())
     chat_provider = ProviderFactory(diagnostics_collector=diagnostics_collector).create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
+    memory_manager = MemoryManager(
+        provider=SQLiteMemoryProvider(config.memory_store.sqlite_path),
+        session_id=voice_session.session_id,
+    )
     stt_provider = create_stt_provider(config.stt)
     tts_provider = create_tts_provider(config.tts, diagnostics_collector=diagnostics_collector)
     reminder_engine = ReminderEngine(notification_callback=tts_provider.speak)
@@ -83,6 +92,7 @@ def main():
         registry=tool_registry,
         diagnostics_collector=diagnostics_collector,
         intent_parser=create_runtime_intent_parser(config),
+        memory_manager=memory_manager,
     )
     intent_runtime = IntentRuntime(
         tool_dispatcher=tool_dispatcher,

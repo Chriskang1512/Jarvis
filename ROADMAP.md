@@ -8,6 +8,12 @@
   - [x] Sprint 19.2 Hardening, Integration, Diagnostics, and Calibration
   - Sprint 19.3 was absorbed into Sprint 19.2 and removed.
 - [ ] v1.2 Memory
+  - [x] Sprint 20 foundation: Manager, Store Policy, SQLite Repository,
+    Working/Long-term/Preference contracts, and Planner integration
+  - [ ] Personal Lexicon implementation
+  - [ ] Correction Memory implementation
+  - [ ] Entity Graph implementation
+  - [ ] Legacy JSON migration and Cloud Provider
 - [ ] v1.3 Local Dashboard
 - [ ] v1.4 Plugin and Ability SDK
 - [ ] v1.5 Work-style Agent

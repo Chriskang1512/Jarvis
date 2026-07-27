@@ -164,6 +164,8 @@ def create_memory_store_config(memory_store_data):
     """Create MemoryStoreConfig using known keys from a dictionary."""
     return MemoryStoreConfig(
         path=memory_store_data.get("path", "data/memory_store.json"),
+        provider=memory_store_data.get("provider", "sqlite"),
+        sqlite_path=memory_store_data.get("sqlite_path", "data/jarvis_memory.db"),
     )
 
 

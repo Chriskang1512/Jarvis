@@ -68,6 +68,8 @@ class MemoryStoreConfig:
     """Store long-term memory backend settings."""
 
     path: str = "data/memory_store.json"
+    provider: str = "sqlite"
+    sqlite_path: str = "data/jarvis_memory.db"
 
 
 @dataclass

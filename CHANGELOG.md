@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Sprint 20 `MemoryManager` as the structured entry point for Working,
+  Long-term, and Preference Memory.
+- Provider-neutral `MemoryRepository` with a WAL-enabled SQLite implementation,
+  canonical upsert keys, session isolation, and explicit connection lifecycle.
+- Conservative `MemoryStorePolicy` for durable preferences and relationship
+  facts while rejecting ephemeral or unknown statements.
+- Planner Memory retrieval with an allowlisted Weather default-location
+  binding and post-Ability Memory updates after successful execution.
+- Typed extension stubs for Personal Lexicon, Correction Memory, Entity Graph,
+  and Cloud Memory.
+
 ## [v1.1.0-wake-input] - 2026-07-27
 
 ### Release Summary

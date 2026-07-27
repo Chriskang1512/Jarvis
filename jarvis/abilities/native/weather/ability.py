@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from jarvis.abilities.metadata import AbilityMetadata, AbilityType
@@ -156,7 +157,11 @@ def normalize_query(input_data, parser=None):
     if raw_text is None:
         raw_text = ""
 
-    return parser.parse(str(raw_text))
+    query = parser.parse(str(raw_text))
+    memory_default = input_data.get("_memory_default_location", "")
+    if not query.location and memory_default:
+        return replace(query, location=str(memory_default))
+    return query
 
 
 def clean_location(text):
