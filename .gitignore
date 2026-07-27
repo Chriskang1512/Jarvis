@@ -11,6 +11,7 @@ memory.txt
 /memory/
 data/*.txt
 data/credentials/
+data/wake_calibration.json
 logs/*.log
 output/
 tmp/

@@ -233,6 +233,12 @@ def print_runtime_banner(config):
     print(f"STT Fallback     : {get_stt_fallback_label(config)}")
     print(f"Context Correct  : {on_off(is_stt_context_correction_enabled())}")
     print(f"STT Metrics      : {on_off(is_stt_metrics_enabled())}")
+    print(
+        "Clap Thresholds  : "
+        f"peak={config.wake.clap_peak_threshold:.3f} "
+        f"rms={config.wake.clap_rms_threshold:.3f} "
+        f"crest={config.wake.clap_crest_factor_threshold:.2f}"
+    )
     print(f"Keep TTS Audio   : {on_off(should_keep_tts_audio())}")
     print(f"Playback Backend : {read_playback_backend_name() or 'auto'}")
     print(f"AI Intent Parser : {on_off(is_ai_intent_enabled(config))}")

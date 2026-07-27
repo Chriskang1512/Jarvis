@@ -1,5 +1,23 @@
 # Wake And Input Hardening
 
+## Per-device Calibration
+
+Run the wizard with the microphone in its normal position:
+
+```powershell
+python scripts\wake_calibration.py
+```
+
+The wizard records a short noise sample and five Double Clap trials. It stores
+features only, never audio, and writes the versioned result atomically to
+`data/wake_calibration.json`. Jarvis overlays only the calibrated Wake fields
+at startup; `config.json` is not rewritten. Insufficient sample count or signal
+separation leaves the previous profile untouched.
+
+Restart Jarvis after calibration and verify the runtime banner's
+`Clap Thresholds` values match the wizard result. Then execute the complete
+Double/Single/Triple/environment matrix below.
+
 Run these probes from the repository root in a quiet room. Each command opens
 the microphone only for the requested duration. It does not call STT, Planner,
 LLM, or TTS and does not store audio.

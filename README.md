@@ -123,6 +123,8 @@ Sprint 19 starts the product-facing Input Layer:
 - the same microphone stream detects `자비스`, `헤이 자비스`, and
   `hey jarvis` as spoken wake phrases without a console prompt;
 - every future input surface normalizes into a privacy-safe `InputEnvelope`;
+- `python scripts\wake_calibration.py` derives a versioned per-device Wake
+  profile from noise plus five clap trials without retaining microphone audio;
 - queue-based trigger contracts isolate OS hotkey and remote transport adapters
   from Planner and Voice Runtime.
 

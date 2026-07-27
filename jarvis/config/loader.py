@@ -5,6 +5,7 @@ from pathlib import Path
 from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, MailConfig, MemoryStoreConfig, STTConfig, WakeConfig
 from jarvis.config.settings import TTSConfig
 from jarvis.config.settings import WeatherConfig
+from jarvis.wake.calibration import DEFAULT_WAKE_CALIBRATION_PATH, load_wake_calibration
 
 
 CONFIG_FILE = Path("config.json")
@@ -13,16 +14,32 @@ CONFIG_FILE = Path("config.json")
 class ConfigurationLoader:
     """Load JarvisConfig from config.json or safe defaults."""
 
-    def __init__(self, path=CONFIG_FILE):
+    def __init__(self, path=CONFIG_FILE, wake_calibration_path=None):
         """Create a loader for one configuration file path."""
         self.path = path
+        self.wake_calibration_path = (
+            DEFAULT_WAKE_CALIBRATION_PATH
+            if wake_calibration_path is None and Path(path) == CONFIG_FILE
+            else (None if wake_calibration_path == "" else wake_calibration_path)
+        )
 
     def load(self):
         """Return JarvisConfig from config.json, or defaults if missing."""
-        if not self.path.exists():
-            return JarvisConfig()
-
-        config_data = read_json_file(self.path)
+        config_data = read_json_file(self.path) if self.path.exists() else {}
+        profile = (
+            load_wake_calibration(self.wake_calibration_path)
+            if self.wake_calibration_path is not None
+            else None
+        )
+        configured_device = str(
+            dict(config_data.get("stt", {})).get("device", "default")
+        )
+        if profile is not None and profile.device_id == configured_device:
+            config_data = dict(config_data)
+            config_data["wake"] = {
+                **dict(config_data.get("wake", {})),
+                **profile.wake_overrides(),
+            }
         return create_config_from_dict(config_data)
 
 
