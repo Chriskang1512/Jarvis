@@ -27,6 +27,8 @@ class SpeechSegmenter:
         self.speech_started_at = None
         self.last_speech_at = None
         self.speech_blocks = 0
+        self.active_run_blocks = 0
+        self.max_active_run_blocks = 0
 
     def process(self, samples, timestamp):
         values = tuple(float(value) for value in samples)
@@ -47,11 +49,20 @@ class SpeechSegmenter:
             self.speech_started_at = float(timestamp)
             self.last_speech_at = float(timestamp)
             self.frames = [values]
+            self.active_run_blocks = self.speech_blocks
+            self.max_active_run_blocks = self.speech_blocks
             return
 
         self.frames.append(values)
         if rms >= continue_threshold:
             self.last_speech_at = float(timestamp)
+            self.active_run_blocks += 1
+            self.max_active_run_blocks = max(
+                self.max_active_run_blocks,
+                self.active_run_blocks,
+            )
+        else:
+            self.active_run_blocks = 0
         sample_count = sum(len(frame) for frame in self.frames)
         silent_for = float(timestamp) - float(self.last_speech_at)
         if sample_count >= self.max_samples or silent_for >= self.silence_seconds:
@@ -63,7 +74,10 @@ class SpeechSegmenter:
         self.speech_started_at = None
         self.last_speech_at = None
         self.speech_blocks = 0
-        if len(samples) >= self.min_samples:
+        active_run_blocks = self.max_active_run_blocks
+        self.active_run_blocks = 0
+        self.max_active_run_blocks = 0
+        if len(samples) >= self.min_samples and active_run_blocks >= 4:
             self.on_segment(create_wav_bytes(samples, self.sample_rate))
 
 

@@ -350,11 +350,30 @@ class TestWakeProvidersAndManager(unittest.TestCase):
 
         segmenter.process(speech, 1.00)
         segmenter.process(speech, 1.05)
+        segmenter.process(speech, 1.10)
+        segmenter.process(speech, 1.15)
         for index in range(12):
-            segmenter.process(silence, 1.10 + index * 0.05)
+            segmenter.process(silence, 1.20 + index * 0.05)
 
         self.assertEqual(len(segments), 1)
         self.assertTrue(segments[0].startswith(b"RIFF"))
+
+    def test_speech_segmenter_rejects_separated_clap_impulses(self):
+        segments = []
+        segmenter = SpeechSegmenter(segments.append)
+        clap = [0.20] * 800
+        silence = [0.0] * 800
+
+        segmenter.process(clap, 1.00)
+        segmenter.process(clap, 1.05)
+        segmenter.process(silence, 1.10)
+        segmenter.process(silence, 1.15)
+        segmenter.process(clap, 1.25)
+        segmenter.process(clap, 1.30)
+        for index in range(12):
+            segmenter.process(silence, 1.35 + index * 0.05)
+
+        self.assertEqual(segments, [])
 
     def test_keyboard_hotkey_only_triggers_on_exact_binding(self):
         provider = KeyboardWakeProvider("ctrl+space")
