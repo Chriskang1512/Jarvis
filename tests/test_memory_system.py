@@ -8,6 +8,7 @@ from jarvis.memory import (
     MemoryType,
     SQLiteMemoryProvider,
 )
+from jarvis.abilities.native.memory.models import MemoryEntry, format_saved_message
 from jarvis.runtime.planner import ExecutionPlan, ExecutionStep
 from jarvis.runtime.tool_dispatcher.dispatcher import apply_memory_context
 from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
@@ -107,6 +108,16 @@ class TestMemorySystem(unittest.TestCase):
         self.assertEqual(stt_preference.value, "강릉")
         self.assertTrue(relationship.should_store)
         self.assertEqual(relationship.value, "오사카")
+
+    def test_weather_preference_save_message_is_user_facing(self):
+        entry = MemoryEntry(
+            id="memory-weather-location",
+            key="preference.weather.default_location",
+            value="강릉",
+            category="preference",
+        )
+
+        self.assertEqual(format_saved_message(entry), "기본 날씨 지역을 강릉으로 설정했습니다.")
 
     def test_successful_ability_execution_applies_store_policy(self):
         manager = MemoryManager(SQLiteMemoryProvider(self.path))

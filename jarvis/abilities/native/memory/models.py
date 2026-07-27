@@ -132,6 +132,9 @@ def memory_entry_from_dict(data):
 
 def format_saved_message(entry):
     """Return a save confirmation by scope."""
+    if entry.key == "preference.weather.default_location":
+        return f"기본 날씨 지역을 {entry.value}으로 설정했습니다."
+
     if entry.scope == "session":
         return "이번 대화 동안 기억하겠습니다."
 

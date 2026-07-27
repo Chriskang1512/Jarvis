@@ -50,6 +50,10 @@ class TodoVoiceRoutingTest(unittest.TestCase):
         self.assertIsNotNone(reply)
         self.assertIn("\ud655\uc778", reply)
 
+    def test_meal_recommendation_can_use_general_llm(self):
+        self.assertIsNone(safe_tool_like_failed_request_reply("오늘 저녁 뭐 먹을까?"))
+        self.assertIsNone(safe_tool_like_failed_request_reply("오늘 메뉴 추천해줘"))
+
     def test_plain_chat_can_still_use_general_llm(self):
         self.assertIsNone(safe_tool_like_failed_request_reply("\uc548\ub155"))
 

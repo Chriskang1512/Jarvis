@@ -21,6 +21,10 @@
   instead of exposing a missing-parameter error for ephemeral statements.
 - Accepted observed Korean preference and relationship phrasing variants in the
   conservative Memory Store Policy.
+- Kept meal recommendations and similar choice-oriented prompts on the general
+  conversation path instead of misclassifying them as failed real-time lookups.
+- Added a specific confirmation sentence when the default Weather location
+  preference is saved.
 
 ## [v1.1.0-wake-input] - 2026-07-27
 

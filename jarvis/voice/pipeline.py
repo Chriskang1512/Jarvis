@@ -2890,6 +2890,10 @@ def is_current_info_like_failed_request(message):
     text = str(message or "").strip()
     current_tokens = ["최근", "오늘", "지금", "현재", "최신", "뉴스", "날씨", "비", "주가", "환율"]
     lookup_tokens = ["알려", "보여", "조회", "검색", "찾아", "어때", "뭐"]
+    recommendation_tokens = ["먹을까", "먹지", "먹으면", "추천", "할까", "하면 좋"]
+
+    if any(token in text for token in recommendation_tokens):
+        return False
 
     return any(token in text for token in current_tokens) and any(token in text for token in lookup_tokens)
 
