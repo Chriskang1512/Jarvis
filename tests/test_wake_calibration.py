@@ -20,6 +20,7 @@ class TestWakeCalibration(unittest.TestCase):
 
         self.assertEqual(profile.sample_count, 10)
         self.assertEqual(profile.device_id, "reference-mic")
+        self.assertEqual(profile.clap_second_threshold_ratio, 0.55)
         self.assertGreater(profile.clap_peak_threshold, profile.noise_floor_peak)
         self.assertLess(profile.clap_peak_threshold, 0.30)
         self.assertGreater(profile.clap_rms_threshold, profile.noise_floor_rms)

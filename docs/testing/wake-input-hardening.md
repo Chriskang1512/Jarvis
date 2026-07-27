@@ -63,7 +63,7 @@ and must be compared against the full environmental false-positive matrix.
 The first post-fix baseline measured 2/11 confirmations with zero exceptions:
 four trials had no candidate and five accepted only the first clap. The first
 clap retains the strict baseline. During its bounded 0.8-second pending window,
-the second clap uses `clap_second_threshold_ratio=0.65` to tolerate microphone
+the second clap uses a calibrated `clap_second_threshold_ratio` to tolerate microphone
 AGC attenuation without allowing a weak sound to start a clap sequence.
 
 The adaptive threshold is experimental and is armed only after all of these
@@ -79,6 +79,11 @@ Trace exposes first/second thresholds, refractory elapsed time, release state,
 second-candidate reason, and cumulative activation count. Final approval
 requires 9/10 Double Clap success plus zero activation across repeated Single
 Clap, Triple Clap, keyboard, desk, door, and media tests.
+
+The first calibrated room matrix measured Double `8/10`, Single `11/11` with
+zero activation, and Triple cancellation `2/5`. Calibration profile v2 uses a
+second-clap ratio of `0.55`. The same adaptive threshold is used only as a
+third-clap cancellation guard during settle; it cannot create an activation.
 
 ## Full Runtime Checks
 

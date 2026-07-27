@@ -246,6 +246,24 @@ class TestClapDetector(unittest.TestCase):
         self.assertFalse(diagnostic["signal_released"])
         self.assertIsNone(detector.second_clap_at)
 
+    def test_weak_third_clap_uses_adaptive_guard_and_cancels_activation(self):
+        detector = ClapDetector()
+        strict_first = [0.0] * 99 + [1.0]
+        weaker_clap = [0.0] * 97 + [0.4, 0.4, 0.4]
+        silence = [0.0] * 100
+
+        self.assertFalse(detector.process(strict_first, 1.0))
+        self.assertFalse(detector.process(silence, 1.10))
+        self.assertFalse(detector.process(weaker_clap, 1.30))
+        detector.pop_decision()
+        self.assertFalse(detector.process(weaker_clap, 1.55))
+
+        self.assertEqual(detector.pop_decision(), "TRIPLE_CANCELLED")
+        self.assertEqual(
+            detector.pop_diagnostic()["rejection_reason"],
+            "third_clap",
+        )
+
     def test_missing_first_clap_is_rejected_without_callback_exception(self):
         detector = ClapDetector()
         detector.second_clap_at = 1.45

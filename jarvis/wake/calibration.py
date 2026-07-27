@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-CALIBRATION_VERSION = 1
+CALIBRATION_VERSION = 2
 DEFAULT_WAKE_CALIBRATION_PATH = Path("data") / "wake_calibration.json"
 
 
@@ -28,7 +28,7 @@ class WakeCalibrationProfile:
     clap_rms_threshold: float
     clap_crest_factor_threshold: float
     device_id: str = "default"
-    clap_second_threshold_ratio: float = 0.65
+    clap_second_threshold_ratio: float = 0.55
     clap_release_threshold_ratio: float = 0.35
     clap_noise_floor_multiplier: float = 4.0
 

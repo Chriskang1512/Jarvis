@@ -8,6 +8,8 @@
   atomic profile storage, runtime overlay, and no retained microphone audio.
 - Required a continuous voiced run for microphone Wake Word transcription so
   separated clap impulses do not generate paid STT requests.
+- Calibrated second-clap sensitivity to `0.55` after an 8/10 Double and 11/11
+  safe Single matrix, and reused it for third-clap cancellation during settle.
 - Added a no-STT live Wake hardening probe and a repeatable room-test matrix
   for clap timing and environmental false-positive validation.
 - Required live Clap probes to observe the expected detector state and exposed

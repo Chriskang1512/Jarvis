@@ -207,9 +207,10 @@ class ClapDetector:
 
     def current_thresholds(self):
         pending_second = self.first_clap_at is not None and self.second_clap_at is None
+        pending_triple_guard = self.second_clap_at is not None
         threshold_ratio = (
             self.settings.second_clap_threshold_ratio
-            if pending_second and self.signal_released
+            if (pending_second and self.signal_released) or pending_triple_guard
             else 1.0
         )
         return (
