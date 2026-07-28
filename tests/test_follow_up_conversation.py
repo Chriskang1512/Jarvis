@@ -135,6 +135,9 @@ class TestFollowUpConversationMode(unittest.TestCase):
         self.assertFalse(is_unprompted_short_follow_up_noise("모레는"))
         self.assertFalse(is_unprompted_short_follow_up_noise("날씨 알려줘"))
 
+    def test_japanese_weather_question_is_not_discarded_as_short_noise(self):
+        self.assertFalse(is_unprompted_short_follow_up_noise("\u660e\u65e5\u306e\u5927\u962a\u306e\u5929\u6c17\u306f?"))
+
     def test_calendar_confirmation_noise_does_not_overwrite_title(self):
         """Check unknown short confirmation noise is not stored as a title."""
         task = start_calendar_conversation_task("내일 오후 3시에 만나기 일정 등록해")
@@ -195,9 +198,18 @@ class TestFollowUpConversationMode(unittest.TestCase):
         reply = pipeline.run_once()
 
         events = [event.event_type for event in diagnostics.get_snapshot().published_events]
-        self.assertEqual(reply, "reply: hello")
+        self.assertEqual(
+            reply,
+            "reply: Respond in English.\nUser request:\nhello",
+        )
         self.assertEqual(wake_listener.calls, 1)
-        self.assertEqual(chat_service.messages, ["hello", "what time is it"])
+        self.assertEqual(
+            chat_service.messages,
+            [
+                "Respond in English.\nUser request:\nhello",
+                "Respond in English.\nUser request:\nwhat time is it",
+            ],
+        )
         self.assertEqual(pipeline.conversation_session.state, CONVERSATION_CLOSED)
         self.assertIn("conversation.started", events)
         self.assertIn("conversation.follow_up", events)

@@ -155,6 +155,7 @@ class RuntimeResult:
     fallback_used: bool = False
     tool_output: object = None
     task: object = None
+    graph_id: str = ""
 
 
 ParsedIntent = Intent

@@ -1,4 +1,5 @@
 import unittest
+from threading import Event, Timer
 
 from jarvis.config.loader import create_config_from_dict
 from jarvis.input import (
@@ -25,7 +26,7 @@ from jarvis.wake import (
     WakeSettings,
     WakeWordProvider,
 )
-from jarvis.wake.voice import SpeechSegmenter
+from jarvis.wake.voice import SpeechSegmenter, WakePhraseTranscriber
 from jarvis.voice.wake_word import WakeWordListener
 from unittest.mock import patch
 
@@ -292,6 +293,39 @@ class TestClapDetector(unittest.TestCase):
 
 
 class TestWakeProvidersAndManager(unittest.TestCase):
+    def test_manager_pause_discards_pending_wake_and_resume_accepts_new_wake(self):
+        voice = WakeWordProvider(("jarvis",))
+        manager = WakeManager((voice,))
+        voice.feed_text("jarvis")
+
+        manager.pause("dashboard_turn")
+
+        self.assertTrue(manager.is_paused())
+        self.assertIsNone(voice.poll())
+        manager.resume("browser_ack")
+        voice.feed_text("jarvis")
+        self.assertEqual(manager.wait(timeout=0.05).method, WakeMethod.VOICE)
+
+    def test_stopped_transcriber_rejects_inflight_stt_result(self):
+        started = Event()
+        release = Event()
+        recognized = []
+
+        def transcribe(_audio):
+            started.set()
+            release.wait(timeout=1.0)
+            return "jarvis"
+
+        transcriber = WakePhraseTranscriber(transcribe, recognized.append)
+        transcriber.start()
+        transcriber.submit(b"wake-audio")
+        self.assertTrue(started.wait(timeout=0.5))
+        Timer(0.05, release.set).start()
+
+        transcriber.stop()
+
+        self.assertEqual(recognized, [])
+
     def test_profile_priority_selects_clap_before_voice(self):
         clap = ClapWakeProvider()
         voice = WakeWordProvider()

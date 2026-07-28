@@ -1039,10 +1039,69 @@ def is_calendar_create_command(text):
 
 def is_weather_query_command(text):
     """Return whether text asks for weather or rain information."""
-    normalized = str(text or "")
-    weather_subject = any(token in normalized for token in ["날씨", "비", "우산", "기온", "온도"])
-    weather_verb = any(token in normalized for token in ["알려", "어때", "와", "오니", "오나", "오냐", "오고", "내려", "필요", "몇 도"])
-    temporal_or_location = has_date_or_time_signal(normalized) or any(token in normalized for token in ["지금", "현재", "강릉", "서울", "잠실"])
+    normalized = str(text or "").lower()
+    weather_subject = any(
+        token in normalized
+        for token in [
+            "날씨",
+            "비",
+            "우산",
+            "기온",
+            "온도",
+            "weather",
+            "forecast",
+            "rain",
+            "umbrella",
+            "temperature",
+            "天気",
+            "天候",
+            "予報",
+            "雨",
+            "気温",
+        ]
+    )
+    weather_verb = any(
+        token in normalized
+        for token in [
+            "알려",
+            "어때",
+            "와",
+            "오니",
+            "오나",
+            "오냐",
+            "오고",
+            "내려",
+            "필요",
+            "몇 도",
+            "what",
+            "how",
+            "tell",
+            "will",
+            "教えて",
+            "おしえて",
+            "どう",
+            "ですか",
+            "降る",
+        ]
+    )
+    temporal_or_location = has_date_or_time_signal(normalized) or any(
+        token in normalized
+        for token in [
+            "지금",
+            "현재",
+            "강릉",
+            "서울",
+            "잠실",
+            "today",
+            "tomorrow",
+            "now",
+            "今日",
+            "きょう",
+            "明日",
+            "あした",
+            "今",
+        ]
+    )
 
     return weather_subject and (weather_verb or temporal_or_location)
 
@@ -1061,7 +1120,30 @@ def has_date_or_time_signal(text):
     normalized = str(text or "")
 
     return bool(re.search(r"\d+\s*(?:월|일|시|:)", normalized)) or any(
-        token in normalized for token in ["오늘", "내일", "모레", "이번 주", "다음 주", "오전", "오후"]
+        token in normalized
+        for token in [
+            "오늘",
+            "내일",
+            "모레",
+            "이번 주",
+            "다음 주",
+            "오전",
+            "오후",
+            "today",
+            "tomorrow",
+            "next week",
+            "am",
+            "pm",
+            "今日",
+            "きょう",
+            "明日",
+            "あした",
+            "明後日",
+            "あさって",
+            "来週",
+            "午前",
+            "午後",
+        ]
     )
 
 

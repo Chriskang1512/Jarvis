@@ -77,6 +77,7 @@ class TaskRunner:
         initial_context=None,
         pre_step_results=None,
         runtime_task=None,
+        observer=None,
     ):
         """Execute a plan and return a TaskRunnerResult."""
         started = perf_counter()
@@ -182,6 +183,8 @@ class TaskRunner:
                     tool=step.tool_name,
                     action=step.action,
                 )
+                if observer is not None:
+                    observer.step_started(task, step, input_data)
                 def begin_retry(retry_number, decision):
                     nonlocal task
                     self.record_journal(
@@ -217,6 +220,8 @@ class TaskRunner:
                 )
                 total_retry_count += retry_count
                 step_results.append(step_result)
+                if observer is not None:
+                    observer.step_finished(task, step, step_result, record)
 
                 if recovery_disposition == "PAUSED":
                     step_records.append(replace(record, status=TaskState.PAUSED))

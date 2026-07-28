@@ -2,7 +2,7 @@ import io
 import os
 import unittest
 from contextlib import redirect_stdout
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 from jarvis.abilities import AbilityHealth, AbilityRegistry, AbilityResult, AbilityToolAdapter, AbilityType
@@ -13,10 +13,19 @@ from jarvis.abilities.native.memory import JsonMemoryStorage, MemoryAbility, Mem
 from jarvis.abilities.native.weather import MockWeatherProvider, WeatherAbility, WeatherResult
 from jarvis.abilities.native.weather import WeatherIntentParser
 from jarvis.abilities.native.weather import WeatherQuery
-from jarvis.abilities.native.weather import WeatherLocationResolver
+from jarvis.abilities.native.weather import (
+    AmbiguousWeatherLocationError,
+    OpenWeatherGeoResolver,
+    WeatherLocationCache,
+    WeatherLocationResolver,
+)
 from jarvis.abilities.native.weather.provider import OpenWeatherProvider
 from jarvis.abilities.native.weather.provider import FallbackWeatherProvider
-from jarvis.abilities.native.weather.provider import create_weather_provider, normalize_openweather_response
+from jarvis.abilities.native.weather.provider import (
+    create_weather_provider,
+    normalize_openweather_forecast_response,
+    normalize_openweather_response,
+)
 from jarvis.brain import BrainToolRouter, IntentRuntime
 from jarvis.commands.chat import ChatCommand
 from jarvis.config.loader import create_config_from_dict
@@ -400,6 +409,98 @@ class TestAbilities(unittest.TestCase):
         self.assertEqual(resolver.resolve("\uc7a0\uc2e4"), "Seoul,KR")
         self.assertEqual(resolver.resolve("\uc624\uc0ac\uce74"), "Osaka,JP")
 
+    def test_weather_location_resolver_maps_multilingual_osaka_aliases(self):
+        """Check Japanese and English Osaka forms share one provider identity."""
+        resolver = WeatherLocationResolver()
+
+        self.assertEqual(resolver.resolve("\u5927\u962a"), "Osaka,JP")
+        self.assertEqual(resolver.resolve("\u304a\u304a\u3055\u304b"), "Osaka,JP")
+        self.assertEqual(resolver.resolve("Osaka"), "Osaka,JP")
+        self.assertEqual(resolver.resolve("in Osaka"), "Osaka,JP")
+        resolved = resolver.resolve_location("\u5927\u962a")
+        self.assertEqual(resolved.canonical_name, "Osaka")
+        self.assertEqual(resolved.country_code, "JP")
+        self.assertEqual(resolved.resolution_source, "alias_registry")
+
+    def test_weather_location_resolver_removes_korean_possessive_particle(self):
+        resolver = WeatherLocationResolver(cache=InMemoryWeatherLocationCache())
+
+        resolved = resolver.resolve_location("\uc624\uc0ac\uce74\uc758")
+
+        self.assertEqual(resolved.normalized, "\uc624\uc0ac\uce74")
+        self.assertEqual(resolved.provider_query, "Osaka,JP")
+        self.assertEqual(resolved.resolution_source, "alias_registry")
+
+    def test_weather_location_resolver_maps_common_korean_cities(self):
+        resolver = WeatherLocationResolver(cache=InMemoryWeatherLocationCache())
+
+        self.assertEqual(resolver.resolve("\ubaa9\ud3ec"), "Mokpo,KR")
+        self.assertEqual(resolver.resolve("\uad11\uc8fc"), "Gwangju,KR")
+        self.assertEqual(resolver.resolve("\uc778\ucc9c"), "Incheon,KR")
+
+    def test_geocoder_merges_city_and_si_candidates_for_same_place(self):
+        geocoder = OpenWeatherGeoResolver(
+            "test-key",
+            fetcher=lambda _location: [
+                {
+                    "name": "Gwangju",
+                    "country": "KR",
+                    "lat": 35.1595,
+                    "lon": 126.8526,
+                },
+                {
+                    "name": "Gwangju-si",
+                    "country": "KR",
+                    "lat": 35.1667,
+                    "lon": 126.9167,
+                },
+            ],
+        )
+
+        resolved = geocoder.resolve("\uad11\uc8fc")
+
+        self.assertEqual(resolved.canonical_name, "Gwangju")
+        self.assertEqual(resolved.country_code, "KR")
+        self.assertAlmostEqual(resolved.latitude, 35.1595)
+
+    def test_weather_location_resolver_geocodes_and_caches_unknown_city(self):
+        """Check an alias miss is geocoded once and then served locally."""
+        calls = []
+
+        def fetcher(location):
+            calls.append(location)
+            return [{"name": "Sapporo", "country": "JP", "lat": 43.0618, "lon": 141.3545}]
+
+        cache = InMemoryWeatherLocationCache()
+        resolver = WeatherLocationResolver(
+            geocoder=OpenWeatherGeoResolver("test-key", fetcher=fetcher),
+            cache=cache,
+        )
+        first = resolver.resolve_location("\u672d\u5e4c")
+        second = resolver.resolve_location("\u672d\u5e4c")
+
+        self.assertEqual(first.provider_query, "Sapporo,JP")
+        self.assertEqual(first.resolution_source, "geocoding")
+        self.assertEqual(second.provider_query, "Sapporo,JP")
+        self.assertEqual(second.resolution_source, "cache")
+        self.assertEqual(calls, ["\u672d\u5e4c"])
+
+    def test_weather_location_resolver_rejects_ambiguous_geocoding(self):
+        """Check multiple distinct cities are not silently auto-selected."""
+        resolver = WeatherLocationResolver(
+            geocoder=OpenWeatherGeoResolver(
+                "test-key",
+                fetcher=lambda _: [
+                    {"name": "Paris", "country": "FR", "lat": 48.8566, "lon": 2.3522},
+                    {"name": "Paris", "country": "US", "lat": 33.6609, "lon": -95.5555},
+                ],
+            ),
+            cache=InMemoryWeatherLocationCache(),
+        )
+
+        with self.assertRaises(AmbiguousWeatherLocationError):
+            resolver.resolve_location("Paris")
+
     def test_openweather_provider_resolves_location_before_fetch(self):
         """Check OpenWeather receives resolved city names, not raw Korean text."""
         provider = CapturingOpenWeatherProvider(api_key="test-key")
@@ -437,6 +538,14 @@ class TestAbilities(unittest.TestCase):
         self.assertEqual(query.mode, "forecast")
         self.assertEqual(query.capability, "precipitation")
         self.assertGreaterEqual(query.confidence, 0.95)
+
+    def test_weather_query_removes_korean_topic_particle_from_location(self):
+        """Check weather-subject particles are not sent as part of a city name."""
+        query = WeatherIntentParser().parse("\ubaa8\ub808 \uac15\ub989 \ub0a0\uc528\ub294 \uc5b4\ub54c?")
+
+        self.assertEqual(query.location, "\uac15\ub989")
+        self.assertEqual(query.date, "day_after_tomorrow")
+        self.assertEqual(query.mode, "forecast")
 
     def test_weather_router_matches_precipitation_question(self):
         """Check precipitation weather requests route without the weather word."""
@@ -476,6 +585,34 @@ class TestAbilities(unittest.TestCase):
         self.assertEqual(query.date, "tomorrow")
         self.assertEqual(query.mode, "forecast")
         self.assertLess(query.confidence, 0.8)
+
+    def test_weather_query_parses_japanese_tomorrow_forecast(self):
+        """Check Japanese weather requests use the same normalized query path."""
+        query = WeatherIntentParser().parse("\u660e\u65e5\u306e\u5929\u6c17\u3092\u6559\u3048\u3066")
+
+        self.assertIsNone(query.location)
+        self.assertEqual(query.date, "tomorrow")
+        self.assertEqual(query.mode, "forecast")
+        self.assertEqual(query.capability, "forecast")
+
+    def test_weather_query_parses_english_tomorrow_forecast(self):
+        """Check English weather requests use the same normalized query path."""
+        query = WeatherIntentParser().parse("What's the weather tomorrow?")
+
+        self.assertIsNone(query.location)
+        self.assertEqual(query.date, "tomorrow")
+        self.assertEqual(query.mode, "forecast")
+        self.assertEqual(query.capability, "forecast")
+
+    def test_weather_query_extracts_english_and_japanese_osaka_without_wrappers(self):
+        """Check multilingual grammar does not leak into provider locations."""
+        english = WeatherIntentParser().parse("What's the weather in Osaka tomorrow?")
+        japanese = WeatherIntentParser().parse("\u660e\u65e5\u306e\u5927\u962a\u306e\u5929\u6c17\u306f?")
+
+        self.assertEqual(english.location, "Osaka")
+        self.assertEqual(english.date, "tomorrow")
+        self.assertEqual(japanese.location, "\u5927\u962a")
+        self.assertEqual(japanese.date, "tomorrow")
 
     def test_weather_query_missing_location_has_lower_confidence(self):
         """Check missing location leaves room for Memory Ability enrichment."""
@@ -545,6 +682,72 @@ class TestAbilities(unittest.TestCase):
         self.assertEqual(result.temperature, 27.5)
         self.assertEqual(result.provider, "openweather")
         self.assertEqual(result.precipitation_probability, 0)
+
+    def test_openweather_forecast_selects_requested_local_day_and_daily_max_rain(self):
+        """Check tomorrow forecast uses local noon and the day's maximum POP."""
+        now = datetime(2026, 7, 28, 9, 0, tzinfo=timezone.utc)
+        payload = {
+            "city": {"name": "Osaka", "timezone": 9 * 60 * 60},
+            "list": [
+                forecast_item(datetime(2026, 7, 29, 0, 0, tzinfo=timezone.utc), 29, 0.2),
+                forecast_item(datetime(2026, 7, 29, 3, 0, tzinfo=timezone.utc), 31, 0.7),
+                forecast_item(datetime(2026, 7, 29, 6, 0, tzinfo=timezone.utc), 32, 0.4),
+            ],
+        }
+
+        with patch("jarvis.abilities.native.weather.provider.trace_event") as trace:
+            result = normalize_openweather_forecast_response(
+                payload,
+                WeatherQuery(location="\uc624\uc0ac\uce74", date="tomorrow", mode="forecast", capability="forecast"),
+                now=now,
+            )
+
+        self.assertEqual(result.location, "\uc624\uc0ac\uce74")
+        self.assertEqual(result.temperature, 31.0)
+        self.assertEqual(result.temperature_min, 29.0)
+        self.assertEqual(result.temperature_max, 32.0)
+        self.assertEqual(result.precipitation_probability, 70)
+        self.assertEqual(result.timestamp, "2026-07-29T12:00:00+09:00")
+        self.assertEqual(result.forecast_at, "2026-07-29T12:00:00+09:00")
+        self.assertIn("\ucd5c\uace0 32\ub3c4", result.to_natural_language())
+        self.assertIn("\ucd5c\uc800 29\ub3c4", result.to_natural_language())
+        self.assertIn("\uac15\uc218\ud655\ub960\uc740 \ucd5c\ub300 70%", result.to_natural_language())
+        event, payload = trace.call_args.args[0], trace.call_args.kwargs
+        self.assertEqual(event, "weather.forecast.selected")
+        self.assertEqual(payload["target_date_local"], "2026-07-29")
+        self.assertEqual(payload["timezone_offset"], 32400)
+        self.assertEqual(payload["matched_slots"], 3)
+        self.assertEqual(payload["representative_slot"], "2026-07-29T12:00:00+09:00")
+
+    def test_openweather_forecast_without_requested_date_fails_clearly(self):
+        """Check a missing local date is surfaced for the fallback wrapper."""
+        now = datetime(2026, 7, 28, 9, 0, tzinfo=timezone.utc)
+        payload = {
+            "city": {"name": "Osaka", "timezone": 9 * 60 * 60},
+            "list": [
+                forecast_item(datetime(2026, 7, 28, 3, 0, tzinfo=timezone.utc), 30, 0.1),
+            ],
+        }
+
+        with self.assertRaisesRegex(RuntimeError, "has no data for 2026-07-29"):
+            normalize_openweather_forecast_response(
+                payload,
+                WeatherQuery(location="\uc624\uc0ac\uce74", date="tomorrow", mode="forecast", capability="forecast"),
+                now=now,
+            )
+
+    def test_openweather_provider_routes_future_query_to_forecast_endpoint(self):
+        """Check future weather never calls the current-conditions transport."""
+        provider = CapturingOpenWeatherProvider()
+
+        result = provider.get_weather(
+            WeatherQuery(location="\uc624\uc0ac\uce74", date="tomorrow", mode="forecast", capability="forecast")
+        )
+
+        self.assertEqual(provider.seen_forecast_location, "Osaka,JP")
+        self.assertEqual(provider.seen_coordinates, (34.6937, 135.5023))
+        self.assertIsNone(provider.seen_location)
+        self.assertEqual(result.mode, "forecast")
 
     def test_config_creates_mock_weather_provider_by_default(self):
         """Check weather.provider defaults to mock."""
@@ -1070,6 +1273,24 @@ class TestAbilities(unittest.TestCase):
         self.assertIn("강수확률은 10%입니다", output)
         self.assertEqual(context.chat_service.messages, [])
 
+    def test_weather_response_uses_topic_particle_without_batchim(self):
+        result = WeatherResult(
+            location="\uc81c\uc8fc\uc2dc",
+            temperature=28.37,
+            feels_like=33.04,
+            condition="\uad6c\ub984\uc870\uae08",
+            humidity=80,
+            wind_speed=1.0,
+            precipitation_probability=0,
+            provider="openweather",
+            timestamp="2026-07-28T19:15:00+09:00",
+        )
+
+        self.assertIn(
+            "\ud604\uc7ac \uc81c\uc8fc\uc2dc\ub294 28.37\ub3c4\uc774\uba70",
+            result.to_natural_language(),
+        )
+
     def test_weather_response_does_not_speak_provider_debug(self):
         """Check provider debug stays in trace logs, not spoken weather text."""
         previous_debug = os.environ.get("JARVIS_DEBUG_TRACE")
@@ -1140,10 +1361,12 @@ class CapturingOpenWeatherProvider(OpenWeatherProvider):
         """Create a capturing provider."""
         super().__init__(api_key=api_key, default_location=default_location)
         self.seen_location = None
+        self.seen_forecast_location = None
 
-    def fetch_current_weather(self, location):
+    def fetch_current_weather(self, location, latitude=None, longitude=None):
         """Capture resolved location and return fake API data."""
         self.seen_location = location
+        self.seen_coordinates = (latitude, longitude)
         return {
             "name": "Gangneung",
             "dt": 1726660758,
@@ -1155,6 +1378,50 @@ class CapturingOpenWeatherProvider(OpenWeatherProvider):
             },
             "wind": {"speed": 2.0},
         }
+
+    def fetch_forecast(self, location, latitude=None, longitude=None):
+        """Capture forecast routing and return tomorrow's fake UTC forecast."""
+        self.seen_forecast_location = location
+        self.seen_coordinates = (latitude, longitude)
+        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+        timestamp = datetime.combine(tomorrow, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=12)
+        return {
+            "city": {"name": "Osaka", "timezone": 0},
+            "list": [forecast_item(timestamp, 25, 0.3)],
+        }
+
+
+def forecast_item(timestamp, temperature, precipitation_probability):
+    """Build one OpenWeather forecast fixture item."""
+    return {
+        "dt": int(timestamp.timestamp()),
+        "weather": [{"description": "light rain"}],
+        "main": {
+            "temp": float(temperature),
+            "feels_like": float(temperature) + 1,
+            "humidity": 65,
+        },
+        "wind": {"speed": 3.0},
+        "pop": precipitation_probability,
+    }
+
+
+class InMemoryWeatherLocationCache:
+    """Test cache with the production get/put contract."""
+
+    def __init__(self):
+        self.items = {}
+
+    def get(self, key):
+        item = self.items.get(str(key).casefold())
+        if item is None:
+            return None
+        from dataclasses import replace
+
+        return replace(item, resolution_source="cache")
+
+    def put(self, key, location):
+        self.items[str(key).casefold()] = location
 
 
 def restore_env(key, previous):

@@ -94,7 +94,7 @@ def canonical_wake_phrase(value):
 class MicrophoneWakeWordProvider(WakeWordProvider):
     """Recognize configured wake phrases from a shared microphone stream."""
 
-    def __init__(self, phrases, transcribe, monitor, sample_rate=16000):
+    def __init__(self, phrases, transcribe, monitor, sample_rate=16000, max_segment_seconds=1.5):
         super().__init__(phrases)
         self.provider_id = "microphone_wake_word"
         self.monitor = monitor
@@ -102,6 +102,7 @@ class MicrophoneWakeWordProvider(WakeWordProvider):
         self.segmenter = SpeechSegmenter(
             self.transcriber.submit,
             sample_rate=sample_rate,
+            max_seconds=max_segment_seconds,
         )
         self.monitor.add_listener(self.segmenter.process)
 

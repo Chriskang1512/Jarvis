@@ -64,6 +64,16 @@ class ConversationConfig:
 
 
 @dataclass
+class LanguageConfig:
+    """Store response-language policy without coupling it to STT settings."""
+
+    policy: str = "AUTO"
+    ko_voice: str = "openai:alloy:ko"
+    ja_voice: str = "openai:nova:ja"
+    en_voice: str = "openai:onyx:en"
+
+
+@dataclass
 class MemoryStoreConfig:
     """Store long-term memory backend settings."""
 
@@ -140,6 +150,7 @@ class JarvisConfig:
     stt: STTConfig = field(default_factory=STTConfig)
     wake: WakeConfig = field(default_factory=WakeConfig)
     conversation: ConversationConfig = field(default_factory=ConversationConfig)
+    language: LanguageConfig = field(default_factory=LanguageConfig)
     memory_store: MemoryStoreConfig = field(default_factory=MemoryStoreConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     calendar: CalendarConfig = field(default_factory=CalendarConfig)

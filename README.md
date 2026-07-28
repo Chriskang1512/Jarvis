@@ -1,5 +1,143 @@
 # Jarvis
 
+## Jarvis v1.3 Sprint 21 — Dashboard & Observability
+
+Sprint 21 adds a local window into the Jarvis runtime. Run `python main.py`,
+then open `http://127.0.0.1:8765`.
+
+The Dashboard shows live Runtime status, EventBus events, tasks, memory,
+searchable logs, permissions, voice state, plugins, settings, diagnostics,
+Timeline and Planner Trace. It also includes cumulative Metrics, an animated
+Event Flow, Provider health and an Ability Monitor. Entity Graph is reserved
+for Sprint 22–23. Updates arrive over WebSocket.
+
+```text
+Jarvis Runtime
+  -> EventBus
+  -> Dashboard Event Bridge
+  -> WebSocket
+  -> Web Dashboard
+```
+
+Use `python dashboard_main.py` to inspect persisted Memory and Settings without
+the command console. Set `JARVIS_DASHBOARD=false` to disable the embedded
+Dashboard. It listens on localhost only, and Settings rejects secret-like
+fields. See `docs/adr/0030-dashboard-observability-event-bridge.md`.
+
+For live Wake, STT, Planner, Ability and TTS observations, start the voice
+runtime itself:
+
+```powershell
+python voice_main.py
+```
+
+`voice_main.py` owns the Dashboard server and connects its real EventBus and
+structured trace to WebSocket. Do not run `dashboard_main.py` at the same time;
+the standalone process is an inspection-only host and cannot see another
+process's in-memory runtime events.
+
+### Runtime language policy
+
+Jarvis resolves one `LanguageContext` per Runtime Turn. The default `AUTO`
+policy follows Korean, Japanese, or English input and supports
+conversation-scoped requests such as `오늘 일본어로만 대화하자`.
+
+```json
+{
+  "language": {
+    "policy": "AUTO",
+    "ko_voice": "openai:alloy:ko",
+    "ja_voice": "openai:nova:ja",
+    "en_voice": "openai:onyx:en"
+  }
+}
+```
+
+Available policies are `AUTO`, `FORCE_KO`, `FORCE_JA`, and `FORCE_EN`.
+
+### Sprint 22 — Dashboard 2.0 Interaction
+
+The Dashboard now includes Chat and push-to-talk browser voice input:
+
+```text
+Browser text / microphone
+  -> bidirectional WebSocket
+  -> JarvisRuntimeService
+  -> InputManager / InputEnvelope
+  -> Planner / Memory / Ability
+  -> Chat result / Browser TTS
+```
+
+Run `python voice_main.py`, open `http://127.0.0.1:8765`, and use the interaction
+panel in the lower-right corner. Browser microphone permission is requested on
+the first press. Press once to start recording and again to submit. OpenAI TTS
+audio is played in the browser when configured; otherwise the browser speech
+engine is used as a fallback.
+
+Dashboard turns pause both Wake detection and Wake transcription. Wake resumes
+only after the browser reports that TTS playback has actually ended. Dashboard
+and local microphone turns have separate voice, conversation, and working-memory
+sessions, preventing browser audio from feeding back into the local voice loop.
+
+All interactive entry points share a token-based `RuntimeTurnLock`. It manages a
+`RuntimeTurn` containing owner, state, start time, soft/hard timeout, typed
+priority, source, conversation ID, Task/Step links, Turn ID, and separate
+LockToken. Runtime cards show this active turn and the ordered TurnQueue.
+Dashboard and Voice use immediate busy rejection on ordinary conflicts. A
+higher-priority `PREEMPT` request cooperatively interrupts the current turn at a
+safe checkpoint before acquiring an Emergency turn. Touch Portal, Mobile, API,
+Plugin, and Scheduler owners are reserved for their adapters.
+
+TurnQueue ordering is PREEMPT first, then priority, then FIFO. Priorities are
+SYSTEM 1000, EMERGENCY 900, USER 500, SCHEDULE 300, PLUGIN 200, and BACKGROUND
+100. One Task may span multiple RuntimeTurns; `task_id` and `step_id` provide
+that relationship without merging the two lifecycles.
+
+### TaskGraph foundation
+
+Before Sprint 23, Jarvis provides a validated DAG execution model without
+replacing the current linear Planner. A `RuntimeTask` owns one `TaskGraph`;
+each `TaskNode` may use multiple RuntimeTurns across retry or resume. READY node
+calculation, retry policy, structured `TurnResult`, `ArtifactRef`, Memory
+references, checkpoint fingerprints, and the
+`READY -> QUEUED -> RUNNING` RuntimeTurn bridge are implemented.
+
+Nodes also form a data-flow contract. `InputBinding` maps upstream outputs into
+downstream inputs, and resolved input is attached to the node's Turn lease.
+Before execution, `TaskGraphValidator` can reject invalid DAGs, missing inputs,
+unavailable Abilities or Provider capabilities, and denied or unconfirmed
+permissions.
+
+Validation is staged as structural validation followed by semantic validation.
+Node `input_types`/`output_types`, `AbilitySemanticContract`, and an optional
+Planner/LLM semantic checker detect meaningful-but-wrong connections before
+execution. An `InputBinding` without a source node binds an `InputEnvelope`, so
+voice, keyboard, OCR, image, clipboard, file, mobile, and API inputs use the
+same graph-facing contract.
+
+The complete preflight order is `Structural -> Semantic -> Capability ->
+Permission -> Execution`. Semantic names are resolved through
+`SemanticRegistry`, which manages canonical types, aliases, and parent
+compatibility. Capability and Permission checks have dedicated validators, so
+a semantically correct PDF plan is still blocked when no PDF Provider exists.
+The Dashboard Tasks view shows every gate as pass/fail, expands denial reason,
+Ability and risk details, and renders the Semantic Registry hierarchy.
+Its right-side Validation Health card keeps the latest four gate states visible
+and exposes Node ID plus the stable validation code for debugger-style triage.
+Each gate includes validation latency, and the same card follows Graph progress
+through Execution, Provider, Result, evidence-based Memory status, and
+Graph-correlated TTS playback. TTS is the final user-perceived completion gate.
+
+See `docs/adr/0032-task-graph-execution-foundation.md`.
+
+The left sidebar Runtime Diagram highlights Browser, Runtime, Planner, Memory,
+Ability and Provider activity. Event Flow animates each foreground observation,
+Ability Monitor displays the latest dispatcher latency, and clicking the Home
+Memory counter opens a type breakdown.
+
+See `docs/adr/0031-runtime-service-dashboard-interaction.md` for the protocol and
+runtime boundary.
+
 Python 기반 개인 AI 비서 프로젝트입니다.
 
 Jarvis는 사용자의 채팅 명령을 받아 Brain이 명령을 분석하고, 작업 성격에 맞는 Agent에게 일을 배정하는 구조로 개발합니다.

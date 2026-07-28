@@ -98,32 +98,51 @@ class WakePhraseTranscriber:
         return True
 
     def start(self):
-        if self.thread is not None and self.thread.is_alive():
+        if (
+            self.thread is not None
+            and self.thread.is_alive()
+            and not self.stop_event.is_set()
+        ):
             return
-        self.stop_event.clear()
-        self.thread = Thread(target=self.run, name="jarvis-voice-wake", daemon=True)
+        # Give every monitoring generation its own queue and cancellation flag.
+        # A slow STT request from a stopped generation can then neither consume
+        # new audio nor publish a stale wake phrase after monitoring resumes.
+        self.queue = Queue(maxsize=2)
+        self.stop_event = Event()
+        run_queue = self.queue
+        run_stop_event = self.stop_event
+        self.thread = Thread(
+            target=self.run,
+            args=(run_queue, run_stop_event),
+            name="jarvis-voice-wake",
+            daemon=True,
+        )
         self.thread.start()
 
     def stop(self):
-        self.stop_event.set()
         thread = self.thread
+        run_queue = self.queue
+        self.stop_event.set()
         if thread is not None:
             thread.join(timeout=1.0)
-        self.thread = None
+        if self.thread is thread:
+            self.thread = None
         while True:
             try:
-                self.queue.get_nowait()
+                run_queue.get_nowait()
             except Empty:
                 break
 
-    def run(self):
-        while not self.stop_event.is_set():
+    def run(self, run_queue=None, run_stop_event=None):
+        queue = run_queue or self.queue
+        stop_event = run_stop_event or self.stop_event
+        while not stop_event.is_set():
             try:
-                audio_data = self.queue.get(timeout=0.1)
+                audio_data = queue.get(timeout=0.1)
             except Empty:
                 continue
             text = self.transcribe(audio_data)
-            if text:
+            if text and not stop_event.is_set():
                 self.on_text(text)
 
 

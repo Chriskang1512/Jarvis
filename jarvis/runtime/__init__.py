@@ -10,6 +10,34 @@ from jarvis.runtime.execution_journal import (
     JournalSearchResult,
     ReplayResult,
 )
+from jarvis.runtime.service import JarvisRuntimeService
+from jarvis.runtime.turn_lock import (
+    BusyPolicy,
+    QueuedTurn,
+    RuntimeBusyError,
+    RuntimeTurn,
+    RuntimeTurnInterrupted,
+    RuntimeTurnLock,
+    RuntimeTurnQueue,
+    RuntimeTurnToken,
+    TurnState,
+    TurnOwner,
+    TurnPriority,
+)
+from jarvis.runtime.language import (
+    LanguageControlAction,
+    LanguageControlCommand,
+    LanguageControlCommandParser,
+    LanguageContext,
+    LanguagePolicy,
+    LanguageResolver,
+)
+from jarvis.runtime.date_resolver import DateResolver, ResolvedDate
+from jarvis.runtime.context_merge import (
+    ContextValueSource,
+    MergedContextValue,
+    merge_context_value,
+)
 
 __all__ = [
     "ExecutionJournal",
@@ -20,4 +48,27 @@ __all__ = [
     "JournalPhase",
     "JournalSearchResult",
     "ReplayResult",
+    "JarvisRuntimeService",
+    "BusyPolicy",
+    "QueuedTurn",
+    "RuntimeBusyError",
+    "RuntimeTurn",
+    "RuntimeTurnInterrupted",
+    "RuntimeTurnLock",
+    "RuntimeTurnQueue",
+    "RuntimeTurnToken",
+    "LanguageContext",
+    "LanguageControlAction",
+    "LanguageControlCommand",
+    "LanguageControlCommandParser",
+    "LanguagePolicy",
+    "LanguageResolver",
+    "DateResolver",
+    "ResolvedDate",
+    "ContextValueSource",
+    "MergedContextValue",
+    "merge_context_value",
+    "TurnState",
+    "TurnOwner",
+    "TurnPriority",
 ]

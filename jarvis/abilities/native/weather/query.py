@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import date as calendar_date
 
 
 WEATHER_DATE_TODAY = "today"
@@ -22,6 +23,10 @@ class WeatherQuery:
     capability: str = WEATHER_CAPABILITY_CURRENT
     raw_text: str = ""
     confidence: float = 1.0
+    follow_up: bool = False
+    location_source: str = "explicit"
+    date_source: str = "default"
+    utterance: str = ""
 
     @property
     def date_label(self):
@@ -38,6 +43,10 @@ class WeatherQuery:
 
         return self.location
 
+    def to_dict(self):
+        """Return a serializable semantic weather intent."""
+        return asdict(self)
+
 
 def date_label(date):
     """Return a Korean date label."""
@@ -46,5 +55,11 @@ def date_label(date):
 
     if date == WEATHER_DATE_DAY_AFTER_TOMORROW:
         return "\ubaa8\ub808"
+
+    try:
+        parsed = calendar_date.fromisoformat(str(date))
+        return f"{parsed.month}\uc6d4 {parsed.day}\uc77c"
+    except ValueError:
+        pass
 
     return "\uc624\ub298"

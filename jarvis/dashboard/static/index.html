@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jarvis · Observability</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/observability.css">
+</head>
+<body>
+  <aside>
+    <div class="brand"><span class="mark">J</span><div>JARVIS<small>OBSERVABILITY</small></div></div>
+    <nav id="nav">
+      <button class="active" data-view="home">⌂ <span>Home</span></button>
+      <button data-view="runtime">◉ <span>Runtime</span></button>
+      <button data-view="tasks">✓ <span>Tasks</span></button>
+      <button data-view="memory">◇ <span>Memory</span></button>
+      <button class="reserved" disabled title="Reserved for Sprint 22–23">⌘ <span>Entity Graph</span><small>SOON</small></button>
+      <button data-view="events">↯ <span>Events</span></button>
+      <button data-view="logs">≡ <span>Logs</span></button>
+      <button data-view="permissions">⌾ <span>Permissions</span></button>
+      <button data-view="voice">◖ <span>Voice</span></button>
+      <button data-view="plugins">⬡ <span>Plugins</span></button>
+      <button data-view="providers">◫ <span>Providers</span></button>
+      <button data-view="settings">⚙ <span>Settings</span></button>
+      <button data-view="diagnostics">⌁ <span>Diagnostics</span></button>
+    </nav>
+    <div class="runtime-mini">
+      <label>RUNTIME DIAGRAM</label>
+      <div id="runtime-diagram"></div>
+    </div>
+    <div class="connection"><i id="socket-dot"></i><span id="socket-label">CONNECTING</span></div>
+  </aside>
+  <main>
+    <header><div><p class="eyebrow">JARVIS v1.3 · SPRINT 21</p><h1 id="title">System overview</h1></div><div class="clock" id="clock"></div></header>
+
+    <section id="home" class="view active">
+      <div class="hero">
+        <div><p class="eyebrow">RUNTIME CONTROL PLANE</p><h2><span id="time-greeting">Hello.</span><br><em>Jarvis is online.</em></h2><p>See the system think, decide and act — in real time.</p></div>
+        <div class="hero-status">
+          <details id="language-card" class="language-card">
+            <summary>
+              <label>RESPONSE LANGUAGE</label>
+              <strong id="language-code">KO</strong>
+              <span id="language-mode">AUTO</span>
+              <div class="language-compact">
+                <small>DET <b id="language-detected-compact">KO</b></small>
+                <small>VOICE <b id="language-voice">alloy</b></small>
+              </div>
+            </summary>
+              <dl>
+                <dt>Detected Language</dt><dd id="language-detected">KO</dd>
+                <dt>Conversation Language</dt><dd id="language-conversation-mode">KO</dd>
+                <dt>Response Language</dt><dd id="language-response">KO</dd>
+                <dt>Response Source</dt><dd id="language-response-source">detected</dd>
+              <dt>Language Policy</dt><dd id="language-policy">AUTO</dd>
+              <dt>Conversation Override</dt><dd id="language-override">OFF</dd>
+              <dt>Confidence</dt><dd id="language-confidence">0.00</dd>
+              <dt>STT Provider</dt><dd id="language-stt">—</dd>
+              <dt>TTS Voice</dt><dd id="language-tts">alloy</dd>
+              <dt class="context-divider">Runtime Context</dt><dd class="context-divider"></dd>
+              <dt>Session / Owner</dt><dd id="language-session">IDLE</dd>
+              <dt>Conversation</dt><dd id="language-conversation">—</dd>
+              <dt>Turn</dt><dd id="language-turn">—</dd>
+              <dt>Planner</dt><dd id="language-planner">IDLE</dd>
+            </dl>
+          </details>
+          <div class="orb"><span></span><b>ONLINE</b><small>ALL SYSTEMS NOMINAL</small></div>
+        </div>
+      </div>
+      <div class="metrics">
+        <article><label>WAKE</label><strong id="m-wake">READY</strong><small>Listening standby</small></article>
+        <article id="memory-metric" class="clickable-metric"><label>MEMORY</label><strong id="m-memory">0</strong><small>Click for breakdown</small><div id="memory-breakdown" class="memory-breakdown"></div></article>
+        <article><label>TASKS</label><strong id="m-tasks">0</strong><small>Runtime history</small></article>
+        <article><label>EVENTS</label><strong id="m-events">0</strong><small>Current session</small></article>
+      </div>
+      <div class="grid">
+        <article class="panel span2"><div class="panel-head"><div><label>LIVE TIMELINE</label><h3>What Jarvis is doing</h3></div><span class="live">● LIVE</span></div><div id="timeline" class="timeline"></div></article>
+        <article class="panel"><div class="panel-head"><div><label>PLANNER TRACE</label><h3>Decision path</h3></div></div><div id="trace" class="trace"></div></article>
+      </div>
+      <article class="panel flow-panel"><div class="panel-head"><div><label>EVENT FLOW</label><h3>Live execution pipeline</h3></div><span class="live">● STREAMING</span></div><div id="event-flow" class="event-flow"></div></article>
+      <div class="grid operations">
+        <article class="panel"><div class="panel-head"><div><label>CUMULATIVE METRICS</label><h3>Runtime activity</h3></div></div><div id="metric-grid" class="metric-grid"></div></article>
+        <article class="panel"><div class="panel-head"><div><label>ABILITY MONITOR</label><h3>Operational readiness</h3></div></div><div id="ability-monitor" class="monitor"></div></article>
+      </div>
+    </section>
+
+    <section id="runtime" class="view"><div class="section-head"><h2>Runtime</h2><p>The active mind and execution context.</p></div><div id="runtime-cards" class="metrics runtime"></div><article class="panel"><div class="panel-head"><div><label>TURN QUEUE</label><h3>Waiting execution owners</h3></div></div><div id="turn-queue" class="monitor"></div></article></section>
+    <section id="tasks" class="view">
+      <div class="section-head"><h2>Tasks</h2><p>Current execution states and preflight validation.</p></div>
+      <div id="task-list" class="list"></div>
+      <div class="grid task-diagnostics">
+        <article class="panel"><div class="panel-head"><div><label>TASKGRAPH VALIDATION</label><h3>Preflight gates</h3></div></div><div id="graph-validation-list" class="validation-list"></div></article>
+        <div class="validation-sidebar">
+          <article class="panel"><div class="panel-head"><div><label>VALIDATION HEALTH</label><h3>Latest preflight</h3></div><span id="validation-health-state" class="validation-overall">WAITING</span></div><div id="validation-health" class="validation-health"></div></article>
+          <article class="panel"><div class="panel-head"><div><label>SEMANTIC REGISTRY</label><h3>Type hierarchy</h3></div></div><div id="semantic-tree" class="semantic-tree"></div></article>
+        </div>
+      </div>
+    </section>
+    <section id="memory" class="view"><div class="section-head"><h2>Memory</h2><p>Inspectable long-term knowledge. Delete with intent.</p></div><div class="toolbar"><input id="memory-search" placeholder="Search memory"><button id="memory-find">Search</button></div><div id="memory-list" class="cards"></div></section>
+    <section id="events" class="view"><div class="section-head"><h2>EventBus Viewer</h2><p>The canonical real-time event stream.</p></div><div id="event-list" class="event-table"></div></section>
+    <section id="logs" class="view"><div class="section-head"><h2>Logs</h2><p>Search and filter normalized runtime records.</p></div><div class="toolbar"><input id="log-search" placeholder="Search logs"><select id="log-level"><option value="">All levels</option><option>ERROR</option><option>WARN</option><option>INFO</option></select></div><div id="log-list" class="event-table"></div></section>
+    <section id="permissions" class="view"><div class="section-head"><h2>Permissions</h2><p>Safe, confirm and restricted decisions.</p></div><div id="permission-list" class="event-table"></div></section>
+    <section id="voice" class="view"><div class="section-head"><h2>Voice</h2><p>Wake, listening, TTS, follow-up and idle state.</p></div><div id="voice-state" class="voice-flow"></div></section>
+    <section id="plugins" class="view"><div class="section-head"><h2>Plugins & Abilities</h2><p>Loaded extension and capability inventory.</p></div><div class="grid"><article class="panel"><h3>Plugins</h3><div id="plugin-list" class="list"></div></article><article class="panel"><h3>Abilities</h3><div id="ability-list" class="list"></div></article></div></section>
+    <section id="providers" class="view"><div class="section-head"><h2>Providers</h2><p>Configured services, health, latency and latest activity.</p></div><div id="provider-grid" class="provider-grid"></div></section>
+    <section id="settings" class="view"><div class="section-head"><h2>Settings</h2><p>Runtime configuration. Secrets remain outside this surface.</p></div><textarea id="settings-json" spellcheck="false"></textarea><div class="settings-actions"><span id="settings-status"></span><button id="settings-save">Save settings</button></div></section>
+    <section id="diagnostics" class="view"><div class="section-head"><h2>Diagnostics</h2><p>Planner, Wake, Memory, Dispatcher and Event internals.</p></div><pre id="diagnostics-json"></pre></section>
+  </main>
+  <section class="interaction-dock" aria-label="Jarvis interaction">
+    <div class="interaction-head">
+      <div><label>INTERACTION</label><h3>Talk to Jarvis</h3></div>
+      <span id="interaction-status" class="status">READY</span>
+    </div>
+    <div id="chat-messages" class="chat-messages">
+      <div class="chat-empty">Type a message or press the microphone.</div>
+    </div>
+    <div class="composer">
+      <textarea id="chat-input" rows="2" placeholder="Message Jarvis…"></textarea>
+      <button id="voice-button" class="voice-button" title="Push to talk" aria-label="Push to talk">🎤</button>
+      <button id="chat-send">Send</button>
+    </div>
+  </section>
+  <script src="/app.js"></script>
+</body>
+</html>

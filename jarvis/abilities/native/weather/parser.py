@@ -10,14 +10,24 @@ from jarvis.abilities.native.weather.query import WEATHER_DATE_TOMORROW
 from jarvis.abilities.native.weather.query import WEATHER_MODE_CURRENT
 from jarvis.abilities.native.weather.query import WEATHER_MODE_FORECAST
 from jarvis.abilities.native.weather.query import WeatherQuery
+from jarvis.runtime.date_resolver import DateResolver
 
 
 DATE_TOKENS = {
     "\uc624\ub298": WEATHER_DATE_TODAY,
     "\ub0b4\uc77c": WEATHER_DATE_TOMORROW,
     "\ubaa8\ub808": WEATHER_DATE_DAY_AFTER_TOMORROW,
+    "today": WEATHER_DATE_TODAY,
+    "tomorrow": WEATHER_DATE_TOMORROW,
+    "day after tomorrow": WEATHER_DATE_DAY_AFTER_TOMORROW,
+    "\u4eca\u65e5": WEATHER_DATE_TODAY,
+    "\u304d\u3087\u3046": WEATHER_DATE_TODAY,
+    "\u660e\u65e5": WEATHER_DATE_TOMORROW,
+    "\u3042\u3057\u305f": WEATHER_DATE_TOMORROW,
+    "\u660e\u5f8c\u65e5": WEATHER_DATE_DAY_AFTER_TOMORROW,
+    "\u3042\u3055\u3063\u3066": WEATHER_DATE_DAY_AFTER_TOMORROW,
 }
-CURRENT_TOKENS = ["\uc9c0\uae08", "\ud604\uc7ac", "\ub2f9\uc7a5"]
+CURRENT_TOKENS = ["\uc9c0\uae08", "\ud604\uc7ac", "\ub2f9\uc7a5", "now", "current", "\u4eca", "\u3044\u307e"]
 COMMAND_TOKENS = [
     "\ub0a0\uc528",
     "\uc54c\ub824\uc918",
@@ -36,6 +46,35 @@ COMMAND_TOKENS = [
     "\uc624\ub298",
     "\ub0b4\uc77c",
     "\ubaa8\ub808",
+    "weather",
+    "forecast",
+    "tell me",
+    "what's",
+    "what is",
+    "how is",
+    "the",
+    "please",
+    "is",
+    "like",
+    "today",
+    "tomorrow",
+    "day after tomorrow",
+    "\u5929\u6c17",
+    "\u5929\u5019",
+    "\u4e88\u5831",
+    "\u6559\u3048\u3066",
+    "\u304a\u3057\u3048\u3066",
+    "\u3069\u3046",
+    "\u3067\u3059\u304b",
+    "\u306f",
+    "\u306e",
+    "\u3092",
+    "\u4eca\u65e5",
+    "\u304d\u3087\u3046",
+    "\u660e\u65e5",
+    "\u3042\u3057\u305f",
+    "\u660e\u5f8c\u65e5",
+    "\u3042\u3055\u3063\u3066",
 ]
 PRECIPITATION_PATTERNS = [
     "\ube44 \uc640",
@@ -43,20 +82,46 @@ PRECIPITATION_PATTERNS = [
     "\ube44 \uc624\ub2c8",
     "\ube44\uc624\ub2c8",
     "\uc6b0\uc0b0",
+    "rain",
+    "raining",
+    "umbrella",
+    "\u96e8",
+    "\u5098",
+]
+ENGLISH_FOLLOW_UP_PREFIXES = [
+    r"how\s+about",
+    r"what\s+about",
+    r"and\s+then",
+    r"then",
+    r"and",
 ]
 
 
 class WeatherIntentParser:
     """Parse raw weather text into a WeatherQuery."""
 
-    def __init__(self, default_location=DEFAULT_WEATHER_LOCATION):
+    def __init__(self, default_location=DEFAULT_WEATHER_LOCATION, date_resolver=None):
         """Create a weather parser with a default location."""
         self.default_location = default_location
+        self.date_resolver = date_resolver or DateResolver()
 
     def parse(self, raw_text):
         """Return a WeatherQuery for one raw user request."""
         text = normalize_text(raw_text)
-        date = parse_date(text)
+        resolved_date = self.date_resolver.resolve(text)
+        date = (
+            (
+                resolved_date.kind
+                if resolved_date.kind in {
+                    WEATHER_DATE_TODAY,
+                    WEATHER_DATE_TOMORROW,
+                    WEATHER_DATE_DAY_AFTER_TOMORROW,
+                }
+                else resolved_date.start_date
+            )
+            if resolved_date is not None
+            else parse_date(text)
+        )
         mode = parse_mode(text, date)
         capability = parse_capability(text, mode)
         location = parse_location(text)
@@ -89,7 +154,10 @@ def parse_date(text):
 
 def parse_mode(text, date):
     """Parse current vs forecast mode."""
-    if date in [WEATHER_DATE_TOMORROW, WEATHER_DATE_DAY_AFTER_TOMORROW]:
+    if date in [WEATHER_DATE_TOMORROW, WEATHER_DATE_DAY_AFTER_TOMORROW] or re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}",
+        str(date),
+    ):
         return WEATHER_MODE_FORECAST
 
     if any(token in text for token in CURRENT_TOKENS):
@@ -112,15 +180,47 @@ def parse_capability(text, mode):
 def parse_location(text):
     """Remove command/date tokens and return only location text."""
     cleaned = text
+    # These are discourse markers in a follow-up, not location candidates.
+    # Context enrichment may prepend a place ("Osaka How about tomorrow?"),
+    # so remove the complete phrase wherever it occurs. Explicit places remain:
+    # "How about Busan tomorrow?" -> "Busan".
+    follow_up_prefixes = "|".join(ENGLISH_FOLLOW_UP_PREFIXES)
+    cleaned = re.sub(
+        rf"\b(?:{follow_up_prefixes})\b",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(?<!\d)\d{1,2}\s*(?:\uc6d4|month)\s*\d{1,2}\s*(?:\uc77c|day)?",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
 
     for pattern in PRECIPITATION_PATTERNS:
         cleaned = cleaned.replace(pattern, " ")
 
     for token in COMMAND_TOKENS:
-        cleaned = cleaned.replace(token, " ")
+        if token.isascii():
+            cleaned = re.sub(rf"\b{re.escape(token)}\b", " ", cleaned, flags=re.IGNORECASE)
+        else:
+            cleaned = cleaned.replace(token, " ")
 
     cleaned = re.sub(r"[?!.,]", " ", cleaned)
     cleaned = " ".join(cleaned.split())
+    cleaned = re.sub(
+        r"(?:^|\s)(?:\uc740|\ub294|\uc774|\uac00|\uc744|\ub97c|\uc758)(?=\s|$)",
+        " ",
+        cleaned,
+    )
+    cleaned = " ".join(cleaned.split())
+    cleaned = re.sub(
+        r"(?<=[\uac00-\ud7a3])(?:\uc5d0\uc11c|\uc73c\ub85c|\uc758|\uc740|\ub294|\uc774|\uac00|\uc5d0)$",
+        "",
+        cleaned,
+    ).strip()
+    cleaned = re.sub(r"^(?:in|at|for|from)\s+", "", cleaned, flags=re.IGNORECASE)
 
     if cleaned == "":
         return None
@@ -157,10 +257,24 @@ def contains_precipitation_intent(text):
 
 def has_weather_intent(text):
     """Return whether text contains a weather-related command token."""
-    weather_tokens = ["\ub0a0\uc528", "\ube44", "\uc6b0\uc0b0"]
-    return any(token in text for token in weather_tokens)
+    normalized = str(text or "").lower()
+    weather_tokens = [
+        "\ub0a0\uc528",
+        "\ube44",
+        "\uc6b0\uc0b0",
+        "weather",
+        "forecast",
+        "rain",
+        "umbrella",
+        "\u5929\u6c17",
+        "\u5929\u5019",
+        "\u4e88\u5831",
+        "\u96e8",
+        "\u5098",
+    ]
+    return any(token in normalized for token in weather_tokens)
 
 
 def normalize_text(text):
-    """Normalize spacing for Korean weather parsing."""
+    """Normalize spacing and case for multilingual weather parsing."""
     return " ".join(str(text).strip().split())

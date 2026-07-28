@@ -1,5 +1,6 @@
 import os
 import math
+import re
 import subprocess
 import tempfile
 import threading
@@ -141,7 +142,7 @@ class OpenAISpeechToTextProvider:
         if isinstance(audio_data, str):
             return audio_data
 
-        return transcribe_stt_audio(
+        text = transcribe_stt_audio(
             audio_data,
             model=self.model,
             language=self.language,
@@ -151,6 +152,38 @@ class OpenAISpeechToTextProvider:
             client_factory=self.client_factory,
             api_key_reader=self.api_key_reader,
         )
+        if not should_disambiguate_auto_japanese(text, self.language):
+            return text
+
+        candidate = transcribe_stt_audio(
+            audio_data,
+            model=self.model,
+            language="auto",
+            provider="openai_language_disambiguation",
+            reason="auto_japanese_disambiguation",
+            prompt_context=(
+                "Language disambiguation: distinguish Korean speech such as "
+                "'오사카의 날씨는?' from Japanese speech such as "
+                "'大阪の天気は？'. Preserve the acoustically spoken language "
+                "and exact grammar. Never translate."
+            ),
+            client_factory=self.client_factory,
+            api_key_reader=self.api_key_reader,
+        )
+        selected = (
+            candidate
+            if contains_japanese_script(candidate)
+            else text
+        )
+        trace_event(
+            "runtime.language.stt_disambiguated",
+            primary_text=text,
+            candidate_text=candidate,
+            selected_text=selected,
+            selected_language="ja" if selected == candidate else "ko",
+            reason="ambiguous_koreanized_japanese_weather",
+        )
+        return selected
 
 class MicrophoneSpeechToTextProvider:
     """Microphone STT provider using the SpeechRecognition package."""
@@ -556,6 +589,16 @@ class OpenAITextToSpeechProvider(DiagnosticsMixin):
         self.api_key_reader = api_key_reader or read_openai_tts_api_key
         self.streaming_enabled = False
         self.playback_backend = playback_backend or create_default_playback_backend()
+
+    @property
+    def voice(self):
+        """Expose the active provider-native voice to the language pipeline."""
+        return self.profile.voice
+
+    @voice.setter
+    def voice(self, value):
+        """Apply a turn-scoped voice while keeping the immutable profile model."""
+        self.profile = apply_voice_overrides(self.profile, voice=str(value or ""))
 
     def speak(self, text):
         """Generate speech audio and play it locally."""
@@ -1347,6 +1390,7 @@ def transcribe_stt_audio(
     client_factory=None,
     api_key_reader=None,
     legacy_trace_prefix="",
+    audio_suffix=".wav",
 ):
     """Transcribe WAV bytes through OpenAI and return normalized text."""
     api_key_reader = api_key_reader or read_openai_tts_api_key
@@ -1381,13 +1425,19 @@ def transcribe_stt_audio(
 
     try:
         client = create_openai_client(api_key, client_factory=client_factory)
-        output_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        suffix = str(audio_suffix or ".wav")
+        if not suffix.startswith("."):
+            suffix = f".{suffix}"
+        output_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
         audio_path = output_file.name
         output_file.write(audio_data)
         output_file.close()
 
         request_language = normalize_openai_stt_language(language)
-        prompt = build_openai_stt_prompt(prompt_context)
+        prompt = build_openai_stt_prompt(
+            prompt_context,
+            language=request_language or "auto",
+        )
         logprobs_enabled = is_openai_stt_logprobs_enabled()
         trace_event(
             "voice.stt.openai.started",
@@ -1404,8 +1454,9 @@ def transcribe_stt_audio(
             request = {
                 "model": model,
                 "file": file,
-                "language": request_language,
             }
+            if request_language:
+                request["language"] = request_language
 
             if prompt != "":
                 request["prompt"] = prompt
@@ -1536,14 +1587,49 @@ def normalize_openai_stt_language(language):
     language_text = str(language or "").strip()
     normalized = language_text.lower().replace("_", "-")
 
+    if normalized in {"auto", "detect", "automatic"}:
+        return ""
+
     if normalized == "ko-kr":
         return "ko"
 
     return language_text or "ko"
 
 
-def read_openai_stt_prompt():
-    """Return a small Korean transcription prompt for OpenAI STT."""
+def should_disambiguate_auto_japanese(text, language):
+    """Return whether AUTO STT erased a likely Japanese weather utterance."""
+    if str(language or "").strip().lower() not in {
+        "",
+        "auto",
+        "detect",
+        "automatic",
+    }:
+        return False
+    normalized = re.sub(r"\s+", "", str(text or "").lower())
+    if len(normalized) > 30:
+        return False
+    locations = ("\uc624\uc0ac\uce74", "\ub3c4\ucfc4", "\uc11c\uc6b8")
+    weather_shapes = (
+        "\uc758\ub0a0\uc528\ub294",
+        "\uc758\ub0a0\uc528\uac00",
+        "\ub0a0\uc528\ub294",
+        "\ub0a0\uc528\uac00",
+    )
+    return any(location in normalized for location in locations) and any(
+        shape in normalized for shape in weather_shapes
+    )
+
+
+def contains_japanese_script(text):
+    """Return whether a transcript contains Japanese kana or common kanji."""
+    value = str(text or "")
+    return any("\u3040" <= character <= "\u30ff" for character in value) or any(
+        marker in value for marker in ("\u5927\u962a", "\u6771\u4eac", "\u5929\u6c17")
+    )
+
+
+def read_openai_stt_prompt(language="ko"):
+    """Return a language-policy-aware transcription prompt."""
     value = os.environ.get("JARVIS_STT_OPENAI_PROMPT", "")
 
     if value == "":
@@ -1555,6 +1641,20 @@ def read_openai_stt_prompt():
     if value != "":
         return value
 
+    if str(language or "").lower() in {"auto", "detect", "automatic"}:
+        return (
+            "Transcribe verbatim in the language actually spoken. "
+            "Never translate, paraphrase, or normalize the utterance into another "
+            "language. Use Japanese script for spoken Japanese, Hangul for spoken "
+            "Korean, and Latin script for spoken English. A Korean accent does not "
+            "make the spoken language Korean. For example, Japanese speech sounding "
+            "like '토와이스노 오스스메노 쿄쿠와' must be transcribed as "
+            "'TWICEのおすすめの曲は？', never as '트와이스의 추천곡은?'. "
+            "English speech sounding like '애니 송 두 유 노' must be transcribed "
+            "as 'Any song do you know?', never as Korean phonetics. "
+            "Preserve names and titles."
+        )
+
     return (
         "한국어 음성입니다. 한국어로 받아쓰세요. "
         "짧은 확인 응답은 응, 네, 예, 아니오, 취소로 받아쓰세요. "
@@ -1563,9 +1663,9 @@ def read_openai_stt_prompt():
     )
 
 
-def build_openai_stt_prompt(prompt_context=""):
+def build_openai_stt_prompt(prompt_context="", language="ko"):
     """Return the OpenAI STT prompt with short runtime context appended."""
-    base_prompt = read_openai_stt_prompt()
+    base_prompt = read_openai_stt_prompt(language=language)
     context = str(prompt_context or "").strip()
 
     if context == "":
@@ -1573,6 +1673,9 @@ def build_openai_stt_prompt(prompt_context=""):
 
     if base_prompt == "":
         return context
+
+    if str(language or "").lower() in {"auto", "detect", "automatic"}:
+        return f"{base_prompt} Context: {context}"
 
     return f"{base_prompt} 현재 문맥: {context}"
 

@@ -20,9 +20,12 @@ from jarvis.voice.providers import (
     OpenAITextToSpeechProvider,
     PiperTextToSpeechProvider,
     Pyttsx3TextToSpeechProvider,
+    build_openai_stt_prompt,
+    contains_japanese_script,
     create_stt_provider,
     create_tts_provider,
     extract_transcription_metadata,
+    should_disambiguate_auto_japanese,
     is_suspicious_tts_duration,
     record_microphone_wav_bytes,
     record_until_silence,
@@ -200,6 +203,26 @@ class TestTTSProviders(unittest.TestCase):
         self.assertEqual(request["input"], "hello")
         self.assertEqual(request["response_format"], "wav")
         self.assertEqual(request["speed"], 0.95)
+
+    def test_openai_tts_provider_accepts_turn_scoped_voice_override(self):
+        """Check LanguageContext can select an OpenAI voice for one turn."""
+        profile = VoiceRegistry().get_profile("jarvis_cinematic")
+        client = FakeOpenAITTSClient()
+        provider = OpenAITextToSpeechProvider(
+            profile=profile,
+            client_factory=lambda api_key: client,
+            api_key_reader=lambda: "test-key",
+            playback_backend=FakePlaybackBackend(),
+        )
+
+        provider.voice = "nova"
+        audio_path = provider.generate_audio("こんにちは")
+
+        try:
+            self.assertEqual(provider.voice, "nova")
+            self.assertEqual(client.audio.speech.request["voice"], "nova")
+        finally:
+            provider_file_cleanup(audio_path)
 
     def test_tts_duration_warning_detects_short_audio(self):
         """Check suspiciously short TTS files are flagged without failing playback."""
@@ -758,6 +781,61 @@ class TestTTSProviders(unittest.TestCase):
         prompt = fake_client.audio.transcriptions.request["prompt"]
         self.assertIn("pending_action=todo.delete", prompt)
         self.assertIn("\uc6b0\uc720 \uc0ac\uae30", prompt)
+
+    def test_openai_stt_auto_language_preserves_spoken_language(self):
+        """Check AUTO STT asks for transcription rather than translation."""
+        prompt = build_openai_stt_prompt(
+            prompt_context="artist=TWICE",
+            language="auto",
+        )
+
+        self.assertIn("Transcribe verbatim", prompt)
+        self.assertIn("Never translate", prompt)
+        self.assertIn("TWICEのおすすめの曲は？", prompt)
+        self.assertIn("Any song do you know?", prompt)
+        self.assertIn("Context: artist=TWICE", prompt)
+        self.assertNotIn("한국어 음성입니다", prompt)
+
+    def test_openai_stt_auto_omits_language_and_uses_neutral_prompt(self):
+        """Check AUTO requests let STT detect Japanese and other languages."""
+        fake_client = FakeOpenAISTTClient(text="TWICEでおすすめの曲ある？")
+
+        text = transcribe_stt_audio(
+            b"RIFFfake",
+            model="fake-transcribe",
+            language="auto",
+            client_factory=lambda api_key: fake_client,
+            api_key_reader=lambda: "test-key",
+        )
+
+        self.assertEqual(text, "TWICEでおすすめの曲ある？")
+        request = fake_client.audio.transcriptions.request
+        self.assertNotIn("language", request)
+        self.assertIn("Never translate", request["prompt"])
+
+    def test_auto_stt_disambiguates_short_koreanized_japanese_weather(self):
+        self.assertTrue(
+            should_disambiguate_auto_japanese(
+                "\uc624\uc0ac\uce74\uc758 \ub0a0\uc528\ub294?",
+                "auto",
+            )
+        )
+        self.assertFalse(
+            should_disambiguate_auto_japanese(
+                "\uc624\uc0ac\uce74\uc758 \ub0a0\uc528\ub294?",
+                "ko",
+            )
+        )
+        self.assertFalse(
+            should_disambiguate_auto_japanese(
+                "\uc624\uc0ac\uce74 \uc5ec\ud589 \uc77c\uc815\uc744 \uc138\uc6cc\uc918",
+                "auto",
+            )
+        )
+
+    def test_japanese_script_detection_accepts_kana_and_weather_kanji(self):
+        self.assertTrue(contains_japanese_script("\u5927\u962a\u306e\u5929\u6c17\u306f\uff1f"))
+        self.assertFalse(contains_japanese_script("\uc624\uc0ac\uce74\uc758 \ub0a0\uc528\ub294?"))
 
     def test_openai_stt_collects_logprob_metadata_when_present(self):
         """Check optional transcription logprobs are converted to metadata."""

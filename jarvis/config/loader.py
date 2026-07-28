@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, MailConfig, MemoryStoreConfig, STTConfig, WakeConfig
+from jarvis.config.settings import AIIntentConfig, CalendarConfig, ContactsConfig, ConversationConfig, JarvisConfig, LanguageConfig, MailConfig, MemoryStoreConfig, STTConfig, WakeConfig
 from jarvis.config.settings import TTSConfig
 from jarvis.config.settings import WeatherConfig
 from jarvis.wake.calibration import DEFAULT_WAKE_CALIBRATION_PATH, load_wake_calibration
@@ -55,6 +55,7 @@ def create_config_from_dict(config_data):
     stt_data = config_data.get("stt", {})
     wake_data = config_data.get("wake", {})
     conversation_data = config_data.get("conversation", {})
+    language_data = config_data.get("language", {})
     memory_store_data = config_data.get("memory_store", {})
     weather_data = config_data.get("weather", {})
     calendar_data = config_data.get("calendar", {})
@@ -76,6 +77,7 @@ def create_config_from_dict(config_data):
         stt=create_stt_config(stt_data),
         wake=create_wake_config(wake_data),
         conversation=create_conversation_config(conversation_data),
+        language=create_language_config(language_data),
         memory_store=create_memory_store_config(memory_store_data),
         weather=create_weather_config(weather_data),
         calendar=create_calendar_config(calendar_data),
@@ -103,6 +105,16 @@ def create_tts_config(config_data, tts_data):
         streaming=tts_data.get("streaming", True),
         piper_path=tts_data.get("piper_path", "piper"),
         model_path=tts_data.get("model_path", ""),
+    )
+
+
+def create_language_config(language_data):
+    """Create a shared runtime language policy."""
+    return LanguageConfig(
+        policy=str(language_data.get("policy", "AUTO")).upper(),
+        ko_voice=str(language_data.get("ko_voice", "openai:alloy:ko")),
+        ja_voice=str(language_data.get("ja_voice", "openai:nova:ja")),
+        en_voice=str(language_data.get("en_voice", "openai:onyx:en")),
     )
 
 

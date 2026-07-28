@@ -17,6 +17,7 @@ from jarvis.runtime.planner import (
 from jarvis.runtime.task import (
     RuntimeTask,
     TaskHistory,
+    GraphExecutor,
     TaskRunner,
     TaskState,
     TaskStateMachine,
@@ -101,6 +102,20 @@ class RuntimeToolDispatcher:
             state_machine=state_machine or TaskStateMachine(event_bus=self.event_bus),
             execution_journal=self.execution_journal,
             rollback_step=self.rollback_task_step,
+        )
+        self.graph_executor = GraphExecutor(
+            task_runner=self.task_runner,
+            registry=self.registry,
+            permission_checker=self.validate_graph_permission,
+        )
+
+    def validate_graph_permission(self, node, ability):
+        """Preview the existing permission policy without executing an Ability."""
+        if ability is None:
+            return None
+        return self.permission_layer.evaluate(
+            ability,
+            ToolRequest(tool_name=node.ability, input_data=dict(node.input)),
         )
 
     def set_intent_parser(self, intent_parser):
@@ -264,7 +279,7 @@ class RuntimeToolDispatcher:
                 step_count=plan.step_count,
             )
 
-        run_result = self.task_runner.run(
+        run_result = self.graph_executor.run(
             plan,
             confirmed=confirmed,
             start_index=start_index,

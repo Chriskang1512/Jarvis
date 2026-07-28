@@ -222,6 +222,25 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_name, "weather")
         self.assertEqual(plan.steps[0].action, "query")
 
+    def test_planner_routes_japanese_weather_question_to_weather(self):
+        """Check Japanese weather requests do not fall through to generic chat."""
+        planner = RuntimePlanner()
+        with patch.dict(os.environ, {"JARVIS_DEBUG_TRACE": "false"}, clear=False):
+            plan = planner.plan("\u660e\u65e5\u306e\u5929\u6c17\u3092\u6559\u3048\u3066", create_sprint6_registry()[0])
+
+        self.assertEqual(plan.step_count, 1)
+        self.assertEqual(plan.steps[0].tool_name, "weather")
+        self.assertEqual(plan.steps[0].action, "query")
+
+    def test_planner_routes_english_weather_question_to_weather(self):
+        """Check English weather requests do not depend on AI intent parsing."""
+        planner = RuntimePlanner()
+        plan = planner.plan("What's the weather tomorrow?", create_sprint6_registry()[0])
+
+        self.assertEqual(plan.step_count, 1)
+        self.assertEqual(plan.steps[0].tool_name, "weather")
+        self.assertEqual(plan.steps[0].action, "query")
+
     def test_dispatcher_returns_safe_response_for_unsupported_conditional(self):
         """Check unsupported conditionals return a safe response."""
         registry, _, _ = create_sprint6_registry()

@@ -1,7 +1,8 @@
 import json
 import os
+from collections import Counter
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 from urllib.error import HTTPError, URLError
@@ -10,12 +11,20 @@ from urllib.request import urlopen
 
 from jarvis.abilities.result import AbilityHealth
 from jarvis.abilities.native.weather.query import WeatherQuery
-from jarvis.abilities.native.weather.resolver import WeatherLocationResolver
+from jarvis.abilities.native.weather.resolver import (
+    AmbiguousWeatherLocationError,
+    WeatherLocationResolver,
+)
 from jarvis.abilities.native.weather.result import WeatherResult
 from jarvis.debug_trace import trace_event
 
 
 OPENWEATHER_ENDPOINT = "https://api.openweathermap.org/data/2.5/weather"
+OPENWEATHER_FORECAST_ENDPOINT = "https://api.openweathermap.org/data/2.5/forecast"
+
+
+class WeatherForecastUnavailableError(RuntimeError):
+    """Raised when a requested date is outside the provider forecast horizon."""
 
 
 class WeatherProvider(Protocol):
@@ -111,6 +120,7 @@ class OpenWeatherProvider:
         self,
         api_key=None,
         endpoint=OPENWEATHER_ENDPOINT,
+        forecast_endpoint=OPENWEATHER_FORECAST_ENDPOINT,
         lang="kr",
         timeout=5,
         resolver=None,
@@ -119,9 +129,10 @@ class OpenWeatherProvider:
         """Create an OpenWeather provider using environment-based credentials."""
         self.api_key = api_key or read_env_value("OPENWEATHER_API_KEY")
         self.endpoint = endpoint
+        self.forecast_endpoint = forecast_endpoint
         self.lang = lang
         self.timeout = timeout
-        self.resolver = resolver or WeatherLocationResolver()
+        self.resolver = resolver or WeatherLocationResolver(api_key=self.api_key)
         self.default_location = default_location
 
     def get_current_weather(self, location):
@@ -130,9 +141,31 @@ class OpenWeatherProvider:
 
     def get_weather(self, query):
         """Fetch weather from OpenWeather and normalize it for the query."""
+        validate_forecast_horizon(query)
         effective_location = query.effective_location(self.default_location)
         provider_query = query if query.location else replace(query, location=effective_location)
-        resolved_location = self.resolver.resolve(effective_location)
+        resolved = (
+            self.resolver.resolve_location(effective_location)
+            if hasattr(self.resolver, "resolve_location")
+            else None
+        )
+        resolved_location = (
+            resolved.provider_query
+            if resolved is not None
+            else self.resolver.resolve(effective_location)
+        )
+        trace_event(
+            "weather.location.resolved",
+            location_raw=effective_location,
+            location_normalized=getattr(resolved, "normalized", resolved_location),
+            location_canonical=getattr(resolved, "canonical_name", resolved_location),
+            country_code=getattr(resolved, "country_code", ""),
+            provider_query=resolved_location,
+            resolution_source=getattr(resolved, "resolution_source", "legacy"),
+            latitude=getattr(resolved, "latitude", None),
+            longitude=getattr(resolved, "longitude", None),
+        )
+        endpoint = self.forecast_endpoint if query.mode == "forecast" else self.endpoint
         trace_event(
             "weather.provider",
             provider_requested=self.provider_name,
@@ -140,9 +173,17 @@ class OpenWeatherProvider:
             fallback_used=False,
             fallback_reason="",
             api_key_loaded=self.api_key != "",
-            endpoint=self.endpoint,
+            endpoint=endpoint,
             location=query.location,
             resolved_location=resolved_location,
+            location_raw=effective_location,
+            location_normalized=getattr(resolved, "normalized", resolved_location),
+            location_canonical=getattr(resolved, "canonical_name", resolved_location),
+            country_code=getattr(resolved, "country_code", ""),
+            provider_query=resolved_location,
+            resolution_source=getattr(resolved, "resolution_source", "legacy"),
+            latitude=getattr(resolved, "latitude", None),
+            longitude=getattr(resolved, "longitude", None),
             date=query.date,
             mode=query.mode,
             capability=query.capability,
@@ -150,8 +191,28 @@ class OpenWeatherProvider:
         if self.api_key == "":
             raise ValueError("OPENWEATHER_API_KEY is not set.")
 
-        data = self.fetch_current_weather(resolved_location)
-        return normalize_openweather_response(data, query=provider_query)
+        if query.mode == "forecast":
+            data = self.fetch_forecast(
+                resolved_location,
+                latitude=getattr(resolved, "latitude", None),
+                longitude=getattr(resolved, "longitude", None),
+            )
+            return normalize_openweather_forecast_response(
+                data,
+                query=provider_query,
+                resolved_location=resolved,
+            )
+
+        data = self.fetch_current_weather(
+            resolved_location,
+            latitude=getattr(resolved, "latitude", None),
+            longitude=getattr(resolved, "longitude", None),
+        )
+        return normalize_openweather_response(
+            data,
+            query=provider_query,
+            resolved_location=resolved,
+        )
 
     def health(self):
         """Return provider configuration health."""
@@ -168,17 +229,30 @@ class OpenWeatherProvider:
             message="OpenWeather provider is configured.",
         )
 
-    def fetch_current_weather(self, location):
+    def fetch_current_weather(self, location, latitude=None, longitude=None):
         """Call the OpenWeather current weather API."""
+        return self._fetch(self.endpoint, location, latitude, longitude)
+
+    def fetch_forecast(self, location, latitude=None, longitude=None):
+        """Call the OpenWeather five-day, three-hour forecast API."""
+        return self._fetch(self.forecast_endpoint, location, latitude, longitude)
+
+    def _fetch(self, endpoint, location, latitude=None, longitude=None):
+        """Call one OpenWeather JSON endpoint."""
+        location_parameters = (
+            {"lat": latitude, "lon": longitude}
+            if latitude is not None and longitude is not None
+            else {"q": location}
+        )
         query = urlencode(
             {
-                "q": location,
+                **location_parameters,
                 "appid": self.api_key,
                 "units": "metric",
                 "lang": self.lang,
             }
         )
-        url = f"{self.endpoint}?{query}"
+        url = f"{endpoint}?{query}"
 
         try:
             with urlopen(url, timeout=self.timeout) as response:
@@ -261,6 +335,10 @@ class FallbackWeatherProvider:
                 return self.primary.get_weather(query)
 
             return self.primary.get_current_weather(query.location)
+        except AmbiguousWeatherLocationError:
+            raise
+        except WeatherForecastUnavailableError:
+            raise
         except Exception as error:
             trace_event(
                 "weather.provider",
@@ -269,7 +347,11 @@ class FallbackWeatherProvider:
                 fallback_used=True,
                 fallback_reason=str(error),
                 api_key_loaded=getattr(self.primary, "api_key", "") != "",
-                endpoint=getattr(self.primary, "endpoint", provider_requested),
+                endpoint=(
+                    getattr(self.primary, "forecast_endpoint", provider_requested)
+                    if query.mode == "forecast"
+                    else getattr(self.primary, "endpoint", provider_requested)
+                ),
                 location=query.location,
                 resolved_location=resolve_provider_location(self.primary, query),
                 date=query.date,
@@ -311,6 +393,29 @@ def create_weather_provider(config):
     return MockWeatherProvider(default_location=getattr(config, "default_location", None))
 
 
+def validate_forecast_horizon(query, today_value=None, horizon_days=5):
+    """Reject explicit dates that the five-day provider cannot truthfully serve."""
+    if query.mode != "forecast":
+        return
+    try:
+        target = datetime.fromisoformat(str(query.date)).date()
+    except ValueError:
+        return
+    current = today_value or datetime.now().date()
+    days = (target - current).days
+    if days < 0:
+        raise WeatherForecastUnavailableError(
+            f"{query.date}\uc740 \uc774\ubbf8 \uc9c0\ub09c \ub0a0\uc785\ub2c8\ub2e4."
+        )
+    if days > int(horizon_days):
+        raise WeatherForecastUnavailableError(
+            f"\ud604\uc7ac\ub294 {query.date_label} {query.location or ''} \ub0a0\uc528\ub97c "
+            f"\ud655\uc778\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4. "
+            f"\ub0a0\uc528 \uc608\ubcf4\ub294 \uc624\ub298\ubd80\ud130 {horizon_days}\uc77c \uc774\ub0b4\ub9cc "
+            f"\ud655\uc778\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
+        )
+
+
 def with_fallback(provider, config):
     """Wrap real providers with mock fallback when enabled."""
     if getattr(config, "fallback_to_mock", True):
@@ -329,7 +434,7 @@ def resolve_provider_location(provider, query):
     return resolver.resolve(query.effective_location(getattr(provider, "default_location", None)))
 
 
-def normalize_openweather_response(data, query=None):
+def normalize_openweather_response(data, query=None, resolved_location=None):
     """Normalize OpenWeather current weather JSON into WeatherResult."""
     query = query or WeatherQuery(location=str(data.get("name", "")))
     weather = first_item(data.get("weather", []))
@@ -355,6 +460,104 @@ def normalize_openweather_response(data, query=None):
         date_label=query.date_label,
         raw_text=query.raw_text,
         confidence=query.confidence,
+        location_names=dict(
+            getattr(resolved_location, "display_names", None) or {}
+        ),
+    )
+
+
+def normalize_openweather_forecast_response(
+    data,
+    query=None,
+    now=None,
+    resolved_location=None,
+):
+    """Normalize one requested local day from OpenWeather's 3-hour forecast."""
+    query = query or WeatherQuery(location=str(data.get("city", {}).get("name", "")))
+    city = data.get("city", {})
+    offset_seconds = int(city.get("timezone", 0) or 0)
+    local_timezone = timezone(timedelta(seconds=offset_seconds))
+    reference = now or datetime.now(timezone.utc)
+    reference_local = reference.astimezone(local_timezone)
+    try:
+        target_date = datetime.fromisoformat(str(query.date)).date()
+    except ValueError:
+        day_offset = 2 if query.date == "day_after_tomorrow" else 1
+        target_date = (reference_local + timedelta(days=day_offset)).date()
+    candidates = []
+
+    for item in data.get("list", []):
+        timestamp = datetime.fromtimestamp(int(item.get("dt", 0)), tz=timezone.utc)
+        local_timestamp = timestamp.astimezone(local_timezone)
+        if local_timestamp.date() == target_date:
+            candidates.append((local_timestamp, item))
+
+    if not candidates:
+        raise RuntimeError(f"OpenWeather forecast has no data for {target_date.isoformat()}.")
+
+    preferred = [pair for pair in candidates if 12 <= pair[0].hour <= 15]
+    representative_time, representative = min(
+        preferred or candidates,
+        key=lambda pair: abs(pair[0].hour * 60 + pair[0].minute - 12 * 60),
+    )
+    main = representative.get("main", {})
+    weather = first_item(representative.get("weather", []))
+    wind = representative.get("wind", {})
+    temperatures_min = [
+        float(item.get("main", {}).get("temp_min", item.get("main", {}).get("temp", 0.0)))
+        for _, item in candidates
+    ]
+    temperatures_max = [
+        float(item.get("main", {}).get("temp_max", item.get("main", {}).get("temp", 0.0)))
+        for _, item in candidates
+    ]
+    conditions = [
+        str(first_item(item.get("weather", [])).get("description", ""))
+        for _, item in candidates
+    ]
+    conditions = [condition for condition in conditions if condition]
+    condition = str(weather.get("description", weather.get("main", "")))
+    if not condition and conditions:
+        condition = Counter(conditions).most_common(1)[0][0]
+    precipitation_probability = round(
+        max(float(item.get("pop", 0.0) or 0.0) for _, item in candidates) * 100
+    )
+    trace_event(
+        "weather.forecast.selected",
+        target_date_local=target_date.isoformat(),
+        timezone_offset=offset_seconds,
+        matched_slots=len(candidates),
+        representative_slot=representative_time.isoformat(),
+        temperature_min=min(temperatures_min),
+        temperature_max=max(temperatures_max),
+        precipitation_probability_max=int(precipitation_probability),
+        selection_policy="local_12_to_15_else_nearest_noon",
+        provider="openweather",
+        fallback_used=False,
+    )
+
+    return WeatherResult(
+        location=query.effective_location(str(city.get("name", "")) or None),
+        temperature=float(main.get("temp", 0.0)),
+        feels_like=float(main.get("feels_like", main.get("temp", 0.0))),
+        condition=condition,
+        humidity=int(main.get("humidity", 0)),
+        wind_speed=float(wind.get("speed", 0.0)),
+        precipitation_probability=int(precipitation_probability),
+        provider="openweather",
+        timestamp=representative_time.isoformat(),
+        date=query.date,
+        mode=query.mode,
+        capability=query.capability,
+        date_label=query.date_label,
+        raw_text=query.raw_text,
+        confidence=query.confidence,
+        temperature_min=min(temperatures_min),
+        temperature_max=max(temperatures_max),
+        forecast_at=representative_time.isoformat(),
+        location_names=dict(
+            getattr(resolved_location, "display_names", None) or {}
+        ),
     )
 
 
@@ -441,4 +644,8 @@ def replace_query(result, query, provider=None):
         date_label=query.date_label,
         raw_text=query.raw_text,
         confidence=query.confidence,
+        temperature_min=result.temperature_min,
+        temperature_max=result.temperature_max,
+        forecast_at=result.forecast_at,
+        location_names=dict(result.location_names),
     )

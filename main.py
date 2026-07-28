@@ -1,3 +1,4 @@
+import os
 import sys
 
 from jarvis.commands import CommandDispatcher, create_default_registry
@@ -5,6 +6,8 @@ from jarvis.capabilities import CapabilityLoader
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.config import ConfigurationLoader
 from jarvis.diagnostics import DiagnosticsCollector
+from jarvis.dashboard import DashboardBackend, DashboardEventBridge, ObservabilityHub
+from jarvis.debug_trace import subscribe_trace, unsubscribe_trace
 from jarvis.events import EventBus
 from jarvis.events.adapters import ConsoleEventAdapter
 from jarvis.input import InputManager, KeyboardInputProvider
@@ -20,6 +23,12 @@ def main():
     configure_console_encoding()
     config = ConfigurationLoader().load()
     event_bus = EventBus()
+    observability_hub = ObservabilityHub()
+    dashboard_bridge = DashboardEventBridge(observability_hub)
+    event_bus.subscribe_all(dashboard_bridge.handle_event)
+    trace_observer = subscribe_trace(
+        lambda event, payload: observability_hub.record(event, payload)
+    )
     diagnostics_collector = DiagnosticsCollector()
     console_adapter = ConsoleEventAdapter()
     event_bus.subscribe_all(console_adapter.handle_event)
@@ -72,9 +81,26 @@ def main():
     )
     input_manager = InputManager()
     keyboard_provider = KeyboardInputProvider()
+    dashboard = None
+    if os.getenv("JARVIS_DASHBOARD", "true").lower() not in {"0", "false", "off", "no"}:
+        dashboard = DashboardBackend(
+            hub=observability_hub,
+            memory_manager=memory_manager,
+            diagnostics_collector=diagnostics_collector,
+            plugin_registry=plugin_registry,
+            ability_registry=capability_registry,
+        ).start()
+        observability_hub.runtime.update(
+            {
+                "current_session": diagnostics_collector.get_snapshot().session.session_id,
+                "current_provider": config.provider,
+            }
+        )
 
     print("================================")
     print(f"Jarvis {config.version}")
+    if dashboard is not None:
+        print(f"Dashboard {dashboard.url}")
     print("================================")
 
     if config.debug:
@@ -92,6 +118,9 @@ def main():
 
         if dispatcher.should_exit():
             chat_service.finish_conversation()
+            if dashboard is not None:
+                dashboard.stop()
+            unsubscribe_trace(trace_observer)
             break
 
 

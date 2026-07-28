@@ -1,6 +1,7 @@
 ﻿import logging
 import re
 import unicodedata
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from time import perf_counter
@@ -9,6 +10,12 @@ from jarvis.date_calculator import elapsed_days_since, format_korean_date, is_is
 from jarvis.brain.intent_runtime import RuntimeResult
 from jarvis.debug_trace import trace_event
 from jarvis.runtime.planner import PlanStepResult
+from jarvis.runtime.context_merge import merge_context_value
+from jarvis.runtime.language import (
+    LanguageResolver,
+    detect_language,
+    response_language_instruction,
+)
 from jarvis.runtime.task import RuntimeTask, TaskState, TaskStateMachine, TaskStepRecord, TransitionSource
 from jarvis.runtime.conversation_task import (
     CALENDAR_TASK_ACTIVE,
@@ -58,6 +65,7 @@ class VoicePipeline:
         conversation_session=None,
         semantic_normalizer=None,
         input_manager=None,
+        language_resolver=None,
     ):
         """Create a voice pipeline with replaceable modules."""
         self.wake_listener = wake_listener
@@ -75,9 +83,14 @@ class VoicePipeline:
         self.input_manager = input_manager or InputManager()
         self.last_input_envelope = None
         self.last_wake_event = None
+        self.language_resolver = language_resolver or LanguageResolver()
+        self.language_context = None
+        self.active_runtime_turn = None
         self.skip_follow_up_for_turn = False
         self.runtime_last_calendar_result = None
         self.runtime_last_calendar_event = None
+        self.weather_conversation_context = {}
+        self.last_weather_intent = None
         self.configure_conversation_context_provider()
 
     def configure_conversation_context_provider(self):
@@ -121,9 +134,67 @@ class VoicePipeline:
         )
         self.publish_pipeline(wake="detected", current_stage="stt")
         self.log_event("Wake detected")
-        self.start_conversation_session()
-        first_reply = self.process_voice_turn()
-        if not self.skip_follow_up_for_turn:
+        turn_token = None
+        turn_lock = getattr(self, "runtime_turn_lock", None)
+        if turn_lock is not None:
+            from jarvis.runtime.turn_lock import (
+                BusyPolicy,
+                RuntimeBusyError,
+                TurnOwner,
+                TurnPriority,
+            )
+
+            try:
+                turn_token = turn_lock.acquire(
+                    TurnOwner.VOICE,
+                    policy=BusyPolicy.REJECT,
+                    soft_timeout=30,
+                    hard_timeout=60,
+                    priority=TurnPriority.USER,
+                    source="microphone",
+                    conversation_id=str(
+                        getattr(self.voice_session, "session_id", "") or ""
+                    ),
+                )
+            except RuntimeBusyError as error:
+                trace_event(
+                    "voice.wake.rejected",
+                    reason="runtime_busy",
+                    source="voice",
+                    owner=error.current_owner.value,
+                )
+                return ""
+        lock = getattr(self, "interaction_lock", None)
+        self.active_runtime_turn = turn_token
+        should_run_follow_up = False
+        try:
+            with lock if lock is not None else nullcontext():
+                self.start_conversation_session()
+                first_reply = self.process_voice_turn()
+                runtime_task = getattr(self.conversation_session, "runtime_task", None)
+                if turn_lock is not None and runtime_task is not None:
+                    turn_lock.link_task(
+                        turn_token,
+                        getattr(runtime_task, "id", ""),
+                    )
+                was_preempted = (
+                    turn_lock is not None
+                    and turn_lock.cancellation_requested(turn_token)
+                )
+                if was_preempted:
+                    trace_event(
+                        "runtime.turn.interrupted",
+                        owner="voice",
+                        token=turn_token.token,
+                    )
+                should_run_follow_up = (
+                    not self.skip_follow_up_for_turn and not was_preempted
+                )
+        finally:
+            self.active_runtime_turn = None
+            if turn_lock is not None and turn_token is not None:
+                turn_lock.release(turn_token, reason="voice_turn_completed")
+        if should_run_follow_up:
             self.run_follow_up_loop()
         return first_reply
 
@@ -147,6 +218,7 @@ class VoicePipeline:
             stage="stt",
         )
         user_message = str(self.last_input_envelope.content or "")
+        self.resolve_language_context(user_message)
         stt_latency = perf_counter() - stt_start
         trace_event(
             "voice.stt.completed",
@@ -181,7 +253,10 @@ class VoicePipeline:
 
         self.set_conversation_state(CONVERSATION_THINKING)
         intent_result = None
-        reply = self.try_calendar_conversation_task_reply(user_message)
+        reply = self.language_override_control_reply()
+
+        if reply is None:
+            reply = self.try_calendar_conversation_task_reply(user_message)
 
         if reply is None:
             reply = self.try_pending_action_confirmation_reply(user_message)
@@ -200,10 +275,14 @@ class VoicePipeline:
         if reply is not None:
             self.publish_pipeline(llm="skipped", current_stage="tts")
         else:
-            intent_result = self.try_intent_runtime(user_message)
+            intent_result = self.try_intent_runtime(
+                self.enrich_weather_follow_up(user_message)
+            )
 
         if reply is None and intent_result is not None and intent_result.handled:
             reply = intent_result.response
+            reply = self.structured_ability_response(intent_result, reply)
+            self.remember_weather_context(intent_result)
             self.remember_runtime_task(intent_result)
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
@@ -231,13 +310,16 @@ class VoicePipeline:
                 llm_start = perf_counter()
                 self.publish_pipeline(llm="started", current_stage="llm")
                 self.log_event("LLM started")
-                reply = self.chat_service.generate_reply(user_message)
+                reply = self.chat_service.generate_reply(
+                    self.language_aware_prompt(user_message)
+                )
                 llm_latency = perf_counter() - llm_start
                 self.logger.info("llm.finished")
                 self.publish_pipeline(llm="finished", current_stage="tts")
                 self.publish_provider_metadata()
                 self.log_event("LLM finished")
 
+        reply = self.ensure_response_language(reply, source="voice_turn")
         self.logger.info("tts.started")
         self.set_session_stage("tts")
         self.set_conversation_state(CONVERSATION_SPEAKING)
@@ -245,10 +327,17 @@ class VoicePipeline:
         self.publish_pipeline(tts="started", current_stage="tts")
         self.log_event("voice.tts.started")
         self.print_llm_response_debug(reply)
-        trace_event("voice.tts.final_text", final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)))
+        trace_event(
+            "voice.tts.final_text",
+            final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)),
+            language_context=(
+                self.language_context.to_dict() if self.language_context else {}
+            ),
+        )
         self.speak_reply(reply)
         self.publish_intent_tts_output(intent_result)
         tts_latency = perf_counter() - tts_start
+        self.record_task_graph_tts(intent_result, tts_latency)
         self.logger.info("tts.playback.finished")
         self.set_session_stage("idle")
         self.publish_pipeline(tts="finished", current_stage="idle")
@@ -288,6 +377,7 @@ class VoicePipeline:
                 stage="follow_up",
             )
             follow_up_text = str(self.last_input_envelope.content or "")
+            follow_up_text = self.normalize_weather_follow_up_stt(follow_up_text)
 
             if should_skip_voice_message(follow_up_text):
                 if self.has_calendar_conversation_task():
@@ -313,7 +403,54 @@ class VoicePipeline:
                 self.close_conversation_session()
                 return
 
-            self.process_follow_up_text(follow_up_text)
+            follow_up_turn = self.acquire_follow_up_runtime_turn()
+            if follow_up_turn is False:
+                self.close_conversation_session()
+                return
+            self.active_runtime_turn = follow_up_turn
+            try:
+                self.process_follow_up_text(follow_up_text)
+            finally:
+                self.active_runtime_turn = None
+                turn_lock = getattr(self, "runtime_turn_lock", None)
+                if turn_lock is not None and follow_up_turn is not None:
+                    turn_lock.release(
+                        follow_up_turn,
+                        reason="voice_follow_up_completed",
+                    )
+
+    def acquire_follow_up_runtime_turn(self):
+        """Acquire an independent RuntimeTurn for one follow-up utterance."""
+        turn_lock = getattr(self, "runtime_turn_lock", None)
+        if turn_lock is None:
+            return None
+        from jarvis.runtime.turn_lock import (
+            BusyPolicy,
+            RuntimeBusyError,
+            TurnOwner,
+            TurnPriority,
+        )
+
+        try:
+            return turn_lock.acquire(
+                TurnOwner.VOICE,
+                policy=BusyPolicy.REJECT,
+                soft_timeout=30,
+                hard_timeout=60,
+                priority=TurnPriority.USER,
+                source="follow_up_microphone",
+                conversation_id=str(
+                    getattr(self.voice_session, "session_id", "") or ""
+                ),
+            )
+        except RuntimeBusyError as error:
+            trace_event(
+                "voice.follow_up.rejected",
+                reason="runtime_busy",
+                source="voice",
+                owner=error.current_owner.value,
+            )
+            return False
 
     def create_voice_input_envelope(self, content, input_type, stage):
         """Normalize every voice turn through the shared Input Manager."""
@@ -341,15 +478,19 @@ class VoicePipeline:
         )
         return envelope
 
-    def process_follow_up_text(self, user_message):
+    def process_follow_up_text(self, user_message, speak=True):
         """Process one follow-up text without wake-word detection."""
+        self.resolve_language_context(user_message)
         total_start = perf_counter()
         llm_latency = 0.0
         tts_latency = 0.0
         self.set_conversation_state(CONVERSATION_THINKING)
         fallback = ""
         intent_result = None
-        reply = self.try_calendar_conversation_task_reply(user_message)
+        reply = self.language_override_control_reply()
+
+        if reply is None:
+            reply = self.try_calendar_conversation_task_reply(user_message)
 
         if reply is None:
             reply = self.try_pending_action_confirmation_reply(user_message)
@@ -378,10 +519,14 @@ class VoicePipeline:
         if reply is not None:
             self.publish_pipeline(llm="skipped", current_stage="tts")
         else:
-            intent_result = self.try_intent_runtime(user_message)
+            intent_result = self.try_intent_runtime(
+                self.enrich_weather_follow_up(user_message)
+            )
 
         if reply is None and intent_result is not None and intent_result.handled:
             reply = intent_result.response
+            reply = self.structured_ability_response(intent_result, reply)
+            self.remember_weather_context(intent_result)
             self.remember_runtime_task(intent_result)
             self.remember_pending_action(intent_result)
             self.remember_pending_clarification(intent_result, user_message)
@@ -409,13 +554,16 @@ class VoicePipeline:
                 llm_start = perf_counter()
                 self.publish_pipeline(llm="started", current_stage="llm")
                 self.log_event("LLM started")
-                reply = self.chat_service.generate_reply(user_message)
+                reply = self.chat_service.generate_reply(
+                    self.language_aware_prompt(user_message)
+                )
                 llm_latency = perf_counter() - llm_start
                 self.logger.info("llm.finished")
                 self.publish_pipeline(llm="finished", current_stage="tts")
                 self.publish_provider_metadata()
                 self.log_event("LLM finished")
 
+        reply = self.ensure_response_language(reply, source="voice_follow_up")
         self.logger.info("tts.started")
         self.set_session_stage("tts")
         self.set_conversation_state(CONVERSATION_SPEAKING)
@@ -423,10 +571,18 @@ class VoicePipeline:
         self.publish_pipeline(tts="started", current_stage="tts")
         self.log_event("voice.tts.started")
         self.print_llm_response_debug(reply)
-        trace_event("voice.tts.final_text", final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)))
-        self.speak_reply(reply)
+        trace_event(
+            "voice.tts.final_text",
+            final_tts_text=sanitize_debug_text(redact_sensitive_text(reply)),
+            language_context=(
+                self.language_context.to_dict() if self.language_context else {}
+            ),
+        )
+        if speak:
+            self.speak_reply(reply)
         self.publish_intent_tts_output(intent_result)
         tts_latency = perf_counter() - tts_start
+        self.record_task_graph_tts(intent_result, tts_latency)
         self.logger.info("tts.playback.finished")
         self.publish_pipeline(tts="finished", current_stage="follow_up")
         self.publish_performance(llm_latency, perf_counter() - total_start, 0.0, tts_latency)
@@ -441,6 +597,21 @@ class VoicePipeline:
 
         if not memory_context_refreshed:
             self.advance_last_memory_result_turn()
+        return reply
+
+    def language_override_control_reply(self):
+        """Acknowledge a LanguageResolver control command without Planner routing."""
+        context = self.language_context
+        if context is None or not getattr(context, "override_cleared", False):
+            return None
+        return {
+            "ja": "自動モードに戻しました。これからは入力された言語で返答します。",
+            "en": "Automatic language mode is back on. I’ll reply in the input language.",
+            "ko": "언어 자동 모드로 돌아왔습니다. 이제 입력한 언어에 맞춰 응답할게요.",
+        }.get(
+            context.response_language,
+            "Automatic language mode is back on.",
+        )
 
     def try_calendar_conversation_task_reply(self, user_message):
         """Continue or start a Calendar-only conversation task."""
@@ -620,19 +791,299 @@ class VoicePipeline:
 
         return self.intent_runtime.run(user_message, input_source="voice")
 
+    def enrich_weather_follow_up(self, user_message):
+        """Carry the last weather location into terse follow-up questions."""
+        text = str(user_message or "").strip()
+        context = dict(self.weather_conversation_context)
+        session = self.conversation_session
+        if session is not None and getattr(session, "runtime_task", None) is not None:
+            selected = dict(
+                getattr(session.runtime_task.conversation_context, "selected_entities", {})
+                or {}
+            )
+            context = dict(selected.get("weather_context", {}) or context)
+        location = str(context.get("location", "") or "")
+        if not text or not location:
+            return text
+        from jarvis.abilities.native.weather.parser import (
+            WeatherIntentParser,
+            contains_precipitation_intent,
+            has_weather_intent,
+        )
+
+        parsed = WeatherIntentParser().parse(text)
+        has_relative_date = any(
+            token in text.lower()
+            for token in (
+                "\uc624\ub298",
+                "\ub0b4\uc77c",
+                "\ubaa8\ub808",
+                "today",
+                "tomorrow",
+                "day after tomorrow",
+                "\u4eca\u65e5",
+                "\u660e\u65e5",
+                "\u660e\u5f8c\u65e5",
+                "\u3042\u3057\u305f",
+                "\u3042\u3055\u3063\u3066",
+            )
+        )
+        explicit_location = str(parsed.location or "").strip()
+        request_is_weather = (
+            has_relative_date
+            or contains_precipitation_intent(text)
+            or has_weather_intent(text)
+        )
+        if not request_is_weather:
+            self.last_weather_intent = None
+            return text
+        merged_location = merge_context_value(
+            explicit=explicit_location,
+            conversation=location,
+        )
+        weather_follow_up = (
+            not explicit_location
+            and (has_relative_date or contains_precipitation_intent(text))
+        )
+        date_only = has_relative_date and not any(
+            token in text.lower()
+            for token in ("\ub0a0\uc528", "\ube44", "weather", "rain", "\u5929\u6c17", "\u96e8")
+        )
+        self.last_weather_intent = replace(
+            parsed,
+            location=merged_location.value,
+            follow_up=bool(weather_follow_up or date_only),
+            location_source=merged_location.source.value,
+            date_source="explicit" if has_relative_date else "default",
+            utterance=text,
+        )
+        trace_event(
+            "weather.intent.resolved",
+            **self.last_weather_intent.to_dict(),
+        )
+        if explicit_location:
+            enriched = f"{text} \ub0a0\uc528" if date_only else text
+            trace_event(
+                "weather.context.merged",
+                location=merged_location.value,
+                location_source=merged_location.source.value,
+                date=parsed.date,
+                date_source="explicit" if has_relative_date else "default",
+                context_location=location,
+                context_location_used=False,
+                original_text=text,
+                enriched_text=enriched,
+            )
+            return enriched
+        if not weather_follow_up and not date_only:
+            return text
+        enriched = f"{location} {text} \ub0a0\uc528" if date_only else f"{location} {text}"
+        trace_event(
+            "weather.context.applied",
+            location=location,
+            original_text=text,
+            enriched_text=enriched,
+        )
+        trace_event(
+            "weather.context.merged",
+            location=location,
+            location_source="conversation_context",
+            date=parsed.date,
+            date_source="explicit" if has_relative_date else "default",
+            context_location=location,
+            context_location_used=True,
+            original_text=text,
+            enriched_text=enriched,
+        )
+        return enriched
+
+    def normalize_weather_follow_up_stt(self, user_message):
+        """Correct narrow Korean STT variants only inside a weather context."""
+        text = str(user_message or "").strip()
+        if not self.weather_conversation_context:
+            return text
+        compact = re.sub(r"[\s?!.,]+", "", text)
+        replacements = {
+            "\ubaa8\ub798\uc640": "\ubaa8\ub808\ub294?",
+            "\ubaa8\ub798\ub294": "\ubaa8\ub808\ub294?",
+            "\ubaa8\ub808\uc640": "\ubaa8\ub808\ub294?",
+            "\ubaa8\ub798\ube44\uc640": "\ubaa8\ub808 \ube44 \uc640?",
+            "\ubaa8\ub798\ube44\uc640\uc694": "\ubaa8\ub808 \ube44 \uc640\uc694?",
+        }
+        corrected = replacements.get(compact, text)
+        if corrected != text:
+            trace_event(
+                "weather.context.stt_corrected",
+                original_text=text,
+                corrected_text=corrected,
+                location=self.weather_conversation_context.get("location", ""),
+            )
+        return corrected
+
+    def remember_weather_context(self, intent_result):
+        """Retain the last successful weather location for this conversation."""
+        tool = getattr(intent_result, "tool", "") or getattr(intent_result, "tool_name", "")
+        output = getattr(intent_result, "tool_output", None)
+        data = getattr(output, "data", None)
+        location = str(getattr(data, "location", "") or "")
+        provider = str(getattr(data, "provider", "") or "")
+        if (
+            tool != "weather"
+            or not getattr(intent_result, "success", False)
+            or not location
+            or provider.startswith("mock")
+        ):
+            return
+        self.weather_conversation_context = {
+            "location": location,
+            "date": str(getattr(data, "date", "") or ""),
+            "provider": provider,
+        }
+        session = self.conversation_session
+        if session is not None and hasattr(session, "ensure_runtime_task"):
+            session.runtime_task = session.resolver.select(
+                session.ensure_runtime_task(),
+                "weather_context",
+                dict(self.weather_conversation_context),
+            )
+        trace_event(
+            "weather.context.updated",
+            **self.weather_conversation_context,
+        )
+
+    def structured_ability_response(self, intent_result, fallback):
+        """Format structured Ability output directly in the response language."""
+        tool = getattr(intent_result, "tool", "") or getattr(intent_result, "tool_name", "")
+        output = getattr(intent_result, "tool_output", None)
+        data = getattr(output, "data", None)
+        if tool != "weather" or not hasattr(data, "to_natural_language"):
+            return fallback
+        language = str(
+            getattr(self.language_context, "response_language", "ko") or "ko"
+        )
+        return data.to_natural_language(language=language)
+
     def speak_reply(self, reply):
-        """Speak a reply using streaming TTS when available."""
-        tts_text = normalize_tts_text(reply)
+        """Apply the final response-language guard, then send text to TTS."""
+        guarded_reply = self.ensure_response_language(
+            reply,
+            source="final_tts_guard",
+        )
+        tts_text = normalize_tts_text(guarded_reply)
         self.print_tts_input_debug(tts_text)
         streaming_enabled = getattr(self.tts_provider, "streaming_enabled", True)
+        original_voice = getattr(self.tts_provider, "voice", None)
+        selected_voice = self.selected_tts_voice()
+        if original_voice is not None and selected_voice:
+            self.tts_provider.voice = selected_voice
+        try:
+            if streaming_enabled and hasattr(self.tts_provider, "speak_stream"):
+                self.tts_provider.speak_stream(tts_text, session=self.voice_session)
+                print(len(tts_text))
+                return
 
-        if streaming_enabled and hasattr(self.tts_provider, "speak_stream"):
-            self.tts_provider.speak_stream(tts_text, session=self.voice_session)
+            self.tts_provider.speak(tts_text)
             print(len(tts_text))
-            return
+        finally:
+            if original_voice is not None:
+                self.tts_provider.voice = original_voice
 
-        self.tts_provider.speak(tts_text)
-        print(len(tts_text))
+    def selected_tts_voice(self):
+        """Return the provider-native voice segment from LanguageContext."""
+        value = str(
+            getattr(self.language_context, "tts_voice", "") or ""
+        )
+        parts = value.split(":")
+        return parts[1] if len(parts) >= 2 and parts[1] else ""
+
+    def resolve_language_context(self, text, stt_provider=""):
+        """Resolve and attach one LanguageContext for the active turn."""
+        conversation_id = self.get_language_conversation_id()
+        stage = str(
+            getattr(getattr(self.last_input_envelope, "metadata", {}), "get", lambda *_: "")(
+                "stage",
+                "",
+            )
+        )
+        preserve_conversation = stage == "follow_up"
+        self.language_context = self.language_resolver.resolve(
+            text,
+            conversation_id=conversation_id,
+            stt_provider=stt_provider or self.get_stt_provider_name(),
+            preserve_conversation=preserve_conversation,
+        )
+        if self.active_runtime_turn is not None:
+            self.active_runtime_turn.language_context = self.language_context
+        return self.language_context
+
+    def language_aware_prompt(self, user_message):
+        """Constrain the response language without altering Planner input."""
+        context = self.language_context
+        if context is None:
+            return user_message
+        return (
+            f"{response_language_instruction(context.response_language)}\n"
+            f"User request:\n{user_message}"
+        )
+
+    def ensure_response_language(self, reply, source="response"):
+        """Translate a tool or fallback response when it violates turn policy."""
+        text = str(reply or "")
+        context = self.language_context
+        if not text or context is None:
+            return reply
+        detected, confidence = detect_language(text)
+        if confidence <= 0:
+            return reply
+        if detected == context.response_language:
+            return reply
+        trace_event(
+            "runtime.language.response_mismatch",
+            expected=context.response_language,
+            actual=detected,
+            source=str(source or "response"),
+            tts_voice=context.tts_voice,
+        )
+        translated = self.chat_service.generate_reply(
+            f"{response_language_instruction(context.response_language)} "
+            "Translate the following response. Preserve facts, dates, names, "
+            f"and formatting. Output only the translated response:\n{text}"
+        )
+        trace_event(
+            "runtime.language.response_normalized",
+            from_language=detected,
+            to_language=context.response_language,
+            source=str(source or "response"),
+            tts_voice=context.tts_voice,
+        )
+        return translated
+
+    def get_stt_provider_name(self):
+        return str(
+            getattr(self.stt_provider, "provider_name", "")
+            or getattr(self.stt_provider, "name", "")
+            or self.stt_provider.__class__.__name__
+            if self.stt_provider is not None
+            else ""
+        )
+
+    def record_task_graph_tts(self, intent_result, tts_latency):
+        """Correlate user-perceived playback completion with its TaskGraph."""
+        graph_id = str(getattr(intent_result, "graph_id", "") or "")
+        dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
+        executor = getattr(dispatcher, "graph_executor", None)
+        coordinator = getattr(executor, "coordinator", None)
+        if not graph_id or coordinator is None:
+            return
+        checkpoint = coordinator.checkpoint_store.load(graph_id)
+        if checkpoint is None:
+            return
+        coordinator.record_tts(
+            checkpoint.graph,
+            "COMPLETED",
+            provider=self.get_provider_name(),
+            latency_ms=round(float(tts_latency or 0) * 1000, 3),
+        )
 
     def print_llm_response_debug(self, response):
         """Print the response text before it is sent to TTS."""
@@ -661,10 +1112,34 @@ class VoicePipeline:
 
     def set_session_stage(self, stage):
         """Update the voice session stage when a session exists."""
-        if self.voice_session is None:
-            return
+        turn_lock = getattr(self, "runtime_turn_lock", None)
+        turn = getattr(self, "active_runtime_turn", None)
+        normalized = str(stage or "").lower()
+        if turn_lock is not None and turn is not None:
+            if normalized == "stt":
+                turn_lock.set_timeout_stage(
+                    turn,
+                    "PROCESSING",
+                    soft_timeout=30,
+                    hard_timeout=60,
+                )
+            elif normalized == "tts":
+                turn_lock.set_timeout_stage(
+                    turn,
+                    "TTS_PLAYBACK",
+                    soft_timeout=30,
+                    hard_timeout=60,
+                )
+            elif normalized == "idle":
+                turn_lock.set_timeout_stage(
+                    turn,
+                    "FOLLOW_UP_WAIT",
+                    soft_timeout=None,
+                    hard_timeout=None,
+                )
 
-        self.voice_session.set_stage(stage)
+        if self.voice_session is not None:
+            self.voice_session.set_stage(stage)
 
     def publish_pipeline(self, wake=None, stt=None, llm=None, tts=None, current_stage=None):
         """Publish voice pipeline status when diagnostics is available."""
@@ -813,6 +1288,7 @@ class VoicePipeline:
 
     def listen_and_normalize_stt(self, remaining=None, confirmation=False):
         """Listen once and apply user vocabulary corrections before routing."""
+        self.configure_stt_language_hint()
         self.configure_stt_prompt_context(confirmation=confirmation)
 
         if confirmation and hasattr(self.stt_provider, "listen_for_confirmation"):
@@ -835,6 +1311,38 @@ class VoicePipeline:
             self.create_semantic_transcript_context(),
         )
         return semantic.semantic_text
+
+    def configure_stt_language_hint(self):
+        """Apply the active conversation language to providers before recording."""
+        provider = self.stt_provider
+        if provider is None:
+            return "auto"
+        conversation_id = self.get_language_conversation_id()
+        language = self.language_resolver.stt_language_hint(conversation_id)
+        attribute = ""
+        if hasattr(provider, "openai_language"):
+            attribute = "openai_language"
+        elif hasattr(provider, "language") and "OpenAI" in provider.__class__.__name__:
+            attribute = "language"
+        if attribute:
+            setattr(provider, attribute, language)
+        trace_event(
+            "runtime.language.stt_hint_applied",
+            conversation_id=conversation_id,
+            language=language,
+            source="conversation_override" if language != "auto" else "auto",
+            provider=self.get_stt_provider_name(),
+            applied=bool(attribute),
+        )
+        return language
+
+    def get_language_conversation_id(self):
+        """Return the stable conversation identifier shared by STT and resolver."""
+        return str(
+            getattr(self.voice_session, "session_id", "")
+            or getattr(self.conversation_session, "session_id", "")
+            or ""
+        )
 
     def should_skip_unprompted_follow_up(self, message):
         """Return whether an unprompted follow-up looks like STT noise."""
@@ -1951,7 +2459,9 @@ def sanitize_debug_text(text):
 
 def is_unprompted_short_follow_up_noise(message):
     """Return whether a free follow-up transcript is too weak to be a new command."""
-    text = str(message or "").strip().strip(" .?!,")
+    raw_text = str(message or "").strip()
+    has_question_mark = "?" in raw_text or "\uff1f" in raw_text
+    text = raw_text.strip(" .?!,\uff1f")
 
     if text == "":
         return True
@@ -1964,6 +2474,9 @@ def is_unprompted_short_follow_up_noise(message):
 
     if len(normalized) <= 2 and confirmation_decision(text) != "yes" and rejection_decision(text) != "no":
         return True
+
+    if has_question_mark and len(normalized) >= 3:
+        return False
 
     if " " not in text and len(normalized) >= 3:
         intentional_tokens = (
@@ -2330,6 +2843,7 @@ def runtime_result_from_plan_result(plan_result, plan):
         fallback_used=False,
         tool_output=tool_output,
         task=getattr(plan_result, "task", None),
+        graph_id=getattr(plan_result, "graph_id", ""),
     )
 
 

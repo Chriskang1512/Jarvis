@@ -26,6 +26,7 @@ class PlanResult:
     response: str = ""
     error: str = ""
     task: object = None
+    graph_id: str = ""
 
     def to_natural_language(self):
         """Return the merged spoken response."""

@@ -74,6 +74,7 @@ class WeatherAbility:
                     "ability_id": self.id,
                     "provider": weather.provider,
                     "query": query,
+                    "semantic_type": "WeatherReport",
                 },
             )
         except Exception as error:

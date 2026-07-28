@@ -5,6 +5,20 @@ from pathlib import Path
 
 
 LOGGER = logging.getLogger("jarvis.trace")
+TRACE_OBSERVERS = []
+
+
+def subscribe_trace(observer):
+    """Send structured planner/runtime traces to an observability adapter."""
+    if observer not in TRACE_OBSERVERS:
+        TRACE_OBSERVERS.append(observer)
+    return observer
+
+
+def unsubscribe_trace(observer):
+    """Stop sending structured traces to one adapter."""
+    if observer in TRACE_OBSERVERS:
+        TRACE_OBSERVERS.remove(observer)
 
 
 def is_debug_trace_enabled():
@@ -14,6 +28,12 @@ def is_debug_trace_enabled():
 
 def trace_event(event, **payload):
     """Log a structured debug trace event when enabled."""
+    for observer in tuple(TRACE_OBSERVERS):
+        try:
+            observer(event, payload)
+        except Exception:
+            LOGGER.exception("Trace observer failed for %s", event)
+
     if not is_debug_trace_enabled():
         return
 

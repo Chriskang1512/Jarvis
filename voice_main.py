@@ -1,15 +1,16 @@
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
 from jarvis.brain import IntentRuntime
 from jarvis.config import ConfigurationLoader
 from jarvis.abilities.native.weather.provider import read_env_value
+from jarvis.dashboard import DashboardBackend, DashboardEventBridge, ObservabilityHub
 from jarvis.debug_trace import is_debug_trace_enabled, read_env_file_value
-from jarvis.debug_trace import trace_event
+from jarvis.debug_trace import subscribe_trace, trace_event, unsubscribe_trace
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
 from jarvis.core.events import InMemoryEventBus
 from jarvis.memory import (
@@ -22,6 +23,7 @@ from jarvis.native.reminder import ReminderEngine, ReminderScheduler
 from jarvis.native.reminder.registry import set_default_reminder_engine
 from jarvis.llm.factory import create_llm_provider
 from jarvis.runtime.intent import AIIntentParser, HybridIntentParser
+from jarvis.runtime import JarvisRuntimeService
 from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
 from jarvis.tools import create_default_tool_registry
 from jarvis.voice import (
@@ -58,6 +60,10 @@ def main():
     """Run the Jarvis voice pipeline."""
     configure_console_encoding()
     configure_logging()
+    observability_hub = ObservabilityHub()
+    trace_observer = subscribe_trace(
+        lambda event, payload: observability_hub.record(event, payload)
+    )
     trace_event(
         "voice.startup",
         cwd=os.getcwd(),
@@ -76,6 +82,7 @@ def main():
     chat_provider = ProviderFactory(diagnostics_collector=diagnostics_collector).create(config)
     memory_service = MemoryService(provider=MockMemoryProvider())
     event_bus = InMemoryEventBus()
+    event_bus.subscribe("*", DashboardEventBridge(observability_hub).handle_event)
     memory_manager = MemoryManager(
         provider=SQLiteMemoryProvider(config.memory_store.sqlite_path),
         session_id=voice_session.session_id,
@@ -85,7 +92,12 @@ def main():
         default_origin="voice",
         default_created_by="user",
     )
-    stt_provider = create_stt_provider(config.stt)
+    stt_provider = create_stt_provider(
+        replace(
+            config.stt,
+            openai_language=get_stt_openai_language(config),
+        )
+    )
     tts_provider = create_tts_provider(config.tts, diagnostics_collector=diagnostics_collector)
     reminder_engine = ReminderEngine(notification_callback=tts_provider.speak)
     set_default_reminder_engine(reminder_engine)
@@ -127,11 +139,34 @@ def main():
         runtime_console=create_runtime_console(config),
         follow_up_timeout=config.conversation.follow_up_timeout,
     )
+    runtime_service = JarvisRuntimeService(
+        pipeline=pipeline,
+        config=config,
+        wake_manager=wake_manager,
+    )
+    dashboard = None
+    if os.getenv("JARVIS_DASHBOARD", "true").lower() not in {"0", "false", "off", "no"}:
+        dashboard = DashboardBackend(
+            hub=observability_hub,
+            memory_manager=memory_manager,
+            diagnostics_collector=diagnostics_collector,
+            ability_registry=tool_registry.ability_registry,
+            runtime_service=runtime_service,
+        ).start()
+        observability_hub.runtime.update(
+            {
+                "current_session": voice_session.session_id,
+                "current_provider": config.provider,
+                "wake_method": config.wake.primary,
+            }
+        )
 
     print("Jarvis Voice Pipeline")
     print(f"Wake methods: {', '.join(config.wake.methods)}")
     print(f"Wake word: {wake_word}")
     print(f"Voice session: {voice_session.session_id}")
+    if dashboard is not None:
+        print(f"Dashboard: {dashboard.url}")
     print("Press Ctrl+C to stop.")
 
     reminder_scheduler.start()
@@ -147,6 +182,9 @@ def main():
     finally:
         memory_manager.clear_working()
         reminder_scheduler.stop()
+        if dashboard is not None:
+            dashboard.stop()
+        unsubscribe_trace(trace_observer)
 
 
 def create_wake_manager(config, wake_word):
@@ -249,6 +287,10 @@ def print_runtime_banner(config):
     print(f"STT Provider     : {read_stt_provider_name(config.stt)}")
     print(f"STT OpenAI Model : {get_stt_openai_model(config)}")
     print(f"STT Language     : {get_stt_openai_language(config)}")
+    print(
+        "Language Policy : "
+        f"{str(getattr(getattr(config, 'language', None), 'policy', 'AUTO')).upper()}"
+    )
     print(f"STT Fallback     : {get_stt_fallback_label(config)}")
     print(f"Context Correct  : {on_off(is_stt_context_correction_enabled())}")
     print(f"STT Metrics      : {on_off(is_stt_metrics_enabled())}")
@@ -376,7 +418,19 @@ def get_stt_openai_model(config):
 
 
 def get_stt_openai_language(config):
-    """Return configured OpenAI STT language for runtime visibility."""
+    """Return the effective primary STT language for runtime visibility."""
+    policy = str(
+        getattr(getattr(config, "language", None), "policy", "AUTO")
+    ).upper()
+    if policy == "AUTO":
+        return "auto"
+    forced = {
+        "FORCE_KO": "ko",
+        "FORCE_JA": "ja",
+        "FORCE_EN": "en",
+    }.get(policy)
+    if forced:
+        return forced
     return (
         os.environ.get("JARVIS_STT_OPENAI_LANGUAGE")
         or read_env_file_value("JARVIS_STT_OPENAI_LANGUAGE")
