@@ -156,6 +156,9 @@ class RuntimeResult:
     tool_output: object = None
     task: object = None
     graph_id: str = ""
+    execution_plan_snapshot: object = None
+    graph_execution_result: object = None
+    pending_clarification: object = None
 
 
 ParsedIntent = Intent

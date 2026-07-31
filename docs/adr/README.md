@@ -19,6 +19,11 @@ architecture tracks. New v0.4 orchestration ADRs continue from 0014 onward.
 - 0023 - Google Workspace Cross-Ability Context
 - 0024 - Agent Core Integration
 - 0025 - Capability Lifecycle Status (Proposed)
+- 0034 - Goal and Semantic Context Architecture
+- 0035 - Native TaskGraph Domain Architecture
+- 0036 - Capability-aware Planning Architecture
+- 0037 - Sequential GraphExecutor Runtime
+- 0038 - Reliable Graph Execution Architecture
 
 ## Sprint 18 Agent Core
 

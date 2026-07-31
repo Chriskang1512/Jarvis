@@ -211,6 +211,18 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
         self.assertEqual(plan.unsupported_reason, "unsupported_conditional")
         self.assertEqual(len(plan.steps), 0)
 
+    def test_planner_blocks_conditional_weather_calendar_update_and_mail(self):
+        """A complex conditional mutation must never degrade into partial execution."""
+        planner = RuntimePlanner()
+        plan = planner.plan(
+            "내일 비가 오는지 확인하고 비가 오면 아야 만나기 일정을 "
+            "오후 4시로 바꿔 줘 그리고 메일도 보내 줘",
+            create_sprint6_registry()[0],
+        )
+
+        self.assertEqual("unsupported_conditional", plan.unsupported_reason)
+        self.assertEqual(0, plan.step_count)
+
     def test_planner_routes_current_rain_question_to_weather(self):
         """Check current rain questions do not fall into datetime validation failure."""
         planner = RuntimePlanner()
@@ -250,7 +262,7 @@ class TestRuntimePlannerSprint6(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(result.error, "unsupported_conditional")
-        self.assertEqual(result.response, "\uc544\uc9c1 \uc870\uac74\ubd80 \uc54c\ub9bc\uc740 \uc9c0\uc6d0\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.")
+        self.assertEqual(result.response, "\uc544\uc9c1 \uc870\uac74\ubd80 \uc791\uc5c5\uc740 \uc9c0\uc6d0\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.")
 
     def test_ambiguous_reminder_does_not_fall_through_to_llm(self):
         """Check vague reminder requests ask for time instead of fake success."""

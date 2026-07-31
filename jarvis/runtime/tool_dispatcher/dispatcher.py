@@ -259,7 +259,7 @@ class RuntimeToolDispatcher:
                 success=False,
                 plan=plan,
                 step_results=[],
-                response="아직 조건부 알림은 지원하지 않습니다.",
+                response="아직 조건부 작업은 지원하지 않습니다.",
                 error="unsupported_conditional",
             )
 

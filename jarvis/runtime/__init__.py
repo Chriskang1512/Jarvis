@@ -38,6 +38,13 @@ from jarvis.runtime.context_merge import (
     MergedContextValue,
     merge_context_value,
 )
+from jarvis.runtime.follow_up import (
+    DEFAULT_FOLLOW_UP_PHRASE_REGISTRY,
+    FOLLOW_UP_PHRASES,
+    TEMPORAL_FOLLOW_UP_PHRASES,
+    FollowUpPhraseMatch,
+    FollowUpPhraseRegistry,
+)
 
 __all__ = [
     "ExecutionJournal",
@@ -68,6 +75,11 @@ __all__ = [
     "ContextValueSource",
     "MergedContextValue",
     "merge_context_value",
+    "DEFAULT_FOLLOW_UP_PHRASE_REGISTRY",
+    "FOLLOW_UP_PHRASES",
+    "TEMPORAL_FOLLOW_UP_PHRASES",
+    "FollowUpPhraseMatch",
+    "FollowUpPhraseRegistry",
     "TurnState",
     "TurnOwner",
     "TurnPriority",

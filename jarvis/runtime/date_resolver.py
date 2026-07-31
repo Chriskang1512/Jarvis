@@ -41,6 +41,27 @@ class DateResolver:
                 target = current + timedelta(days=offset)
                 return ResolvedDate(target.isoformat(), target.isoformat(), kind, raw)
 
+        weekday = _resolve_next_weekday(normalized, current)
+        if weekday is not None:
+            return ResolvedDate(
+                weekday.isoformat(),
+                weekday.isoformat(),
+                "weekday",
+                raw,
+            )
+
+        if any(
+            token in normalized
+            for token in ("\ub2e4\uc74c\uc8fc", "\ub2e4\uc74c \uc8fc", "next week", "\u6765\u9031")
+        ):
+            start = current + timedelta(days=(7 - current.weekday()))
+            return ResolvedDate(
+                start.isoformat(),
+                (start + timedelta(days=6)).isoformat(),
+                "next_week",
+                raw,
+            )
+
         if any(token in normalized for token in ("\uc8fc\ub9d0", "weekend", "\u9031\u672b")):
             saturday = current + timedelta(days=(5 - current.weekday()) % 7)
             return ResolvedDate(
@@ -54,10 +75,6 @@ class DateResolver:
             start = current - timedelta(days=current.weekday())
             end = start + timedelta(days=6)
             return ResolvedDate(start.isoformat(), end.isoformat(), "this_week", raw)
-
-        weekday = _resolve_next_weekday(normalized, current)
-        if weekday is not None:
-            return ResolvedDate(weekday.isoformat(), weekday.isoformat(), "weekday", raw)
 
         explicit = re.search(r"(?<!\d)(\d{1,2})\s*(?:\uc6d4|month)\s*(\d{1,2})\s*(?:\uc77c|day)?", normalized)
         if explicit:

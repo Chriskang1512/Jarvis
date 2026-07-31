@@ -11,6 +11,7 @@ from jarvis.abilities.native.weather.query import WEATHER_MODE_CURRENT
 from jarvis.abilities.native.weather.query import WEATHER_MODE_FORECAST
 from jarvis.abilities.native.weather.query import WeatherQuery
 from jarvis.runtime.date_resolver import DateResolver
+from jarvis.runtime.follow_up import DEFAULT_FOLLOW_UP_PHRASE_REGISTRY
 
 
 DATE_TOKENS = {
@@ -184,12 +185,11 @@ def parse_location(text):
     # Context enrichment may prepend a place ("Osaka How about tomorrow?"),
     # so remove the complete phrase wherever it occurs. Explicit places remain:
     # "How about Busan tomorrow?" -> "Busan".
-    follow_up_prefixes = "|".join(ENGLISH_FOLLOW_UP_PREFIXES)
-    cleaned = re.sub(
-        rf"\b(?:{follow_up_prefixes})\b",
-        " ",
-        cleaned,
-        flags=re.IGNORECASE,
+    cleaned = DEFAULT_FOLLOW_UP_PHRASE_REGISTRY.strip_discourse_markers(
+        cleaned
+    )
+    cleaned = DEFAULT_FOLLOW_UP_PHRASE_REGISTRY.strip_temporal_references(
+        cleaned
     )
     cleaned = re.sub(
         r"(?<!\d)\d{1,2}\s*(?:\uc6d4|month)\s*\d{1,2}\s*(?:\uc77c|day)?",
@@ -207,7 +207,7 @@ def parse_location(text):
         else:
             cleaned = cleaned.replace(token, " ")
 
-    cleaned = re.sub(r"[?!.,]", " ", cleaned)
+    cleaned = re.sub(r"[?!.,？！，。]", " ", cleaned)
     cleaned = " ".join(cleaned.split())
     cleaned = re.sub(
         r"(?:^|\s)(?:\uc740|\ub294|\uc774|\uac00|\uc744|\ub97c|\uc758)(?=\s|$)",

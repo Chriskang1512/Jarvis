@@ -13,7 +13,11 @@ from jarvis.runtime import (
 )
 from jarvis.runtime.language import detect_language
 from jarvis.voice.pipeline import VoicePipeline
-from voice_main import get_stt_openai_language
+from voice_main import (
+    get_stt_openai_language,
+    is_native_execution_enabled,
+    is_native_reliability_enabled,
+)
 
 
 class RecordingChat:
@@ -148,6 +152,64 @@ class TestLanguagePipeline(unittest.TestCase):
             return_value="",
         ):
             self.assertEqual(get_stt_openai_language(config), "ja")
+
+    def test_native_execution_flag_reads_project_env_fallback(self):
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "voice_main.read_env_file_value",
+            return_value="true",
+        ):
+            self.assertTrue(is_native_execution_enabled())
+
+    def test_native_execution_process_env_takes_precedence(self):
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_NATIVE_EXECUTION_ENABLED": "false"},
+            clear=True,
+        ), patch(
+            "voice_main.read_env_file_value",
+            return_value="true",
+        ):
+            self.assertFalse(is_native_execution_enabled())
+
+    def test_native_reliability_flags_have_safe_defaults_and_overrides(self):
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "voice_main.read_env_file_value",
+            return_value="",
+        ):
+            self.assertTrue(
+                is_native_reliability_enabled(
+                    "JARVIS_NATIVE_VERIFICATION_ENABLED", default=True
+                )
+            )
+            self.assertFalse(
+                is_native_reliability_enabled(
+                    "JARVIS_NATIVE_RETRY_ENABLED", default=False
+                )
+            )
+        with patch.dict(
+            "os.environ",
+            {
+                "JARVIS_NATIVE_VERIFICATION_ENABLED": "false",
+                "JARVIS_NATIVE_RETRY_ENABLED": "true",
+                "JARVIS_NATIVE_REPLAN_ENABLED": "true",
+            },
+            clear=True,
+        ):
+            self.assertFalse(
+                is_native_reliability_enabled(
+                    "JARVIS_NATIVE_VERIFICATION_ENABLED", default=True
+                )
+            )
+            self.assertTrue(
+                is_native_reliability_enabled(
+                    "JARVIS_NATIVE_RETRY_ENABLED", default=False
+                )
+            )
+            self.assertTrue(
+                is_native_reliability_enabled(
+                    "JARVIS_NATIVE_REPLAN_ENABLED", default=False
+                )
+            )
 
     def test_detects_korean_japanese_and_english(self):
         self.assertEqual(detect_language("내일 날씨 알려줘")[0], "ko")

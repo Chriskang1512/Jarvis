@@ -557,7 +557,38 @@ def trace_plan(plan):
 def is_unsupported_conditional(text):
     """Return whether text asks for unsupported conditional execution."""
     normalized = normalize_clause(text)
-    return "면" in normalized and ("비" in normalized or "오면" in normalized) and contains_reminder_command(normalized)
+    has_condition = "면" in normalized or "경우" in normalized
+    has_weather_predicate = any(
+        token in normalized for token in ["비", "날씨", "강수"]
+    )
+    has_dependent_action = contains_reminder_command(
+        normalized
+    ) or contains_external_mutation_command(normalized)
+    return has_condition and has_weather_predicate and has_dependent_action
+
+
+def contains_external_mutation_command(text):
+    """Return whether a conditional branch would mutate external state."""
+    normalized = str(text or "")
+    return any(
+        token in normalized
+        for token in [
+            "등록",
+            "추가",
+            "변경",
+            "바꿔",
+            "늦춰",
+            "당겨",
+            "삭제",
+            "지워",
+            "취소",
+            "보내",
+            "전송",
+            "답장",
+            "메일",
+            "이메일",
+        ]
+    )
 
 
 def is_unsupported_second_reminder(text):

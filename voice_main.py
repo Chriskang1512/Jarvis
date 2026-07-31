@@ -5,6 +5,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from jarvis.chat import ChatService, ProviderFactory, PromptBuilder, create_default_prompt_profile
+from jarvis.capability_planning import (
+    CapabilityRegistryAdapter,
+    HybridPlanner,
+    NativePlanningCoordinator,
+)
 from jarvis.brain import IntentRuntime
 from jarvis.config import ConfigurationLoader
 from jarvis.abilities.native.weather.provider import read_env_value
@@ -13,6 +18,7 @@ from jarvis.debug_trace import is_debug_trace_enabled, read_env_file_value
 from jarvis.debug_trace import subscribe_trace, trace_event, unsubscribe_trace
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
 from jarvis.core.events import InMemoryEventBus
+from jarvis.graph_execution import CapabilityExecutionAdapter, GraphExecutor
 from jarvis.memory import (
     MemoryManager,
     MemoryService,
@@ -107,6 +113,34 @@ def main():
         memory_service=memory_service,
         config=config,
     )
+    native_execution_enabled = is_native_execution_enabled()
+    capability_snapshot = CapabilityRegistryAdapter().create_snapshot(
+        tool_registry.ability_registry,
+        environment_constraints={
+            "conversationId": voice_session.session_id,
+            "nativeExecutionEnabled": native_execution_enabled,
+        },
+    )
+    graph_executor = GraphExecutor(
+        CapabilityExecutionAdapter(tool_registry.ability_registry),
+        event_bus=event_bus,
+        verification_enabled=is_native_reliability_enabled(
+            "JARVIS_NATIVE_VERIFICATION_ENABLED", default=True
+        ),
+        retry_enabled=is_native_reliability_enabled(
+            "JARVIS_NATIVE_RETRY_ENABLED", default=False
+        ),
+        replan_enabled=is_native_reliability_enabled(
+            "JARVIS_NATIVE_REPLAN_ENABLED", default=False
+        ),
+    )
+    native_planning_coordinator = NativePlanningCoordinator(
+        capability_snapshot,
+        planner=HybridPlanner(),
+        user_preferences={"location": config.weather.default_location},
+        native_execution_enabled=native_execution_enabled,
+        graph_executor=graph_executor,
+    )
     tool_dispatcher = RuntimeToolDispatcher(
         registry=tool_registry,
         diagnostics_collector=diagnostics_collector,
@@ -136,6 +170,7 @@ def main():
         diagnostics_collector=diagnostics_collector,
         voice_session=voice_session,
         intent_runtime=intent_runtime,
+        native_planning_coordinator=native_planning_coordinator,
         runtime_console=create_runtime_console(config),
         follow_up_timeout=config.conversation.follow_up_timeout,
     )
@@ -303,6 +338,19 @@ def print_runtime_banner(config):
     print(f"Keep TTS Audio   : {on_off(should_keep_tts_audio())}")
     print(f"Playback Backend : {read_playback_backend_name() or 'auto'}")
     print(f"AI Intent Parser : {on_off(is_ai_intent_enabled(config))}")
+    print(f"Native Execution : {on_off(is_native_execution_enabled())}")
+    print(
+        "Native Verification : "
+        f"{on_off(is_native_reliability_enabled('JARVIS_NATIVE_VERIFICATION_ENABLED', default=True))}"
+    )
+    print(
+        "Native Retry : "
+        f"{on_off(is_native_reliability_enabled('JARVIS_NATIVE_RETRY_ENABLED', default=False))}"
+    )
+    print(
+        "Native Replan : "
+        f"{on_off(is_native_reliability_enabled('JARVIS_NATIVE_REPLAN_ENABLED', default=False))}"
+    )
     print(f"AI Intent Force  : {on_off(is_ai_intent_force_enabled())}")
     print(f"AI Intent MaxTok : {get_ai_intent_max_output_tokens(config)}")
     print("====================================")
@@ -365,6 +413,24 @@ class IntentProviderConfig:
     provider: str
     model: str
     temperature: float = 0.0
+
+
+def is_native_execution_enabled():
+    """Read the Native Graph feature flag from process env or project .env."""
+    value = os.environ.get("JARVIS_NATIVE_EXECUTION_ENABLED", "")
+    if value == "":
+        value = read_env_file_value("JARVIS_NATIVE_EXECUTION_ENABLED") or ""
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_native_reliability_enabled(name, *, default):
+    """Read a native reliability feature flag from env or project .env."""
+    value = os.environ.get(name, "")
+    if value == "":
+        value = read_env_file_value(name) or ""
+    if value == "":
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def is_ai_intent_enabled(config):

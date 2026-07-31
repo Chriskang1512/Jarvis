@@ -646,17 +646,18 @@ def format_trace_event(event, payload):
 
     if event == "intent.rule":
         return (
-            "[Intent] rule "
-            f"matched={yes_no(payload.get('matched'))} "
+            "[Intent Parser] "
+            f"parser_source=rule "
+            f"intent_match={str(bool(payload.get('matched'))).lower()} "
             f"confidence={payload.get('confidence')}"
         )
 
     if event == "intent.ai.requested":
-        return f"[Intent] ai requested model={payload.get('model') or '-'}"
+        return f"[Intent Parser] ai requested model={payload.get('model') or '-'}"
 
     if event == "intent.ai.parsed":
         return (
-            "[Intent] ai parsed "
+            "[Intent Parser] ai parsed "
             f"ability={payload.get('ability') or '-'} "
             f"action={payload.get('action') or '-'} "
             f"confidence={payload.get('confidence')}"
@@ -664,7 +665,7 @@ def format_trace_event(event, payload):
 
     if event == "intent.ai.failed":
         return (
-            "[Intent] ai failed "
+            "[Intent Parser] ai failed "
             f"latency={payload.get('latency_ms', 0)}ms "
             f"finish_reason={payload.get('finish_reason') or '-'} "
             f"error={truncate(str(payload.get('error') or '-'), 160)}"
@@ -672,7 +673,7 @@ def format_trace_event(event, payload):
 
     if event == "intent.api_error":
         return (
-            "[Intent] api_error "
+            "[Intent Parser] api_error "
             f"status={payload.get('status') or '-'} "
             f"error_type={payload.get('error_type') or '-'} "
             f"error_code={payload.get('error_code') or '-'} "
@@ -684,7 +685,7 @@ def format_trace_event(event, payload):
     if event == "intent.compatibility_retry":
         removed = payload.get("removed") or []
         return (
-            "[Intent] compatibility_retry "
+            "[Intent Parser] compatibility_retry "
             f"model={payload.get('model') or '-'} "
             f"attempt={payload.get('attempt') or '-'} "
             f"removed=[{', '.join(removed)}] "
@@ -692,14 +693,17 @@ def format_trace_event(event, payload):
         )
 
     if event == "intent.validation":
-        return f"[Intent] validation success={yes_no(payload.get('success'))}"
+        return f"[Intent Parser] validation success={yes_no(payload.get('success'))}"
 
     if event == "intent.selected":
-        return f"[Intent] selected source={payload.get('source') or '-'}"
+        return (
+            "[Intent Parser] "
+            f"parser_source={payload.get('source') or '-'}"
+        )
 
     if event == "intent.metrics":
         return (
-            "[Intent] metrics "
+            "[Intent Parser] metrics "
             f"latency={payload.get('latency_ms', 0)}ms "
             f"input_tokens={payload.get('input_tokens', 0)} "
             f"output_tokens={payload.get('output_tokens', 0)} "
@@ -711,13 +715,35 @@ def format_trace_event(event, payload):
 
     if event == "intent.stats":
         return (
-            "[Intent] stats "
+            "[Intent Parser] stats "
             f"total={payload.get('total', 0)} "
             f"rule={payload.get('rule_hit_rate', 0)}% "
             f"ai={payload.get('ai_hit_rate', 0)}% "
             f"fallback={payload.get('fallback_rate', 0)}% "
             f"clarification={payload.get('clarification_rate', 0)}% "
             f"avg_confidence={payload.get('average_confidence', 0):.2f}"
+        )
+
+    if event == "runtime.goal_router.routed":
+        return (
+            "[Goal Router] "
+            f"request_route={payload.get('request_route') or '-'} "
+            f"reasons={','.join(payload.get('routing_reasons') or []) or '-'}"
+        )
+
+    if event == "runtime.native_planner.completed":
+        selected = payload.get("selected_capabilities") or []
+        missing = payload.get("missing_inputs") or []
+        return (
+            "[TaskGraph Planner] "
+            f"planner_type={payload.get('planner_type') or '-'} "
+            f"planner_status={payload.get('planner_status') or '-'} "
+            f"graph_id={payload.get('graph_id') or '-'} "
+            f"snapshot_id={payload.get('execution_plan_snapshot_id') or '-'} "
+            f"nodes={payload.get('graph_node_count', 0)} "
+            f"validation={payload.get('validation_status') or '-'} "
+            f"capabilities=[{', '.join(selected)}] "
+            f"missing_inputs=[{', '.join(missing)}]"
         )
 
     if event == "integration.request":
@@ -1043,11 +1069,13 @@ def format_trace_event(event, payload):
         return f"[Confirm] execute action={payload.get('pending_action')}"
 
     if event == "voice.intent.handled":
-        return (
+        line = (
             "[Voice] route "
             f"ability={payload.get('routed_ability')} "
             f"success={yes_no(payload.get('ability_result_success'))}"
         )
+        status = str(payload.get("result_status", "") or "")
+        return f"{line} status={status}" if status else line
 
     if event == "voice.tts.final_text":
         text = str(payload.get("final_tts_text", ""))

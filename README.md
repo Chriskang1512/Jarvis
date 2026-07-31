@@ -1,5 +1,140 @@
 # Jarvis
 
+## v1.4 Goal-oriented pipeline
+
+Jarvis now has an additive goal-normalization foundation:
+
+`Natural Language -> SemanticContext -> GoalSpecification -> Request Router`
+
+Simple requests remain on Direct Execution. Compound, conditional, or
+result-dependent requests are marked for Goal-oriented Execution. Semantic
+slots and entities retain confidence and provenance, conversation context is
+merged with deterministic precedence, and previous results can carry
+`ArtifactRef` values into follow-up requests. Native TaskGraph execution is
+intentionally deferred to the next sprint.
+
+Sprint 2 adds the immutable Native TaskGraph plan contract:
+
+`GoalSpecification -> NativeTaskGraph -> Validate -> Serialize -> Restore`
+
+The plan model supports typed nodes, edges, bindings, graph outputs, retry,
+verification, failure, permission, and execution policies. `TaskEdge` is the
+dependency source of truth. Validation detects broken references, cycles,
+unreachable nodes, missing inputs, output-key errors, and basic type mismatch.
+The graph contains no running state; a future `GraphExecutionSession` will own
+attempts, results, errors, permission waits, and checkpoints. Existing Direct
+Execution and the runtime TaskGraph remain unchanged.
+
+Sprint 3 adds capability-aware planning:
+
+`GoalSpecification + CapabilityRegistrySnapshot`
+` -> Rule/AI HybridPlanner -> NativeTaskGraph -> Validation -> PlannerResult`
+` -> ExecutionPlanSnapshot -> GraphExecutor (Sprint 4)`
+
+Existing Ability operations are projected into immutable, provider-neutral
+Capability Descriptors. RulePlanner provides deterministic baseline graphs for
+weather, calendar summary, contact lookup, calendar creation, conditional
+reminders, and weather-gated calendar update plus mail workflows. AI planning
+accepts structured NativeTaskGraph JSON only. Registry
+membership, input/output schema, permission integrity, success criteria, and
+node limits are checked before a result can become `Planned`; missing core
+inputs return `NeedsUserInput`, and bounded repair failure returns no graph.
+The Voice runtime routes compound, conditional, and result-dependent goals
+through NativePlanningCoordinator before the legacy planner. It records route,
+planner and snapshot identity, registry hash, selected capabilities, graph
+identity and size, validation status, and the Native execution feature state.
+Because Native execution is disabled in Sprint 3, a valid graph is reported but
+never dispatched. Single supported requests retain existing Direct Execution.
+
+Before a planned graph crosses the future executor boundary, Jarvis creates an
+immutable `ExecutionPlanSnapshot`. It contains `GraphHash`, `PlannerMetadata`,
+`PlanningConfidence`, `SnapshotId`, `ValidationHash`, and `CreatedAt`.
+PlanningConfidence is top-level so execution policy can require confirmation
+for low-confidence plans. The graph is revalidated at snapshot creation, and
+canonical hashes make the exact accepted plan and validation result auditable
+and replay-identifiable without mixing execution state into `NativeTaskGraph`.
+
+Sprint 4's executor boundary is fail-closed:
+
+`ExecutionPlanSnapshot -> SnapshotVerifier -> GraphExecutor`
+
+SnapshotVerifier checks GraphHash, ValidationHash, required PlannerMetadata,
+supported snapshot contract version, and graph schema version. An execution
+session must not be created when any check fails. Sprint 4 will emit
+`runtime.execution.snapshot_verified` after successful verification and before
+session creation, completing the audit chain from planning through node
+execution. Verification failure emits a sanitized failure event and never
+creates a session.
+
+Sprint 4 implements the sequential Native Graph runtime:
+
+`Verified Snapshot -> GraphExecutionSession -> Ready/Running/Succeeded`
+` -> Typed OutputStore -> Next Node -> Session Completed`
+
+Session state is separate from the immutable graph and carries the exact
+SnapshotId through events and checkpoints. NodeOutput bindings pass structured
+values to downstream nodes. ConfirmRequired nodes pause after input resolution
+and resume the same session after approval. Condition nodes select explicit
+true/false edges, Transform and Result nodes run deterministically, and every
+transition is appended to GraphExecutionTimeline. Native execution is guarded
+by `JARVIS_NATIVE_EXECUTION_ENABLED` and remains off by default.
+The Voice runtime reads this flag from either the process environment or the
+project `.env` file and prints `Native Execution: ON/OFF` in the startup
+banner, so a stale disabled runtime is immediately visible.
+
+Every terminal execution also creates an immutable `ExecutionSummary`.
+SessionId and SnapshotId preserve lineage; node outcome lists, duration,
+permission wait time, provider-call count, artifact descriptors, and a
+canonical ResultHash support metrics, Dashboard views, replay comparison, and
+failure analysis. The same summary is stored in the terminal checkpoint and
+published with `runtime.execution.session_completed`.
+
+Sprint 5 adds reliable execution:
+
+`Capability Result -> Node Verification -> Retry/Replan Decision`
+` -> Goal Verification -> ExecutionSummary`
+
+Schema, semantic, and external read-back verification run before outputs become
+trusted downstream inputs. Retryable provider failures use bounded
+fixed/linear/exponential backoff, stable per-node idempotency keys, optional
+jitter, AttemptHistory, and checkpointed waiting state. External mutations do
+not automatically switch providers. Interrupted safe reads may retry after
+restart, while interrupted mutations require read-back before Jarvis will
+consider replaying them. Not-found, multiple-candidate, and semantic-assumption
+failures produce structured partial-replan triggers that preserve completed
+nodes, reusable output hashes/values, GoalExecutionId, and previous SessionIds.
+
+Reliability rollout is independently guarded by
+`JARVIS_NATIVE_VERIFICATION_ENABLED` (default true),
+`JARVIS_NATIVE_RETRY_ENABLED` (default false), and
+`JARVIS_NATIVE_REPLAN_ENABLED` (default false). ExecutionSummary records the
+final outcome, retry/replan counts, verification failures, final GraphId,
+session lineage, recovery path, and Goal verification status.
+
+The shared language layer now exposes a multilingual
+`FollowUpPhraseRegistry`. Korean, English, and Japanese discourse markers,
+relative dates, and weekday-only questions are classified once and reused by
+SemanticContext and Weather follow-up enrichment. DateResolver normalizes
+weekday and next-week expressions, while terse-shape checks prevent ordinary
+sentences containing words such as `and` or `tomorrow` from being mistaken for
+follow-ups.
+
+Voice follow-up filtering is state-first. `FOLLOW_UP_CLARIFICATION` and
+`FOLLOW_UP_PERMISSION` consume the next non-empty STT result before any
+short-noise heuristic; `FOLLOW_UP_WAIT` alone may apply the noise filter, and
+cleared or closed sessions return to `FOLLOW_UP_IDLE`. Consequently terse
+answers such as `4시`, `네`, `응`, `그래`, and `오후` cannot be discarded while
+Planner input or execution permission is pending.
+
+Sprint 3 final hardening freezes nested graph metadata and binding values,
+projects frozen values only at serialization boundaries, and requires
+validation repairs to retain GraphId while incrementing Version exactly once.
+Every planned graph receives trusted snapshot, registry, planner, and policy
+version metadata. Condition nodes expose boolean result, matched branch,
+structured evidence and comparison values, with explicit true and false Result
+branches. Planner diagnostics retain only fingerprints, entity types and
+operational identifiers after structured sensitive-data sanitization.
+
 ## Jarvis v1.3 Sprint 21 — Dashboard & Observability
 
 Sprint 21 adds a local window into the Jarvis runtime. Run `python main.py`,
@@ -2665,3 +2800,27 @@ Jarvis는 아래 흐름으로 개발합니다.
 ```
 
 자세한 개발 흐름은 `DEVELOPMENT_WORKFLOW.md`를 참고합니다.
+### Sprint 5 Voice Partial Replan 실측
+
+Google 계정이나 실제 일정을 변경하지 않는 안전한 실측:
+
+```powershell
+.\Run_Sprint5_Voice_Replan_Smoke.bat
+```
+
+권장 입력:
+
+1. `내일 오후 3시에 아야 만나는 일정 등록해줘`
+2. `2번`
+3. `네`
+
+자동 실행은 다음 명령을 사용한다.
+
+```powershell
+python scripts\sprint5_voice_replan_smoke.py --auto
+```
+
+마지막 JSON의 `passed`와 모든 `checks`가 `true`이면 성공이다.
+이 실측은 가상 연락처 2개와 가상 Calendar Provider를 사용하지만,
+Goal Parser, Native Planner, Snapshot, Voice Follow-up, Partial Replan,
+Permission Gate, GraphExecutor는 실제 Runtime 구현을 사용한다.

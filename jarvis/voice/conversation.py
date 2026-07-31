@@ -13,6 +13,10 @@ CONVERSATION_THINKING = "THINKING"
 CONVERSATION_SPEAKING = "SPEAKING"
 CONVERSATION_FOLLOW_UP = "FOLLOW_UP"
 CONVERSATION_CLOSED = "CLOSED"
+FOLLOW_UP_IDLE = "FOLLOW_UP_IDLE"
+FOLLOW_UP_WAIT = "FOLLOW_UP_WAIT"
+FOLLOW_UP_CLARIFICATION = "FOLLOW_UP_CLARIFICATION"
+FOLLOW_UP_PERMISSION = "FOLLOW_UP_PERMISSION"
 DEFAULT_LAST_MEMORY_RESULT_TURNS = 2
 DEFAULT_PENDING_ACTION_TURNS = 2
 DEFAULT_PENDING_ACTION_SECONDS = 120.0
@@ -31,6 +35,7 @@ class ConversationSession:
     follow_up_timeout: float = 0.0
     last_activity_time: float = 0.0
     runtime_task: RuntimeTask | None = None
+    follow_up_state: str = FOLLOW_UP_IDLE
     resolver: ConversationResolver = field(default_factory=ConversationResolver, repr=False)
 
     def start(self):
@@ -45,10 +50,22 @@ class ConversationSession:
 
     def enter_follow_up(self):
         """Move to follow-up listening state."""
+        pending = self.get_pending_clarification()
+        if pending is not None:
+            self.follow_up_state = (
+                FOLLOW_UP_PERMISSION
+                if pending.get("kind") == "native_graph_permission"
+                else FOLLOW_UP_CLARIFICATION
+            )
+        elif self.get_pending_action() is not None:
+            self.follow_up_state = FOLLOW_UP_PERMISSION
+        else:
+            self.follow_up_state = FOLLOW_UP_WAIT
         self.transition(CONVERSATION_FOLLOW_UP)
 
     def close(self, preserve_context=False):
         """Close the conversation session."""
+        self.follow_up_state = FOLLOW_UP_IDLE
         if preserve_context:
             self.transition(CONVERSATION_CLOSED)
             return
@@ -182,6 +199,7 @@ class ConversationSession:
             payload=dict(pending_action),
         )
         self.runtime_task = self.resolver.set_confirmation(task, "PENDING")
+        self.follow_up_state = FOLLOW_UP_PERMISSION
 
     def get_pending_action(self):
         """Return pending action if it has not expired."""
@@ -204,6 +222,7 @@ class ConversationSession:
         if question is not None and question.kind == "confirmation":
             task = self.resolver.clear_question(task)
         self.runtime_task = self.resolver.set_confirmation(task, "")
+        self.follow_up_state = FOLLOW_UP_IDLE
 
     def answer_pending_action(self, answer):
         """Resolve the Runtime-owned confirmation question."""
@@ -240,6 +259,12 @@ class ConversationSession:
             turns=turns,
             seconds=seconds,
         )
+        self.follow_up_state = (
+            FOLLOW_UP_PERMISSION
+            if pending_clarification.get("kind")
+            == "native_graph_permission"
+            else FOLLOW_UP_CLARIFICATION
+        )
 
     def get_pending_clarification(self):
         """Return pending clarification if it has not expired."""
@@ -261,6 +286,7 @@ class ConversationSession:
         question = self.resolver.get_question(task)
         if question is not None and question.kind != "confirmation":
             self.runtime_task = self.resolver.clear_question(task)
+        self.follow_up_state = FOLLOW_UP_IDLE
 
     def answer_pending_clarification(self, answer):
         """Resolve the Runtime-owned clarification question."""
@@ -403,6 +429,7 @@ class ConversationSession:
             "started_at": self.started_at,
             "last_activity": self.last_activity,
             "state": self.state,
+            "follow_up_state": self.follow_up_state,
             "follow_up_timeout": self.follow_up_timeout,
             "remaining": self.remaining_follow_up_seconds(),
             "last_memory_result": self.last_memory_result,

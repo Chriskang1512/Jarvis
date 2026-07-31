@@ -22,6 +22,11 @@ from jarvis.runtime.tool_dispatcher import RuntimeToolDispatcher
 from jarvis.tools import ToolDispatcher, ToolRegistry
 from jarvis.voice import CONVERSATION_CLOSED, CONVERSATION_FOLLOW_UP
 from jarvis.voice import create_conversation_session
+from jarvis.voice import (
+    FOLLOW_UP_CLARIFICATION,
+    FOLLOW_UP_IDLE,
+    FOLLOW_UP_PERMISSION,
+)
 from jarvis.voice.conversation import DEFAULT_LAST_MEMORY_RESULT_TURNS
 from jarvis.runtime.conversation_task import confirmation_decision as calendar_confirmation_decision
 from jarvis.runtime.conversation_task import (
@@ -798,6 +803,122 @@ class TestFollowUpConversationMode(unittest.TestCase):
             pending["raw_text"],
             "내일 오후 세시 일정을 메일로 보내줘",
         )
+
+    def test_runtime_required_follow_up_state_precedes_noise_filter(self):
+        conversation = create_conversation_session(
+            follow_up_timeout=30
+        )
+        pipeline = VoicePipeline(
+            None,
+            None,
+            None,
+            None,
+            conversation_session=conversation,
+        )
+        conversation.set_pending_clarification(
+            {
+                "kind": "native_goal_missing_input",
+                "fields": ("time",),
+                "question": "몇 시인가요?",
+            }
+        )
+
+        self.assertEqual(
+            FOLLOW_UP_CLARIFICATION,
+            conversation.follow_up_state,
+        )
+        self.assertTrue(pipeline.is_required_follow_up_input())
+        for answer in ("4시", "네", "응", "그래", "오후"):
+            with self.subTest(answer=answer):
+                self.assertFalse(
+                    pipeline.should_skip_unprompted_follow_up(answer)
+                )
+
+        conversation.clear_pending_clarification()
+        self.assertEqual(FOLLOW_UP_IDLE, conversation.follow_up_state)
+
+    def test_native_permission_uses_permission_follow_up_state(self):
+        conversation = create_conversation_session(
+            follow_up_timeout=30
+        )
+        conversation.set_pending_clarification(
+            {
+                "kind": "native_graph_permission",
+                "question": "진행할까요?",
+            }
+        )
+
+        self.assertEqual(
+            FOLLOW_UP_PERMISSION,
+            conversation.follow_up_state,
+        )
+
+    def test_native_goal_missing_input_clarification_is_preserved(self):
+        runtime_result = SimpleNamespace(
+            pending_clarification={
+                "kind": "native_goal_missing_input",
+                "fields": ("time",),
+                "raw_text": "내일 비가 오면 일정을 변경해줘",
+                "question": "시간이 필요합니다.",
+            }
+        )
+
+        pending = extract_pending_clarification(
+            runtime_result,
+            "내일 비가 오면 일정을 변경해줘",
+        )
+
+        self.assertEqual("native_goal_missing_input", pending["kind"])
+        self.assertEqual(("time",), pending["fields"])
+
+    def test_native_graph_permission_resumes_saved_session(self):
+        calls = []
+        completed = SimpleNamespace(
+            requires_permission=False,
+            error="",
+            graph_outputs={"primary": "완료"},
+            session=SimpleNamespace(),
+        )
+        executor = SimpleNamespace(
+            execute=lambda *args, **kwargs: calls.append(
+                (args, kwargs)
+            )
+            or completed
+        )
+        conversation = create_conversation_session(
+            follow_up_timeout=30
+        )
+        conversation.set_pending_clarification(
+            {
+                "kind": "native_graph_permission",
+                "graph": "graph",
+                "snapshot": "snapshot",
+                "validation_report": "report",
+                "session": "session",
+                "pending_node_ids": ("calendar-update",),
+                "question": "진행할까요?",
+            }
+        )
+        pipeline = VoicePipeline(
+            None,
+            None,
+            None,
+            None,
+            conversation_session=conversation,
+            native_planning_coordinator=SimpleNamespace(
+                graph_executor=executor
+            ),
+        )
+
+        reply = pipeline.try_pending_clarification_reply("네")
+
+        self.assertEqual("완료", reply)
+        self.assertEqual(1, len(calls))
+        self.assertEqual(
+            ("calendar-update",),
+            calls[0][1]["confirmed_node_ids"],
+        )
+        self.assertIsNone(conversation.get_pending_clarification())
 
     def test_calendar_mail_recipient_reply_is_normalized(self):
         from jarvis.voice.pipeline import normalize_mail_recipient_answer

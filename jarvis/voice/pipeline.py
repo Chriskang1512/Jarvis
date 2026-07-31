@@ -16,6 +16,9 @@ from jarvis.runtime.language import (
     detect_language,
     response_language_instruction,
 )
+from jarvis.runtime.follow_up import (
+    DEFAULT_FOLLOW_UP_PHRASE_REGISTRY,
+)
 from jarvis.runtime.task import RuntimeTask, TaskState, TaskStateMachine, TaskStepRecord, TransitionSource
 from jarvis.runtime.conversation_task import (
     CALENDAR_TASK_ACTIVE,
@@ -37,7 +40,12 @@ from jarvis.runtime.conversation_task import (
     update_calendar_conversation_task,
 )
 from jarvis.tools import ToolRequest
-from jarvis.voice.conversation import CONVERSATION_FOLLOW_UP, CONVERSATION_IDLE
+from jarvis.voice.conversation import (
+    CONVERSATION_FOLLOW_UP,
+    CONVERSATION_IDLE,
+    FOLLOW_UP_CLARIFICATION,
+    FOLLOW_UP_PERMISSION,
+)
 from jarvis.voice.conversation import CONVERSATION_LISTENING, CONVERSATION_SPEAKING
 from jarvis.voice.conversation import CONVERSATION_THINKING, create_conversation_session
 from jarvis.voice.semantic import SemanticTranscriptContext, SemanticTranscriptNormalizer
@@ -66,6 +74,7 @@ class VoicePipeline:
         semantic_normalizer=None,
         input_manager=None,
         language_resolver=None,
+        native_planning_coordinator=None,
     ):
         """Create a voice pipeline with replaceable modules."""
         self.wake_listener = wake_listener
@@ -84,6 +93,7 @@ class VoicePipeline:
         self.last_input_envelope = None
         self.last_wake_event = None
         self.language_resolver = language_resolver or LanguageResolver()
+        self.native_planning_coordinator = native_planning_coordinator
         self.language_context = None
         self.active_runtime_turn = None
         self.skip_follow_up_for_turn = False
@@ -295,6 +305,7 @@ class VoicePipeline:
                 "voice.intent.handled",
                 routed_ability=getattr(intent_result, "tool", ""),
                 ability_result_success=getattr(intent_result, "success", False),
+                result_status=getattr(intent_result, "status", ""),
             )
             self.publish_pipeline(llm="skipped", current_stage="tts")
         elif reply is None:
@@ -378,6 +389,7 @@ class VoicePipeline:
             )
             follow_up_text = str(self.last_input_envelope.content or "")
             follow_up_text = self.normalize_weather_follow_up_stt(follow_up_text)
+            required_follow_up = self.is_required_follow_up_input()
 
             if should_skip_voice_message(follow_up_text):
                 if self.has_calendar_conversation_task():
@@ -398,7 +410,18 @@ class VoicePipeline:
                 self.close_conversation_session()
                 return
 
-            if self.should_skip_unprompted_follow_up(follow_up_text):
+            if required_follow_up:
+                trace_event(
+                    "voice.follow_up.accepted",
+                    reason="runtime_state_requires_input",
+                    follow_up_state=getattr(
+                        self.conversation_session,
+                        "follow_up_state",
+                        "",
+                    ),
+                    content_length=len(follow_up_text),
+                )
+            elif self.should_skip_unprompted_follow_up(follow_up_text):
                 trace_event("voice.follow_up.skipped", reason="unprompted_short_noise", text=str(follow_up_text or ""))
                 self.close_conversation_session()
                 return
@@ -539,6 +562,7 @@ class VoicePipeline:
                 "voice.intent.handled",
                 routed_ability=getattr(intent_result, "tool", ""),
                 ability_result_success=getattr(intent_result, "success", False),
+                result_status=getattr(intent_result, "status", ""),
             )
             self.publish_pipeline(llm="skipped", current_stage="tts")
         elif reply is None:
@@ -754,6 +778,9 @@ class VoicePipeline:
 
         self.set_session_stage("intent")
         self.publish_pipeline(llm="intent", current_stage="intent")
+        native_result = self.try_native_goal_planning(user_message)
+        if native_result is not None:
+            return native_result
         dispatcher = getattr(self.intent_runtime, "tool_dispatcher", None)
 
         if dispatcher is not None and hasattr(dispatcher, "create_plan"):
@@ -770,7 +797,7 @@ class VoicePipeline:
             if getattr(plan, "unsupported_reason", "") == "unsupported_conditional":
                 return RuntimeResult(
                     handled=True,
-                    response="아직 조건부 알림은 지원하지 않습니다.",
+                    response="아직 조건부 작업은 지원하지 않습니다.",
                     plan=plan,
                     success=False,
                     error="unsupported_conditional",
@@ -790,6 +817,207 @@ class VoicePipeline:
             )
 
         return self.intent_runtime.run(user_message, input_source="voice")
+
+    def try_native_goal_planning(self, user_message):
+        """Plan a goal-oriented request before the legacy execution path."""
+        coordinator = self.native_planning_coordinator
+        if coordinator is None:
+            return None
+        session_id = self.get_session_id()
+        turn_id = str(
+            getattr(self.active_runtime_turn, "turn_id", "") or ""
+        )
+        outcome = coordinator.plan(
+            user_message,
+            conversation_id=session_id,
+            session_id=session_id,
+            turn_id=turn_id,
+        )
+        if outcome is None:
+            return None
+
+        result = outcome.result
+        status = result.status.value
+        if status == "Planned":
+            graph = result.graph
+            capabilities = tuple(
+                node.capability_id
+                for node in getattr(graph, "nodes", ())
+                if node.capability_id
+            )
+            trace_event(
+                "voice.native_plan.ready",
+                request_route=outcome.request_route,
+                planner_status=status,
+                graph_id=getattr(graph, "graph_id", ""),
+                graph_node_count=len(
+                    getattr(graph, "nodes", ()) or ()
+                ),
+                selected_capabilities=list(capabilities),
+                native_execution_enabled=coordinator.native_execution_enabled,
+                execution_plan_snapshot_id=(
+                    outcome.execution_plan_snapshot.snapshot_id
+                    if outcome.execution_plan_snapshot
+                    else ""
+                ),
+                graph_hash=(
+                    outcome.execution_plan_snapshot.graph_hash
+                    if outcome.execution_plan_snapshot
+                    else ""
+                ),
+                validation_hash=(
+                    outcome.execution_plan_snapshot.validation_hash
+                    if outcome.execution_plan_snapshot
+                    else ""
+                ),
+                planning_confidence=(
+                    outcome.execution_plan_snapshot.planning_confidence
+                    if outcome.execution_plan_snapshot
+                    else 0.0
+                ),
+            )
+            execution = outcome.execution_result
+            if execution is not None:
+                if getattr(execution, "requires_replan", False):
+                    trigger = execution.replan_trigger
+                    question = (
+                        "대상이 여러 개입니다. 계속할 대상을 선택해 주세요."
+                        if trigger.user_input_required
+                        else "실행 계획을 복구하지 못했습니다."
+                    )
+                    return RuntimeResult(
+                        handled=True,
+                        tool="native_task_graph",
+                        tool_name="native_task_graph",
+                        response=question,
+                        plan=graph,
+                        success=False,
+                        error="native_replan_required",
+                        status=execution.session.state.value,
+                        fallback_used=False,
+                        graph_id=getattr(graph, "graph_id", ""),
+                        execution_plan_snapshot=outcome.execution_plan_snapshot,
+                        graph_execution_result=execution,
+                        pending_clarification=(
+                            {
+                                "kind": "native_graph_replan",
+                                "graph": graph,
+                                "snapshot": outcome.execution_plan_snapshot,
+                                "session": execution.session,
+                                "trigger": trigger,
+                                "goal": outcome.goal_specification,
+                                "mappings": result.success_criteria_mappings,
+                                "question": question,
+                            }
+                            if trigger.user_input_required
+                            else None
+                        ),
+                    )
+                if execution.requires_permission:
+                    pending_nodes = tuple(
+                        execution.pending_node_ids
+                    )
+                    return RuntimeResult(
+                        handled=True,
+                        tool="native_task_graph",
+                        tool_name="native_task_graph",
+                        response="실행 계획을 검증했습니다. 외부 변경을 계속하려면 사용자 확인이 필요합니다.",
+                        plan=graph,
+                        success=False,
+                        error="native_permission_required",
+                        status="waiting_for_permission",
+                        fallback_used=False,
+                        graph_id=getattr(graph, "graph_id", ""),
+                        execution_plan_snapshot=outcome.execution_plan_snapshot,
+                        graph_execution_result=execution,
+                        pending_clarification={
+                            "kind": "native_graph_permission",
+                            "graph": graph,
+                            "snapshot": outcome.execution_plan_snapshot,
+                            "validation_report": outcome.validation_report,
+                            "session": execution.session,
+                            "goal": outcome.goal_specification,
+                            "mappings": result.success_criteria_mappings,
+                            "binding_context": {
+                                "context_slots": {
+                                    key: item.value
+                                    for key, item in (
+                                        outcome.goal_specification.context.slots.items()
+                                    )
+                                }
+                            },
+                            "pending_node_ids": pending_nodes,
+                            "question": (
+                                "외부 변경을 계속하려면 사용자 확인이 필요합니다."
+                            ),
+                        },
+                    )
+                primary = next(
+                    iter(execution.graph_outputs.values()), ""
+                )
+                return RuntimeResult(
+                    handled=True,
+                    tool="native_task_graph",
+                    tool_name="native_task_graph",
+                    response=str(primary),
+                    plan=graph,
+                    success=not bool(execution.error),
+                    error=execution.error,
+                    status=execution.session.state.value,
+                    fallback_used=False,
+                    graph_id=getattr(graph, "graph_id", ""),
+                    execution_plan_snapshot=outcome.execution_plan_snapshot,
+                    graph_execution_result=execution,
+                )
+            return RuntimeResult(
+                handled=True,
+                tool="native_task_graph",
+                tool_name="native_task_graph",
+                response=(
+                    "조건부 실행 계획을 만들고 검증했습니다. "
+                    "Native Graph 실행은 아직 활성화되지 않아 "
+                    "일정과 메일은 변경하지 않았습니다."
+                ),
+                plan=graph,
+                success=False,
+                error="native_execution_disabled",
+                status="planned_not_executed",
+                fallback_used=False,
+                graph_id=getattr(graph, "graph_id", ""),
+                execution_plan_snapshot=outcome.execution_plan_snapshot,
+            )
+
+        if status == "NeedsUserInput":
+            fields = ", ".join(
+                item.field for item in result.missing_inputs
+            )
+            question = (
+                "실행 계획을 만들려면 다음 정보가 필요합니다: "
+                f"{fields}"
+            )
+            return RuntimeResult(
+                handled=True,
+                response=question,
+                success=False,
+                error="native_plan_needs_user_input",
+                fallback_used=False,
+                pending_clarification={
+                    "kind": "native_goal_missing_input",
+                    "fields": tuple(
+                        item.field for item in result.missing_inputs
+                    ),
+                    "raw_text": str(user_message or ""),
+                    "question": question,
+                },
+            )
+
+        return RuntimeResult(
+            handled=True,
+            response="현재 사용할 수 있는 기능만으로는 안전한 실행 계획을 만들 수 없습니다.",
+            success=False,
+            error=f"native_planner_{status.lower()}",
+            fallback_used=False,
+        )
 
     def enrich_weather_follow_up(self, user_message):
         """Carry the last weather location into terse follow-up questions."""
@@ -812,22 +1040,10 @@ class VoicePipeline:
         )
 
         parsed = WeatherIntentParser().parse(text)
-        has_relative_date = any(
-            token in text.lower()
-            for token in (
-                "\uc624\ub298",
-                "\ub0b4\uc77c",
-                "\ubaa8\ub808",
-                "today",
-                "tomorrow",
-                "day after tomorrow",
-                "\u4eca\u65e5",
-                "\u660e\u65e5",
-                "\u660e\u5f8c\u65e5",
-                "\u3042\u3057\u305f",
-                "\u3042\u3055\u3063\u3066",
-            )
+        follow_up_phrase = (
+            DEFAULT_FOLLOW_UP_PHRASE_REGISTRY.match(text)
         )
+        has_relative_date = follow_up_phrase.has_temporal_reference
         explicit_location = str(parsed.location or "").strip()
         request_is_weather = (
             has_relative_date
@@ -1354,6 +1570,24 @@ class VoicePipeline:
 
         return is_unprompted_short_follow_up_noise(message)
 
+    def is_required_follow_up_input(self):
+        """Return whether Runtime state must consume the next non-empty STT."""
+        session = self.conversation_session
+        if session is None:
+            return False
+        if getattr(session, "follow_up_state", "") in {
+            FOLLOW_UP_CLARIFICATION,
+            FOLLOW_UP_PERMISSION,
+        }:
+            return True
+        pending = session.get_pending_clarification()
+        if pending is not None and pending.get("kind") in {
+            "native_goal_missing_input",
+            "native_graph_permission",
+        }:
+            return True
+        return session.get_pending_action() is not None
+
     def configure_stt_prompt_context(self, confirmation=False):
         """Pass short runtime context to STT providers that support it."""
         if not hasattr(self.stt_provider, "set_prompt_context"):
@@ -1500,6 +1734,188 @@ class VoicePipeline:
             self.remember_pending_action(result)
             self.remember_mail_context(result)
             return result.response
+
+        if pending.get("kind", "") == "native_goal_missing_input":
+            answer = str(user_message or "").strip()
+            if rejection_decision(answer) == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "취소했습니다."
+            original_text = str(pending.get("raw_text", "") or "").strip()
+            self.conversation_session.clear_pending_clarification()
+            result = self.try_intent_runtime(
+                f"{original_text} {answer}".strip()
+            )
+            if result is None or not getattr(result, "handled", False):
+                return "추가 정보를 실행 계획에 반영하지 못했습니다."
+            self.remember_pending_clarification(result, original_text)
+            self.remember_runtime_task(result)
+            self.remember_pending_action(result)
+            return result.response
+
+        if pending.get("kind", "") == "native_graph_replan":
+            answer = str(user_message or "").strip()
+            if rejection_decision(answer) == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "실행을 취소했습니다."
+            coordinator = self.native_planning_coordinator
+            executor = getattr(coordinator, "graph_executor", None)
+            if executor is None:
+                self.conversation_session.clear_pending_clarification()
+                return "Native Graph 실행기를 찾지 못했습니다."
+            from jarvis.graph_execution import ReplanController
+
+            controller = ReplanController(
+                coordinator.planner,
+                validator=coordinator.execution_snapshot_factory.validator,
+                snapshot_factory=coordinator.execution_snapshot_factory,
+                event_bus=getattr(executor, "event_bus", None),
+            )
+            decision = controller.build_request(
+                goal=pending["goal"],
+                graph=pending["graph"],
+                snapshot=pending["snapshot"],
+                session=pending["session"],
+                trigger=pending["trigger"],
+                capability_snapshot=coordinator.capability_snapshot,
+                conversation_context=pending["goal"].context,
+                correlation_id=self.get_session_id(),
+                user_supplied_clarification=answer,
+            )
+            replanned = controller.replan(decision)
+            if not replanned.succeeded:
+                self.conversation_session.advance_pending_clarification_turn()
+                return "선택 내용을 반영한 실행 계획을 만들지 못했습니다."
+            binding_context = {
+                "context_slots": {
+                    key: item.value
+                    for key, item in pending["goal"].context.slots.items()
+                },
+                **replanned.binding_context,
+            }
+            execution = executor.execute(
+                replanned.graph,
+                replanned.snapshot,
+                replanned.validation_report,
+                session=replanned.session,
+                correlation_id=self.get_session_id(),
+                binding_context=binding_context,
+                goal=pending["goal"],
+                success_criteria_mappings=(
+                    replanned.planner_result.success_criteria_mappings
+                ),
+            )
+            if execution.requires_permission:
+                self.conversation_session.set_pending_clarification(
+                    {
+                        "kind": "native_graph_permission",
+                        "graph": replanned.graph,
+                        "snapshot": replanned.snapshot,
+                        "validation_report": replanned.validation_report,
+                        "session": execution.session,
+                        "pending_node_ids": tuple(
+                            execution.pending_node_ids
+                        ),
+                        "goal": pending["goal"],
+                        "mappings": (
+                            replanned.planner_result.success_criteria_mappings
+                        ),
+                        "binding_context": binding_context,
+                        "question": "외부 변경을 계속하려면 사용자 확인이 필요합니다.",
+                    }
+                )
+                return "외부 변경을 계속하려면 사용자 확인이 필요합니다."
+            if getattr(execution, "requires_replan", False):
+                updated = dict(pending)
+                updated.update(
+                    {
+                        "graph": replanned.graph,
+                        "snapshot": replanned.snapshot,
+                        "session": execution.session,
+                        "trigger": execution.replan_trigger,
+                        "mappings": (
+                            replanned.planner_result.success_criteria_mappings
+                        ),
+                    }
+                )
+                self.conversation_session.set_pending_clarification(updated)
+                return "추가 선택 정보가 필요합니다."
+            self.conversation_session.clear_pending_clarification()
+            if execution.error:
+                return f"Native Graph 실행 복구에 실패했습니다: {execution.error}"
+            return str(
+                next(iter(execution.graph_outputs.values()), "완료했습니다.")
+            )
+
+        if pending.get("kind", "") == "native_graph_permission":
+            decision = confirmation_decision(user_message)
+            if decision == "no":
+                self.conversation_session.clear_pending_clarification()
+                return "실행을 취소했습니다."
+            if decision != "yes":
+                self.conversation_session.advance_pending_clarification_turn()
+                return str(
+                    pending.get("question")
+                    or "외부 변경 작업을 진행할까요?"
+                )
+            coordinator = self.native_planning_coordinator
+            executor = getattr(coordinator, "graph_executor", None)
+            if executor is None:
+                self.conversation_session.clear_pending_clarification()
+                return "Native Graph 실행기를 찾지 못했습니다."
+            execution = executor.execute(
+                pending["graph"],
+                pending["snapshot"],
+                pending["validation_report"],
+                confirmed_node_ids=tuple(
+                    pending.get("pending_node_ids", ())
+                ),
+                session=pending["session"],
+                correlation_id=self.get_session_id(),
+                goal=pending.get("goal"),
+                success_criteria_mappings=tuple(
+                    pending.get("mappings", ())
+                ),
+                binding_context=dict(
+                    pending.get("binding_context", {}) or {}
+                ),
+            )
+            if execution.requires_permission:
+                updated = dict(pending)
+                updated["session"] = execution.session
+                updated["pending_node_ids"] = tuple(
+                    execution.pending_node_ids
+                )
+                self.conversation_session.set_pending_clarification(
+                    updated
+                )
+                return "다음 외부 변경 작업도 진행할까요?"
+            if getattr(execution, "requires_replan", False):
+                trigger = execution.replan_trigger
+                if trigger.user_input_required:
+                    self.conversation_session.set_pending_clarification(
+                        {
+                            "kind": "native_graph_replan",
+                            "graph": pending["graph"],
+                            "snapshot": pending["snapshot"],
+                            "session": execution.session,
+                            "trigger": trigger,
+                            "goal": pending.get("goal"),
+                            "mappings": tuple(
+                                pending.get("mappings", ())
+                            ),
+                            "binding_context": dict(
+                                pending.get("binding_context", {}) or {}
+                            ),
+                            "question": "계속할 대상을 선택해 주세요.",
+                        }
+                    )
+                    return "계속할 대상을 선택해 주세요."
+                self.conversation_session.clear_pending_clarification()
+                return "남은 실행 계획을 자동으로 복구하지 못했습니다."
+            self.conversation_session.clear_pending_clarification()
+            if execution.error:
+                return f"Native Graph 실행에 실패했습니다: {execution.error}"
+            return str(next(iter(execution.graph_outputs.values()), "완료했습니다."))
 
         if pending.get("kind", "") != "reminder_time":
             return None
@@ -3104,6 +3520,12 @@ def integration_query_to_input_data(query):
 
 def extract_pending_clarification(intent_result, user_message):
     """Return clarification state to keep for the next user turn."""
+    native_pending = getattr(
+        intent_result, "pending_clarification", None
+    )
+    if native_pending:
+        return dict(native_pending)
+
     contact_pending = extract_contact_ambiguous_clarification(intent_result)
 
     if contact_pending is not None:
