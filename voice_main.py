@@ -19,6 +19,10 @@ from jarvis.debug_trace import subscribe_trace, trace_event, unsubscribe_trace
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
 from jarvis.core.events import InMemoryEventBus
 from jarvis.graph_execution import CapabilityExecutionAdapter, GraphExecutor
+from jarvis.execution_memory import (
+    ExecutionMemoryService,
+    SQLiteExecutionMemoryRepository,
+)
 from jarvis.memory import (
     MemoryManager,
     MemoryService,
@@ -124,6 +128,11 @@ def main():
     graph_executor = GraphExecutor(
         CapabilityExecutionAdapter(tool_registry.ability_registry),
         event_bus=event_bus,
+        execution_memory=ExecutionMemoryService(
+            SQLiteExecutionMemoryRepository(
+                config.memory_store.sqlite_path
+            )
+        ),
         verification_enabled=is_native_reliability_enabled(
             "JARVIS_NATIVE_VERIFICATION_ENABLED", default=True
         ),

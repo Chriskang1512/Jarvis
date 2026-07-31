@@ -1,5 +1,33 @@
 # Jarvis
 
+## v1.5 Sprint 1 — Execution Memory
+
+Native Graph 실행이 종료되면 immutable `ExecutionSummary`가 명시적인
+privacy boundary를 거쳐 검색 가능한 Execution Memory로 저장된다.
+
+```text
+ExecutionSummary
+→ MemoryRedactor
+→ ExecutionMemoryRecord
+→ MemoryRepository
+→ MemoryIndexer
+→ MemorySearch
+```
+
+핵심 계약:
+
+- `schemaVersion`과 `summaryVersion` 기반 복원
+- `sourceExecutionId + summaryVersion` 중복 방지
+- Goal/Execution/Verification/Retry/Replan/Permission/Failure History
+- 원문을 복제하지 않는 `SessionReplayReference`
+- 분리된 `MemoryProvenance`와 `MemoryConfidence`
+- 교체 가능한 `SemanticSearchProvider`
+- Planner에 아직 주입되지 않는 `PlannerHint` 초안
+
+Voice Runtime은 기존 Memory SQLite 파일의 별도
+`execution_memories` 테이블을 사용한다. Planner Ranking과 Hint Injection은
+Sprint 5까지 비활성 상태다.
+
 ## v1.4 Goal-oriented pipeline
 
 Jarvis now has an additive goal-normalization foundation:

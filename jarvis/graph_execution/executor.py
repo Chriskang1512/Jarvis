@@ -199,6 +199,7 @@ class GraphExecutor:
         replan_enabled=False,
         sleeper=None,
         recovery_controller=None,
+        execution_memory=None,
     ):
         self.capability_adapter = capability_adapter
         self.snapshot_verifier = snapshot_verifier or SnapshotVerifier()
@@ -214,6 +215,7 @@ class GraphExecutor:
         self.replan_enabled = bool(replan_enabled)
         self.sleeper = sleeper or time.sleep
         self.recovery_controller = recovery_controller or RecoveryController()
+        self.execution_memory = execution_memory
 
     def execute(
         self,
@@ -584,6 +586,12 @@ class GraphExecutor:
             graph_outputs,
             outcome=execution_outcome,
             goal_verification_status=goal_result.status,
+        )
+        self.remember_execution(
+            graph,
+            session,
+            goal=goal,
+            correlation_id=correlation_id,
         )
         self.checkpoint_store.save(session)
         self.emit_session(
@@ -972,6 +980,11 @@ class GraphExecutor:
             outcome=outcome,
             goal_verification_status=goal_verification_status,
         )
+        self.remember_execution(
+            graph,
+            session,
+            correlation_id=correlation_id,
+        )
         self.checkpoint_store.save(session)
         self.emit_session(
             "runtime.execution.session_completed",
@@ -986,6 +999,42 @@ class GraphExecutor:
             error=error,
             summary=session.summary,
         )
+
+    def remember_execution(
+        self,
+        graph,
+        session,
+        *,
+        goal=None,
+        correlation_id="",
+    ):
+        """Persist a redacted execution experience without changing outcome."""
+        if self.execution_memory is None or session.summary is None:
+            return None
+        try:
+            record, created = self.execution_memory.remember(
+                session.summary,
+                graph=graph,
+                session=session,
+                goal=goal,
+            )
+            self.emit_session(
+                "runtime.execution.memory_saved",
+                session,
+                correlation_id,
+                memory_record_id=record.record_id,
+                memory_created=created,
+                memory_schema_version=record.schema_version,
+            )
+            return record
+        except Exception as error:
+            self.emit_session(
+                "execution_memory.persist.failure",
+                session,
+                correlation_id,
+                error_type=type(error).__name__,
+            )
+            return None
 
     def collect_graph_outputs(self, graph, session):
         values = {}
