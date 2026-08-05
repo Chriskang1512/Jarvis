@@ -13,12 +13,20 @@ from jarvis.capability_planning import (
 from jarvis.brain import IntentRuntime
 from jarvis.config import ConfigurationLoader
 from jarvis.abilities.native.weather.provider import read_env_value
-from jarvis.dashboard import DashboardBackend, DashboardEventBridge, ObservabilityHub
+from jarvis.dashboard import (
+    DashboardBackend,
+    DashboardEventBridge,
+    DashboardProjectionEngine,
+    ObservabilityHub,
+    SafeDashboardProjectionHandler,
+    SQLiteDashboardProjectionRepository,
+)
 from jarvis.debug_trace import is_debug_trace_enabled, read_env_file_value
 from jarvis.debug_trace import subscribe_trace, trace_event, unsubscribe_trace
 from jarvis.diagnostics import DiagnosticsCollector, RuntimeDevConsole
 from jarvis.core.events import InMemoryEventBus
 from jarvis.graph_execution import CapabilityExecutionAdapter, GraphExecutor
+from jarvis.artifacts import ArtifactManager, SQLiteArtifactRepository
 from jarvis.execution_memory import (
     ExecutionMemoryService,
     SQLiteExecutionMemoryRepository,
@@ -93,6 +101,17 @@ def main():
     memory_service = MemoryService(provider=MockMemoryProvider())
     event_bus = InMemoryEventBus()
     event_bus.subscribe("*", DashboardEventBridge(observability_hub).handle_event)
+    projection_repository = SQLiteDashboardProjectionRepository(
+        config.memory_store.sqlite_path
+    )
+    projection_engine = DashboardProjectionEngine(projection_repository)
+    event_bus.subscribe(
+        "*",
+        SafeDashboardProjectionHandler(
+            projection_engine,
+            publish=observability_hub.publish_projection,
+        ).handle_event,
+    )
     memory_manager = MemoryManager(
         provider=SQLiteMemoryProvider(config.memory_store.sqlite_path),
         session_id=voice_session.session_id,
@@ -125,6 +144,9 @@ def main():
             "nativeExecutionEnabled": native_execution_enabled,
         },
     )
+    artifact_repository = SQLiteArtifactRepository(
+        config.memory_store.sqlite_path
+    )
     graph_executor = GraphExecutor(
         CapabilityExecutionAdapter(tool_registry.ability_registry),
         event_bus=event_bus,
@@ -133,6 +155,7 @@ def main():
                 config.memory_store.sqlite_path
             )
         ),
+        artifact_manager=ArtifactManager(artifact_repository),
         verification_enabled=is_native_reliability_enabled(
             "JARVIS_NATIVE_VERIFICATION_ENABLED", default=True
         ),
@@ -196,6 +219,9 @@ def main():
             diagnostics_collector=diagnostics_collector,
             ability_registry=tool_registry.ability_registry,
             runtime_service=runtime_service,
+            artifact_repository=artifact_repository,
+            projection_repository=projection_repository,
+            projection_engine=projection_engine,
         ).start()
         observability_hub.runtime.update(
             {

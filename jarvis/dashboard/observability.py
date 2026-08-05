@@ -162,6 +162,7 @@ class ObservabilityHub:
             "weather_location_coordinates": "",
         }
         self._subscribers = set()
+        self._event_sequence = 0
         self._lock = RLock()
 
     def record(self, event_type, payload=None, category=None, level="INFO"):
@@ -186,6 +187,8 @@ class ObservabilityHub:
             "details": body,
         }
         with self._lock:
+            self._event_sequence += 1
+            observation["eventSequence"] = self._event_sequence
             self.logs.append(log_entry)
             if not background:
                 self.events.append(observation)
@@ -204,6 +207,23 @@ class ObservabilityHub:
         for subscriber in subscribers:
             subscriber.put(message)
         return observation
+
+    def publish_projection(self, event, session, statistics):
+        """Push an already-built read model without mutating Runtime state."""
+        from jarvis.dashboard.projection_serialization import session_to_dict
+
+        message = {
+            "kind": "dashboard.projection",
+            "data": {
+                "event": dict(event),
+                "session": session_to_dict(session) if session else None,
+                "statistics": dict(statistics),
+            },
+        }
+        with self._lock:
+            subscribers = tuple(self._subscribers)
+        for subscriber in subscribers:
+            subscriber.put(message)
 
     def record_task(self, task):
         data = task.to_dict() if hasattr(task, "to_dict") else _json_value(task)

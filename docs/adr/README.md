@@ -25,6 +25,8 @@ architecture tracks. New v0.4 orchestration ADRs continue from 0014 onward.
 - 0037 - Sequential GraphExecutor Runtime
 - 0038 - Reliable Graph Execution Architecture
 - 0039 - Execution Memory Architecture
+- 0040 - Provider-neutral Artifact Manager Architecture
+- 0041 - Dashboard Runtime Projection Architecture
 
 ## Sprint 18 Agent Core
 

@@ -9,12 +9,13 @@
 </head>
 <body>
   <aside>
-    <div class="brand"><span class="mark">J</span><div>JARVIS<small>OBSERVABILITY</small></div></div>
+    <div id="brand-runtime" class="brand state-idle"><span class="mark">J<i></i></span><div>JARVIS<small id="brand-runtime-state">IDLE</small></div></div>
     <nav id="nav">
       <button class="active" data-view="home">⌂ <span>Home</span></button>
-      <button data-view="runtime">◉ <span>Runtime</span></button>
+      <button id="runtime-nav" class="runtime-nav state-idle" data-view="runtime">◉ <span>Runtime</span><i id="runtime-nav-beacon"></i></button>
       <button data-view="tasks">✓ <span>Tasks</span></button>
       <button data-view="memory">◇ <span>Memory</span></button>
+      <button data-view="artifacts">▣ <span>Artifacts</span></button>
       <button class="reserved" disabled title="Reserved for Sprint 22–23">⌘ <span>Entity Graph</span><small>SOON</small></button>
       <button data-view="events">↯ <span>Events</span></button>
       <button data-view="logs">≡ <span>Logs</span></button>
@@ -32,9 +33,60 @@
     <div class="connection"><i id="socket-dot"></i><span id="socket-label">CONNECTING</span></div>
   </aside>
   <main>
-    <header><div><p class="eyebrow">JARVIS v1.3 · SPRINT 21</p><h1 id="title">System overview</h1></div><div class="clock" id="clock"></div></header>
+    <header><div><p class="eyebrow">JARVIS v1.5 · DASHBOARD RUNTIME</p><h1 id="title">System overview</h1></div><div class="header-runtime-actions"><button id="runtime-sound-test" class="runtime-sound-test" title="Play the Runtime sound check">TEST</button><button id="runtime-sound-toggle" class="runtime-sound-toggle" aria-pressed="true" title="Toggle subtle Runtime state sounds">SOUND ON</button><div class="clock" id="clock"></div></div></header>
 
     <section id="home" class="view active">
+      <section class="ops-command" aria-labelledby="ops-heading">
+        <div class="ops-primary">
+          <div class="ops-state-mark" id="ops-state-mark"><i></i><span>RUNTIME STATE</span><strong id="ops-runtime-state">IDLE</strong></div>
+          <div class="ops-goal">
+            <p class="eyebrow">JARVIS STATUS</p>
+            <h2 id="ops-heading">Ready for your next goal.</h2>
+            <p id="ops-current-node">No active execution</p>
+            <div id="ops-jarvis-status" class="ops-jarvis-status" aria-label="Jarvis readiness"></div>
+          </div>
+          <div class="ops-elapsed"><span>ELAPSED</span><strong id="ops-elapsed">00:00:00</strong><small id="ops-session-id">NO ACTIVE SESSION</small></div>
+        </div>
+        <div id="ops-permission" class="ops-permission" hidden><span>PERMISSION REQUIRED</span><strong>Jarvis is waiting for your approval.</strong></div>
+        <div class="ops-kpis">
+          <article><span>REMAINING NODES</span><strong id="ops-remaining">0</strong><small id="ops-progress-label">Graph idle</small></article>
+          <article><span>RETRY</span><strong id="ops-retry">0</strong><small>Current execution</small></article>
+          <article><span>MEMORY TODAY</span><strong id="ops-memory">0</strong><small id="ops-memory-state">Ready</small></article>
+          <article><span>ARTIFACTS</span><strong id="ops-artifacts">0</strong><small id="ops-artifact-state">Ready</small></article>
+        </div>
+        <div class="ops-assets">
+          <section><div><label>RECENT MEMORY</label><span id="ops-memory-count">TODAY · 0</span></div><div id="ops-memory-recent" class="ops-chip-list"></div></section>
+          <section><div><label>RECENT ARTIFACTS</label><span id="ops-artifact-count">TOTAL · 0</span></div><div id="ops-artifact-recent" class="ops-chip-list"></div></section>
+        </div>
+      </section>
+
+      <section class="ops-system-header" aria-label="Runtime status header">
+        <article><span>AI PROVIDER</span><strong id="ops-ai-provider">Not observed</strong><small id="ops-ai-model">Model unavailable</small></article>
+        <article><span>LATENCY</span><strong id="ops-latency">—</strong><small>Latest observed call</small></article>
+        <article><span>TTS</span><strong id="ops-tts">Unknown</strong><small id="ops-tts-provider">Not observed</small></article>
+        <article><span>STT</span><strong id="ops-stt">Unknown</strong><small id="ops-stt-provider">Not observed</small></article>
+        <article><span>WAKE WORD</span><strong id="ops-wake">Unknown</strong><small>Voice activation</small></article>
+        <article><span>GPU</span><strong id="ops-gpu">Not observed</strong><small>Compute state</small></article>
+      </section>
+
+      <div class="ops-layout">
+        <article class="panel ops-graph-panel">
+          <div class="panel-head"><div><label>CURRENT GRAPH</label><h3>Execution progress</h3></div><span id="ops-graph-health" class="live">STANDBY</span></div>
+          <div id="ops-graph" class="ops-graph"></div>
+          <div class="ops-stage-strip" id="ops-stage-strip"></div>
+        </article>
+        <div class="ops-side">
+          <article class="panel"><div class="panel-head"><div><label>RECENT SESSIONS</label><h3>Latest outcomes</h3></div></div><div id="ops-recent" class="ops-recent"></div></article>
+          <article class="panel"><div class="panel-head"><div><label>SESSION TIMELINE</label><h3>Latest activity</h3></div><span class="live">LIVE</span></div><div id="ops-timeline" class="ops-timeline"></div></article>
+        </div>
+      </div>
+
+      <article class="panel ops-health-panel">
+        <div class="panel-head"><div><label>RUNTIME SERVICES</label><h3>Abilities & platform health</h3></div><span id="ops-health-summary" class="live">CHECKING</span></div>
+        <div id="ops-ability-health" class="ops-health-grid"></div>
+      </article>
+
+      <div class="ops-technical-label"><span>TECHNICAL TELEMETRY</span><small>Detailed runtime diagnostics</small></div>
       <div class="hero">
         <div><p class="eyebrow">RUNTIME CONTROL PLANE</p><h2><span id="time-greeting">Hello.</span><br><em>Jarvis is online.</em></h2><p>See the system think, decide and act — in real time.</p></div>
         <div class="hero-status">
@@ -85,7 +137,7 @@
       </div>
     </section>
 
-    <section id="runtime" class="view"><div class="section-head"><h2>Runtime</h2><p>The active mind and execution context.</p></div><div id="runtime-cards" class="metrics runtime"></div><article class="panel"><div class="panel-head"><div><label>TURN QUEUE</label><h3>Waiting execution owners</h3></div></div><div id="turn-queue" class="monitor"></div></article></section>
+    <section id="runtime" class="view"><div class="section-head"><h2>Runtime</h2><p>Read-only event projection of active and recent execution.</p></div><div id="runtime-cards" class="metrics runtime"></div><div class="grid"><article class="panel"><div class="panel-head"><div><label>RUNNING SESSIONS</label><h3>Live execution</h3></div><span id="projection-health" class="live">HEALTHY</span></div><div id="running-sessions" class="monitor"></div></article><article class="panel"><div class="panel-head"><div><label>RECENT SESSIONS</label><h3>Execution history</h3></div></div><div id="recent-sessions" class="monitor"></div></article></div><article class="panel"><div class="panel-head"><div><label>TURN QUEUE</label><h3>Waiting execution owners</h3></div></div><div id="turn-queue" class="monitor"></div></article></section>
     <section id="tasks" class="view">
       <div class="section-head"><h2>Tasks</h2><p>Current execution states and preflight validation.</p></div>
       <div id="task-list" class="list"></div>
@@ -98,6 +150,7 @@
       </div>
     </section>
     <section id="memory" class="view"><div class="section-head"><h2>Memory</h2><p>Inspectable long-term knowledge. Delete with intent.</p></div><div class="toolbar"><input id="memory-search" placeholder="Search memory"><button id="memory-find">Search</button></div><div id="memory-list" class="cards"></div></section>
+    <section id="artifacts" class="view"><div class="section-head"><h2>Artifacts</h2><p>Provider-neutral outputs, provenance and relationships.</p></div><div class="toolbar"><input id="artifact-search" placeholder="Search artifacts"><button id="artifact-find">Search</button></div><div id="artifact-stats" class="metrics"></div><div id="artifact-list" class="cards"></div></section>
     <section id="events" class="view"><div class="section-head"><h2>EventBus Viewer</h2><p>The canonical real-time event stream.</p></div><div id="event-list" class="event-table"></div></section>
     <section id="logs" class="view"><div class="section-head"><h2>Logs</h2><p>Search and filter normalized runtime records.</p></div><div class="toolbar"><input id="log-search" placeholder="Search logs"><select id="log-level"><option value="">All levels</option><option>ERROR</option><option>WARN</option><option>INFO</option></select></div><div id="log-list" class="event-table"></div></section>
     <section id="permissions" class="view"><div class="section-head"><h2>Permissions</h2><p>Safe, confirm and restricted decisions.</p></div><div id="permission-list" class="event-table"></div></section>

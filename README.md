@@ -1,5 +1,53 @@
 # Jarvis
 
+## v1.5 Sprint 3 — Dashboard Runtime
+
+Runtime execution is projected into an independent, read-only CQRS model:
+
+```text
+Runtime EventBus
+→ sequenced Dashboard Projection
+→ In-memory / SQLite Read Repository
+→ REST + WebSocket push
+→ Running Session / TaskGraph / Timeline UI
+```
+
+The Projection tracks nodes, retries, permissions, verification, Memory,
+Artifacts, elapsed time and current Runtime State. It supports health/lag,
+event replay and periodic snapshots. Projection failures never alter Runtime
+results. The shared `RuntimeState` contract is ready for future Rive, Desktop,
+Lively and Mobile clients, while Rive itself remains out of scope.
+
+Sprint 3.5 adds an operator-first home view without changing that read-model
+boundary. The live WebSocket projection now drives a prominent Runtime State,
+current Goal, elapsed time, permission wait banner, typed graph progress,
+Planner/Execution/Verification/Memory/Artifact stages, recent outcomes and a
+session timeline. Detailed developer telemetry remains available below the
+operations view. CSS state animation is used here; Rive remains deferred.
+The v1.7 roadmap freezes shared motion, color, accessibility and subtle state
+sound semantics in `docs/runtime-motion-design-guideline.md`.
+
+## v1.5 Sprint 2 — Artifact Manager
+
+Verified Native TaskGraph outputs declared as artifacts now pass through one
+provider-neutral asset boundary:
+
+```text
+Provider Result
+→ ArtifactBuilder
+→ immutable ArtifactRef
+→ ArtifactRepository / ArtifactIndexer
+→ Metadata Search / Dashboard Artifact View
+```
+
+Artifact references have stable IDs, schema versions, capability/provider
+provenance, explicit visibility, retention and soft-delete lifecycle, plus
+cycle-safe parent/child relationships with a configurable default depth of 20.
+Checksums are mandatory, and SQLite schemas use an ordered Migration Runner.
+Search supports ID, title, type, tag,
+Goal, Execution, and metadata. Semantic search is an interface only and is not
+connected to Planner or Runtime in this Sprint.
+
 ## v1.5 Sprint 1 — Execution Memory
 
 Native Graph 실행이 종료되면 immutable `ExecutionSummary`가 명시적인

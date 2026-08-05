@@ -200,6 +200,7 @@ class GraphExecutor:
         sleeper=None,
         recovery_controller=None,
         execution_memory=None,
+        artifact_manager=None,
     ):
         self.capability_adapter = capability_adapter
         self.snapshot_verifier = snapshot_verifier or SnapshotVerifier()
@@ -216,6 +217,7 @@ class GraphExecutor:
         self.sleeper = sleeper or time.sleep
         self.recovery_controller = recovery_controller or RecoveryController()
         self.execution_memory = execution_memory
+        self.artifact_manager = artifact_manager
 
     def execute(
         self,
@@ -397,9 +399,18 @@ class GraphExecutor:
                     correlation_id,
                     recovery_actions=actions,
                 )
-            for record in session.node_records.values():
+            confirmed = set(confirmed_node_ids)
+            for waiting_node_id, record in session.node_records.items():
                 if record.state == NodeExecutionState.WAITING_FOR_PERMISSION:
                     record.state = NodeExecutionState.PENDING
+                    if waiting_node_id in confirmed:
+                        self.emit_session(
+                            "runtime.execution.permission_resolved",
+                            session,
+                            correlation_id,
+                            node_id=waiting_node_id,
+                            resolution="approved",
+                        )
             if session.permission_wait_started_at is not None:
                 session.permission_wait_seconds += max(
                     0.0,
@@ -456,6 +467,12 @@ class GraphExecutor:
                     )
                     session.permission_wait_started_at = session.waiting_since
                     session.append_timeline("permission_required", node.node_id)
+                    self.emit_node(
+                        "runtime.execution.permission_requested",
+                        session,
+                        node,
+                        correlation_id,
+                    )
                     self.checkpoint_store.save(session)
                     return GraphExecutionResult(
                         session,
@@ -580,12 +597,14 @@ class GraphExecutor:
         session.completed_at = datetime.now(timezone.utc)
         session.append_timeline("session_completed")
         graph_outputs = self.collect_graph_outputs(graph, session)
+        artifacts = self.capture_artifacts(graph, session, correlation_id)
         session.summary = ExecutionSummary.create(
             graph,
             session,
             graph_outputs,
             outcome=execution_outcome,
             goal_verification_status=goal_result.status,
+            artifacts=artifacts,
         )
         self.remember_execution(
             graph,
@@ -973,12 +992,14 @@ class GraphExecutor:
             error_category=error_category.value,
         )
         graph_outputs = self.collect_graph_outputs(graph, session)
+        artifacts = self.capture_artifacts(graph, session, correlation_id)
         session.summary = ExecutionSummary.create(
             graph,
             session,
             graph_outputs,
             outcome=outcome,
             goal_verification_status=goal_verification_status,
+            artifacts=artifacts,
         )
         self.remember_execution(
             graph,
@@ -1030,6 +1051,37 @@ class GraphExecutor:
         except Exception as error:
             self.emit_session(
                 "execution_memory.persist.failure",
+                session,
+                correlation_id,
+                error_type=type(error).__name__,
+            )
+            return None
+
+    def capture_artifacts(self, graph, session, correlation_id=""):
+        if self.artifact_manager is None:
+            return None
+        try:
+            from jarvis.artifacts import artifact_to_dict
+
+            artifacts = self.artifact_manager.capture_execution(graph, session)
+            self.emit_session(
+                "runtime.execution.artifacts_captured",
+                session,
+                correlation_id,
+                artifact_count=len(artifacts),
+                artifact_ids=tuple(item.artifact_id for item in artifacts),
+                artifacts=tuple(
+                    {
+                        "artifact_id": item.artifact_id,
+                        "node_id": item.provenance.node_id,
+                    }
+                    for item in artifacts
+                ),
+            )
+            return tuple(artifact_to_dict(item) for item in artifacts)
+        except Exception as error:
+            self.emit_session(
+                "artifact_manager.persist.failure",
                 session,
                 correlation_id,
                 error_type=type(error).__name__,

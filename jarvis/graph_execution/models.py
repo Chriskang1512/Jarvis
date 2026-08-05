@@ -533,21 +533,23 @@ class ExecutionSummary:
         *,
         outcome=ExecutionOutcome.SUCCEEDED,
         goal_verification_status=VerificationStatus.SKIPPED,
+        artifacts=None,
     ):
-        artifacts = []
-        for node in graph.nodes:
-            for key, definition in node.outputs.items():
-                if (
-                    definition.artifact_type
-                    and session.output_store.has(node.node_id, key)
-                ):
-                    artifacts.append(
-                        {
-                            "nodeId": node.node_id,
-                            "outputKey": key,
-                            "artifactType": definition.artifact_type,
-                        }
-                    )
+        if artifacts is None:
+            artifacts = []
+            for node in graph.nodes:
+                for key, definition in node.outputs.items():
+                    if (
+                        definition.artifact_type
+                        and session.output_store.has(node.node_id, key)
+                    ):
+                        artifacts.append(
+                            {
+                                "nodeId": node.node_id,
+                                "outputKey": key,
+                                "artifactType": definition.artifact_type,
+                            }
+                        )
         return cls(
             session_id=session.session_id,
             snapshot_id=session.snapshot_id,
@@ -569,7 +571,7 @@ class ExecutionSummary:
             ),
             permission_wait_seconds=session.permission_wait_seconds,
             provider_calls=session.provider_calls,
-            artifacts=tuple(artifacts),
+            artifacts=tuple(dict(item) for item in artifacts),
             result_hash=stable_result_hash(graph_outputs),
             outcome=outcome,
             retry_count=session.retry_count,

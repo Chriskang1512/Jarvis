@@ -31,6 +31,9 @@ class DashboardBackend:
         ability_registry=None,
         runtime_service=None,
         semantic_registry=None,
+        artifact_repository=None,
+        projection_repository=None,
+        projection_engine=None,
         host="127.0.0.1",
         port=8765,
     ):
@@ -42,6 +45,9 @@ class DashboardBackend:
         self.ability_registry = ability_registry
         self.runtime_service = runtime_service
         self.semantic_registry = semantic_registry or DEFAULT_SEMANTIC_REGISTRY
+        self.artifact_repository = artifact_repository
+        self.projection_repository = projection_repository
+        self.projection_engine = projection_engine
         self.host = host
         self.port = int(port)
         self.server = None
@@ -94,6 +100,26 @@ class DashboardBackend:
             return bool(self.memory_manager.delete(record.key, record.memory_type))
         return bool(self.memory_manager.delete(memory_id))
 
+    def artifacts(self, query="", **criteria):
+        if self.artifact_repository is None:
+            return []
+        criteria = {key: value for key, value in criteria.items() if value}
+        criteria["query"] = query
+        items = self.artifact_repository.search_metadata(limit=200, **criteria)
+        from jarvis.artifacts import artifact_to_dict
+
+        return [artifact_to_dict(item) for item in items]
+
+    def artifact(self, artifact_id):
+        if self.artifact_repository is None:
+            return None
+        item = self.artifact_repository.get(artifact_id, include_deleted=True)
+        if item is None:
+            return None
+        from jarvis.artifacts import artifact_to_dict
+
+        return artifact_to_dict(item)
+
     def config(self):
         if not self.config_path.exists():
             return {}
@@ -127,6 +153,38 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json(self.dashboard.hub.snapshot()["events"])
         if parsed.path == "/api/tasks":
             return self._json(self.dashboard.hub.snapshot()["tasks"])
+        if parsed.path == "/api/runtime/sessions/running":
+            return self._json(self._projection_sessions(running=True))
+        if parsed.path == "/api/runtime/sessions/recent":
+            params = parse_qs(parsed.query)
+            limit = int(params.get("limit", ["20"])[0])
+            return self._json(self._projection_sessions(limit=limit))
+        if parsed.path == "/api/runtime/statistics":
+            engine = self.dashboard.projection_engine
+            return self._json(engine.statistics() if engine else {})
+        if parsed.path == "/api/runtime/projection-health":
+            health = getattr(self.dashboard.projection_engine, "health", None)
+            if health is None:
+                return self._json({})
+            payload = asdict(health)
+            payload["status"] = health.status.value
+            return self._json(payload)
+        if parsed.path.startswith("/api/runtime/sessions/"):
+            suffix = parsed.path[len("/api/runtime/sessions/"):]
+            timeline = suffix.endswith("/timeline")
+            session_id = suffix[:-len("/timeline")] if timeline else suffix
+            repository = self.dashboard.projection_repository
+            session = repository.get_session(session_id) if repository else None
+            if session is None:
+                return self._json({"error": "Session not found"}, 404)
+            from jarvis.dashboard.projection_serialization import (
+                session_to_dict,
+                timeline_to_dict,
+            )
+            return self._json(
+                [timeline_to_dict(item) for item in session.timeline]
+                if timeline else session_to_dict(session)
+            )
         if parsed.path == "/api/task-graphs/validation":
             return self._json(
                 self.dashboard.hub.snapshot().get("task_graph_validations", {})
@@ -161,6 +219,28 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json(self.dashboard.memories(query))
         if parsed.path == "/api/memory/stats":
             return self._json(_memory_stats(self.dashboard.memories()))
+        if parsed.path == "/api/artifacts":
+            params = parse_qs(parsed.query)
+            return self._json(
+                self.dashboard.artifacts(
+                    params.get("q", [""])[0],
+                    artifact_type=params.get("type", [""])[0],
+                    tag=params.get("tag", [""])[0],
+                    goal_id=params.get("goal", [""])[0],
+                    execution_id=params.get("execution", [""])[0],
+                )
+            )
+        if parsed.path == "/api/artifacts/stats":
+            items = self.dashboard.artifacts()
+            counts = {}
+            for item in items:
+                key = item["artifactType"]
+                counts[key] = counts.get(key, 0) + 1
+            return self._json({"total": len(items), "byType": counts})
+        if parsed.path.startswith("/api/artifacts/"):
+            artifact_id = parsed.path.rsplit("/", 1)[-1]
+            artifact = self.dashboard.artifact(artifact_id)
+            return self._json(artifact) if artifact else self._json({"error": "Artifact not found"}, 404)
         if parsed.path == "/api/settings":
             return self._json(self.dashboard.config())
         if parsed.path == "/api/diagnostics":
@@ -181,6 +261,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/providers":
             return self._json(_provider_items(self.dashboard))
         return self._static(parsed.path)
+
+    def _projection_sessions(self, running=False, limit=20):
+        repository = self.dashboard.projection_repository
+        if repository is None:
+            return []
+        sessions = (
+            repository.running_sessions()
+            if running else repository.recent_sessions(limit=limit)
+        )
+        from jarvis.dashboard.projection_serialization import session_to_dict
+        return [session_to_dict(item) for item in sessions]
 
     def do_PUT(self):
         if urlparse(self.path).path != "/api/settings":
